@@ -16,6 +16,10 @@
   body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);}
   .wrap{max-width:1220px;margin:0 auto;padding:28px 20px 80px;}
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:14px;}
+  .auth-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .auth-row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
+  .auth-input{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-family:var(--mono);font-size:12px;width:140px;}
+  .auth-error{color:var(--rose);font-size:11px;min-height:14px;}
   .brand{display:flex;align-items:center;gap:12px;}
   .brand .mark{width:38px;height:38px;border-radius:8px;background:linear-gradient(135deg,var(--amber),#c9791f);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;color:#0d1117;font-size:18px;}
   .brand h1{font-family:var(--display);font-size:19px;margin:0;letter-spacing:0.3px;}
@@ -178,6 +182,24 @@
     <div class="brand">
       <div class="mark">F</div>
       <div><h1>Fortress Terminal</h1><small>Análisis técnico + derivados · automatizado</small></div>
+    </div>
+    <div id="authBox" class="auth-box">
+      <div id="authLoggedOut">
+        <div class="auth-row">
+          <input id="authEmail" type="email" placeholder="email" class="auth-input">
+          <input id="authPass" type="password" placeholder="contraseña" class="auth-input">
+        </div>
+        <div class="auth-row">
+          <button class="backtest-btn" id="authSignIn">Entrar</button>
+          <button class="backtest-btn" id="authSignUp">Crear cuenta</button>
+          <button class="backtest-btn" id="authGoogle">🔵 Google</button>
+        </div>
+        <div id="authError" class="auth-error"></div>
+      </div>
+      <div id="authLoggedIn" style="display:none;">
+        <span class="subrow" id="authUserEmail"></span>
+        <button class="backtest-btn" id="authSignOut" style="margin-left:8px;">Salir</button>
+      </div>
     </div>
   </header>
 
@@ -393,6 +415,59 @@
     </div>
   </div>
 </div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getAuth, onAuthStateChanged, createUserWithEmailAndPassword,
+    signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import {
+    getFirestore, collection, addDoc, query, orderBy, limit, getDocs
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBFvMiioZ6nCMnVMeJsW8KoGg-H1xtTsSE",
+    authDomain: "critophaton.firebaseapp.com",
+    projectId: "critophaton",
+    storageBucket: "critophaton.firebasestorage.app",
+    messagingSenderId: "455815028806",
+    appId: "1:455815028806:web:c0d07bf017760d97ce2a47",
+    measurementId: "G-NT01ZDNBT2"
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const db = getFirestore(fbApp);
+
+  window.fb = {
+    auth,
+    async signUp(email, pass){ return createUserWithEmailAndPassword(auth, email, pass); },
+    async signIn(email, pass){ return signInWithEmailAndPassword(auth, email, pass); },
+    async signInGoogle(){ return signInWithPopup(auth, new GoogleAuthProvider()); },
+    async signOutUser(){ return signOut(auth); },
+    async saveHistory(item){
+      if(!auth.currentUser) return false;
+      await addDoc(collection(db, 'users', auth.currentUser.uid, 'history'), {...item});
+      return true;
+    },
+    async loadHistory(){
+      if(!auth.currentUser) return [];
+      const q = query(collection(db, 'users', auth.currentUser.uid, 'history'), orderBy('ts', 'desc'), limit(50));
+      const snap = await getDocs(q);
+      return snap.docs.map(d=>d.data());
+    },
+    async saveWatchlist(list){
+      if(!auth.currentUser) return false;
+      await addDoc(collection(db, 'users', auth.currentUser.uid, 'watchlist_snapshots'), {list, ts:Date.now()});
+      return true;
+    }
+  };
+
+  onAuthStateChanged(auth, user=>{
+    window.dispatchEvent(new CustomEvent('fb-auth-changed', {detail:{user}}));
+  });
+</script>
 
 <script>
 const BINANCE = 'https://api.binance.com';
@@ -1504,21 +1579,31 @@ async function pollAlerts(){
 }
 
 // ================= HISTORIAL =================
-function pushHistory(data, result, setup){
-  let hist = [];
-  try{ hist = JSON.parse(localStorage.getItem('fortress_history')||'[]'); }catch(e){}
-  hist.unshift({
+async function pushHistory(data, result, setup){
+  const item = {
     ts: Date.now(), token: data.displayName, tf: currentTF, price: data.price,
     longScore: result.longScore, shortScore: result.shortScore, recommendation: result.recommendation, query: lastQuery
-  });
+  };
+  // Si el usuario tiene sesión iniciada, guarda en Firestore (memoria en la nube, entre dispositivos)
+  if(window.fb && window.fb.auth.currentUser){
+    try{ await window.fb.saveHistory(item); return; }catch(e){ /* si falla, cae al localStorage como respaldo */ }
+  }
+  let hist = [];
+  try{ hist = JSON.parse(localStorage.getItem('fortress_history')||'[]'); }catch(e){}
+  hist.unshift(item);
   hist = hist.slice(0,50);
   try{ localStorage.setItem('fortress_history', JSON.stringify(hist)); }catch(e){}
 }
-function renderHistory(){
+async function renderHistory(){
   const el = document.getElementById('historyList');
   let hist = [];
-  try{ hist = JSON.parse(localStorage.getItem('fortress_history')||'[]'); }catch(e){}
-  if(!hist.length){ el.textContent = 'Todavía no analizaste ninguna moneda.'; return; }
+  if(window.fb && window.fb.auth.currentUser){
+    el.textContent = 'Cargando tu historial de la nube...';
+    try{ hist = await window.fb.loadHistory(); }catch(e){ hist = []; }
+  } else {
+    try{ hist = JSON.parse(localStorage.getItem('fortress_history')||'[]'); }catch(e){}
+  }
+  if(!hist.length){ el.textContent = window.fb && window.fb.auth.currentUser ? 'Todavía no analizaste ninguna moneda con esta cuenta.' : 'Todavía no analizaste ninguna moneda. (Iniciá sesión arriba para guardar tu historial en la nube.)'; return; }
   el.innerHTML = hist.map(h=>{
     const cls = h.recommendation==='LONG'?'badge-long':h.recommendation==='SHORT'?'badge-short':'badge-neutral';
     return `<div class="hist-row" data-q="${h.query}" data-tf="${h.tf}">
@@ -1536,6 +1621,46 @@ function renderHistory(){
     });
   });
 }
+
+// ================= AUTENTICACIÓN (Firebase) =================
+function wireAuthUI(){
+  const err = document.getElementById('authError');
+  const showErr = m => { err.textContent = m; };
+  document.getElementById('authSignIn').addEventListener('click', async ()=>{
+    showErr('');
+    try{ await window.fb.signIn(document.getElementById('authEmail').value, document.getElementById('authPass').value); }
+    catch(e){ showErr(traduceAuthError(e)); }
+  });
+  document.getElementById('authSignUp').addEventListener('click', async ()=>{
+    showErr('');
+    try{ await window.fb.signUp(document.getElementById('authEmail').value, document.getElementById('authPass').value); }
+    catch(e){ showErr(traduceAuthError(e)); }
+  });
+  document.getElementById('authGoogle').addEventListener('click', async ()=>{
+    showErr('');
+    try{ await window.fb.signInGoogle(); }
+    catch(e){ showErr(traduceAuthError(e)); }
+  });
+  document.getElementById('authSignOut').addEventListener('click', async ()=>{
+    try{ await window.fb.signOutUser(); }catch(e){}
+  });
+  window.addEventListener('fb-auth-changed', e=>{
+    const user = e.detail.user;
+    document.getElementById('authLoggedOut').style.display = user ? 'none' : 'block';
+    document.getElementById('authLoggedIn').style.display = user ? 'block' : 'none';
+    if(user) document.getElementById('authUserEmail').textContent = '👤 ' + user.email;
+    if(document.getElementById('panel-historial').classList.contains('active')) renderHistory();
+  });
+}
+function traduceAuthError(e){
+  const code = e?.code || '';
+  if(code.includes('email-already-in-use')) return 'Ese email ya tiene una cuenta. Probá "Entrar" en vez de "Crear cuenta".';
+  if(code.includes('invalid-credential') || code.includes('wrong-password')) return 'Email o contraseña incorrectos.';
+  if(code.includes('weak-password')) return 'La contraseña debe tener al menos 6 caracteres.';
+  if(code.includes('invalid-email')) return 'Ese email no es válido.';
+  return 'Error: ' + code;
+}
+wireAuthUI();
 
 // ================= COMPARAR =================
 document.getElementById('cmpBtn').addEventListener('click', async ()=>{
