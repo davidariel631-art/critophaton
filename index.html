@@ -210,7 +210,7 @@
       <button class="tf-btn" data-tf="1d">1D</button>
     </div>
     <button class="addwatch" id="addWatchBtn">+ Agregar a watchlist</button>
-    <select id="riskProfileSelect" class="tf-group" style="padding:8px 10px;color:var(--text);">
+    <select id="riskProfileSelect" style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:12.5px;">
       <option value="conservative">🟢 Conservador</option>
       <option value="balanced" selected>🟡 Balanceado</option>
       <option value="aggressive">🔴 Agresivo</option>
@@ -406,6 +406,7 @@ const TF_MAP = {
   '1d':  {binance:'1d',  gecko:{timeframe:'day',    aggregate:1}},
 };
 let currentTF = '4h';
+let riskProfile = 'balanced';
 let watchlist = []; // {query, data, result, setup}
 let lastQuery = null;
 let lastAnalysisData = null;
@@ -422,6 +423,10 @@ document.getElementById('tfGroup').addEventListener('click', e=>{
   document.querySelectorAll('.tf-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   currentTF = btn.dataset.tf;
+  if(lastQuery) analyze(lastQuery);
+});
+document.getElementById('riskProfileSelect').addEventListener('change', e=>{
+  riskProfile = e.target.value;
   if(lastQuery) analyze(lastQuery);
 });
 
@@ -795,12 +800,16 @@ function computeScore(data, macro){
   const confidence = Math.round(Math.abs(bullishness)*100);
   const bestScore = Math.max(longScore, shortScore);
   let stars = bestScore>=9.5?5 : bestScore>=8?4 : bestScore>=6.5?3 : bestScore>=5?2 : 1;
+  // Perfil de trader: conservador exige más confianza para operar, agresivo se conforma con menos
+  const profileThresholds = {conservative:7.5, balanced:6.5, aggressive:5.5};
+  const scoreThreshold = profileThresholds[typeof riskProfile!=='undefined'?riskProfile:'balanced'] || 6.5;
+  const macroTolerance = {conservative:95, balanced:85, aggressive:70}[typeof riskProfile!=='undefined'?riskProfile:'balanced'] || 85;
   let recommendation = 'NO OPERAR';
-  if(longScore>=6.5) recommendation='LONG'; else if(shortScore>=6.5) recommendation='SHORT';
+  if(longScore>=scoreThreshold) recommendation='LONG'; else if(shortScore>=scoreThreshold) recommendation='SHORT';
   // Filtro de tendencia mayor: si va totalmente contra la macro de 4h, degradar a NO OPERAR salvo confluencia extrema
   if(macro && !confluenceNote){
-    if(recommendation==='LONG' && macro.bias==='bear' && confidence<85) recommendation='NO OPERAR';
-    if(recommendation==='SHORT' && macro.bias==='bull' && confidence<85) recommendation='NO OPERAR';
+    if(recommendation==='LONG' && macro.bias==='bear' && confidence<macroTolerance) recommendation='NO OPERAR';
+    if(recommendation==='SHORT' && macro.bias==='bull' && confidence<macroTolerance) recommendation='NO OPERAR';
   }
 
   const supportStrength = levelStrength(data.candles, support);
@@ -893,7 +902,18 @@ function buildSetup(data, result){
   if(volPct<1.5) leverage='4x - 5x';
   else if(volPct<3) leverage='3x - 4x';
   else if(volPct<5) leverage='2x - 3x';
-  return {dir, entryLow, entryHigh, stop, t1,t2,t3, leverage, volPct, atrMultiple:2};
+  const profile = typeof riskProfile!=='undefined'?riskProfile:'balanced';
+  if(profile==='conservative'){
+    // nunca sugerir más de 2x, priorizando preservar capital
+    leverage = volPct<1.5 ? '1x - 2x' : '1x (spot / sin apalancamiento)';
+  } else if(profile==='aggressive'){
+    // permite un escalón más de leverage que el balanceado, dentro de límites razonables
+    if(volPct<1.5) leverage='6x - 8x';
+    else if(volPct<3) leverage='4x - 6x';
+    else if(volPct<5) leverage='3x - 4x';
+    else leverage='2x - 3x';
+  }
+  return {dir, entryLow, entryHigh, stop, t1,t2,t3, leverage, volPct, atrMultiple:2, riskProfile:profile};
 }
 
 function fmt(n){ if(n==null||isNaN(n)) return '—'; if(n>=1000) return n.toLocaleString('en-US',{maximumFractionDigits:2}); if(n>=1) return n.toFixed(4); return n.toPrecision(4); }
