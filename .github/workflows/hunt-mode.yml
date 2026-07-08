@@ -1,0 +1,33 @@
+name: Fortress Hunt Mode - Telegram Signals
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'   # cada 15 minutos
+  workflow_dispatch:          # también podés lanzarlo a mano desde la pestaña "Actions" de GitHub
+
+permissions:
+  contents: write            # necesario para que el bot pueda guardar el estado (dedupe de alertas)
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Ejecutar el escáner y enviar señales a Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: node telegram-bot/scan.js
+
+      - name: Guardar el estado (para no repetir alertas)
+        run: |
+          git config user.name "fortress-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add telegram-bot/state.json
+          git diff --staged --quiet || git commit -m "chore: actualizar estado del hunt mode [skip ci]"
+          git push
