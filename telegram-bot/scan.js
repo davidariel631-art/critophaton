@@ -1,6 +1,11 @@
 // Fortress Terminal — Bot de señales + TheHaton (cuenta virtual)
 // Corre en GitHub Actions cada 15 min. Usa una versión simplificada del motor
-// (EMA/RSI/MACD/ATR). Escanea Binance (top N por volumen) + pools nuevas en DEX.
+// (EMA/RSI/MACD/ATR). Escanea:
+//   1) Binance top N por volumen 24h (dinámico).
+//   2) CUSTOM_COINS: monedas específicas que VOS elegís abajo, buscadas en
+//      Binance -> OKX -> Bybit -> MEXC -> Gate.io (radar multi-exchange),
+//      para las que operás que no están entre las top 60 de Binance.
+//   3) Pools nuevas en DEX (Solana/Base/Ethereum).
 //
 // NUEVO (TheHaton): mantiene una cuenta virtual de 100 USDT que:
 //  - Abre operaciones de papel cuando aparece una señal fuerte (score>=8).
@@ -8,6 +13,7 @@
 //  - Nunca borra el historial: si el capital llega a 0, archiva la cuenta y abre una nueva.
 //  - Solo abre operaciones nuevas dentro del horario de trabajo (04:00–15:00 Argentina).
 //  - Máximo 4 operaciones nuevas por día.
+//  - Riesgo dinámico según drawdown y racha (0.5% - 1.5%).
 // El estado completo queda en telegram-bot/state.json, y la web lee ese mismo
 // archivo (público, vía GitHub raw) para mostrar el panel TheHaton.
 
@@ -22,7 +28,12 @@ const STATE_FILE = 'telegram-bot/state.json';
 const MAX_TRADES_PER_DAY = 4;
 const WORK_HOUR_START = 4;   // 04:00 Argentina (UTC-3)
 const WORK_HOUR_END = 15;    // 15:00 Argentina (UTC-3)
-const RISK_PCT = 0.01;       // 1% del capital por operación
+const RISK_PCT = 0.01;       // 1% del capital por operación (base, se ajusta dinámicamente)
+
+// 👇 EDITÁ ESTA LISTA vos mismo: poné acá cualquier moneda que operes aunque no esté
+// entre las top 60 de Binance por volumen. El bot la va a buscar automáticamente en
+// Binance, OKX, Bybit, MEXC y Gate.io (el que la tenga primero, gana).
+const CUSTOM_COINS = ['TIA','SEI','JUP','PYTH','WIF','ORDI','STRK','ENA','W','TNSR'];
 
 // ---------- Indicadores ----------
 function ema(values, period){
@@ -112,6 +123,55 @@ async function fetchBinancePrice(symbol){
     return parseFloat(d.price);
   }catch(e){ return null; }
 }
+
+// ---------- Radar multi-exchange (para CUSTOM_COINS que no están en el top 60 de Binance) ----------
+async function tryOKXCandles(symbol){
+  const instId = `${symbol.toUpperCase()}-USDT`;
+  const res = await fetch(`https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=4H&limit=220`);
+  const data = await res.json();
+  if(!data.data || !data.data.length) throw new Error('OKX sin datos');
+  return data.data.map(r=>({t:+r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]})).sort((a,b)=>a.t-b.t);
+}
+async function tryBybitCandles(symbol){
+  const pair = `${symbol.toUpperCase()}USDT`;
+  const res = await fetch(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${pair}&interval=240&limit=220`);
+  const data = await res.json();
+  const list = data.result?.list;
+  if(!list || !list.length) throw new Error('Bybit sin datos');
+  return list.map(r=>({t:+r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]})).sort((a,b)=>a.t-b.t);
+}
+async function tryMEXCCandles(symbol){
+  const pair = `${symbol.toUpperCase()}USDT`;
+  const res = await fetch(`https://api.mexc.com/api/v3/klines?symbol=${pair}&interval=4h&limit=220`);
+  const klines = await res.json();
+  if(!Array.isArray(klines) || !klines.length) throw new Error('MEXC sin datos');
+  return klines.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]})).sort((a,b)=>a.t-b.t);
+}
+async function tryGateCandles(symbol){
+  const pair = `${symbol.toUpperCase()}_USDT`;
+  const res = await fetch(`https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${pair}&interval=4h&limit=220`);
+  const rows = await res.json();
+  if(!Array.isArray(rows) || !rows.length) throw new Error('Gate.io sin datos');
+  // Formato Gate: [timestamp, volumen, close, high, low, open]
+  return rows.map(r=>({t:+r[0]*1000,o:+r[5],h:+r[3],l:+r[4],c:+r[2],v:+r[1]})).sort((a,b)=>a.t-b.t);
+}
+// Prueba las fuentes en orden hasta encontrar una que tenga la moneda. Devuelve {source, candles}.
+async function fetchCandlesAnywhere(symbol){
+  const sources = [
+    {name:'Binance', fn: ()=>fetchBinanceCandles(symbol)},
+    {name:'OKX',     fn: ()=>tryOKXCandles(symbol)},
+    {name:'Bybit',   fn: ()=>tryBybitCandles(symbol)},
+    {name:'MEXC',    fn: ()=>tryMEXCCandles(symbol)},
+    {name:'Gate.io', fn: ()=>tryGateCandles(symbol)},
+  ];
+  for(const s of sources){
+    try{
+      const candles = await s.fn();
+      if(candles && candles.length>=220) return {source: s.name, candles};
+    }catch(e){ /* probamos la siguiente */ }
+  }
+  return null;
+}
 async function getNewDexPools(){
   let pools = [];
   for(const net of DEX_NETWORKS){
@@ -150,6 +210,8 @@ function loadState(){
   try{ raw = JSON.parse(fs.readFileSync(STATE_FILE,'utf8')); }catch(e){ raw = {}; }
   if(!raw || typeof raw !== 'object') raw = {};
   if(!raw.account){
+    // Migración automática desde el formato viejo del bot (solo tenía el mapa de "ya notificado").
+    // Antes, todo el archivo ERA ese mapa; ahora vive adentro de `notified`.
     const oldNotified = (raw.notified && typeof raw.notified==='object') ? raw.notified : raw;
     console.log('Migrando state.json de formato viejo a formato con cuenta TheHaton...');
     return {
@@ -175,26 +237,29 @@ async function sendTelegram(text){
   if(!res.ok){ console.error('Error enviando a Telegram:', await res.text()); }
 }
 
-// Promesas globales para asegurar envíos
-let sendPromises = [];
-
 function argentinaHourNow(){
   const utcHour = new Date().getUTCHours();
-  return (utcHour - 3 + 24) % 24;
+  return (utcHour - 3 + 24) % 24; // Argentina = UTC-3, sin horario de verano
 }
 function todayKey(){
-  return new Date().toISOString().slice(0,10);
+  return new Date().toISOString().slice(0,10); // YYYY-MM-DD (UTC, suficiente como clave de día)
 }
 
 // ---------- TheHaton: revisar posiciones abiertas ----------
+async function getLatestPrice(pos){
+  if(pos.source==='DEX') return await fetchDexPrice(pos.network, pos.poolAddress);
+  if(pos.source==='BINANCE') return await fetchBinancePrice(pos.symbol);
+  // OKX / BYBIT / MEXC / GATE.IO: reusamos el resolver multi-exchange y tomamos el último cierre
+  const found = await fetchCandlesAnywhere(pos.symbol);
+  return found ? found.candles.at(-1).c : null;
+}
+
 async function checkOpenPositions(state){
   const acc = state.account;
   const stillOpen = [];
   for(const pos of acc.openPositions){
     let price = null;
-    try{
-      price = pos.source==='DEX' ? await fetchDexPrice(pos.network, pos.poolAddress) : await fetchBinancePrice(pos.symbol);
-    }catch(e){}
+    try{ price = await getLatestPrice(pos); }catch(e){}
     if(price==null){ stillOpen.push(pos); continue; }
 
     let hitTP=false, hitSL=false;
@@ -219,6 +284,7 @@ async function checkOpenPositions(state){
   }
   acc.openPositions = stillOpen;
 
+  // Cuenta agotada -> archivar y abrir una nueva, sin borrar nada
   if(acc.capital <= 0){
     console.log('TheHaton agotó el capital. Archivando cuenta #' + acc.id + ' y abriendo una nueva.');
     sendPromises.push(sendTelegram(`💀 <b>TheHaton agotó la cuenta #${acc.id}</b>\nAbriendo cuenta nueva de 100 USDT. El historial anterior queda guardado para siempre.`));
@@ -227,39 +293,65 @@ async function checkOpenPositions(state){
   }
 }
 
-// ---------- TheHaton: abrir posición nueva si hay señal ----------
+// ---------- TheHaton: abrir posición nueva si hay señal y estamos en horario ----------
+// Riesgo dinámico: sube o baja el % arriesgado según el drawdown y la racha reciente.
+// Nunca sale del rango 0.5%-1.5% (regla maestra: nunca romper el límite conservador salvo confluencia extrema del propio score).
+function computeDynamicRisk(acc, confidencePct){
+  if(acc.peakCapital == null) acc.peakCapital = acc.capital;
+  acc.peakCapital = Math.max(acc.peakCapital, acc.capital);
+  const drawdown = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
+  const recent = acc.closedTrades.slice(-3);
+  const recentLosses = recent.filter(t=>t.result==='loss').length;
+
+  let risk = RISK_PCT; // base 1%
+  let reason = 'riesgo base (1%)';
+  if(drawdown>0.15 || recentLosses>=2){
+    risk = 0.005;
+    reason = `riesgo reducido a 0.5% (drawdown ${(drawdown*100).toFixed(0)}% o ${recentLosses} pérdidas seguidas)`;
+  } else if(confidencePct>=90 && recentLosses===0 && drawdown<0.05){
+    risk = 0.015;
+    reason = `riesgo aumentado a 1.5% (alta confianza ${confidencePct}% y sin pérdidas recientes)`;
+  }
+  return {risk: Math.max(0.005, Math.min(0.015, risk)), reason};
+}
+
 function tryOpenPosition(state, symbol, r, tag, source, network, poolAddress){
   const acc = state.account;
   const hour = argentinaHourNow();
-  if(hour < WORK_HOUR_START || hour >= WORK_HOUR_END) return false;
+  if(hour < WORK_HOUR_START || hour >= WORK_HOUR_END) return false; // fuera de horario de trabajo
 
   const today = todayKey();
   if(acc.tradesToday.date !== today) acc.tradesToday = {date:today, count:0};
   if(acc.tradesToday.count >= MAX_TRADES_PER_DAY) return false;
 
-  if(acc.openPositions.find(p=>p.symbol===symbol)) return false;
+  if(acc.openPositions.find(p=>p.symbol===symbol)) return false; // ya hay una posición abierta en esa moneda
 
   const best = Math.max(r.longScore, r.shortScore);
   if(best < THRESHOLD || r.recommendation==='NO OPERAR') return false;
 
-  const riskAmount = acc.capital * RISK_PCT;
+  const confidencePct = Math.round(best*10); // proxy simple 0-100 a partir del score
+  const {risk: riskPct, reason: riskReason} = computeDynamicRisk(acc, confidencePct);
+  const riskAmount = acc.capital * riskPct;
   const distance = Math.abs(r.price - r.stop);
   if(distance<=0) return false;
   const units = riskAmount / distance;
 
   acc.openPositions.push({
     symbol, dir: r.recommendation, entry: r.price, stop: r.stop, tp: r.t1, units,
-    source, network, poolAddress, tag, openedAt: Date.now()
+    source, network, poolAddress, tag, openedAt: Date.now(), riskPct
   });
   acc.tradesToday.count++;
-  console.log(`TheHaton abrió ${symbol}${tag} ${r.recommendation} @ ${r.price} (score ${best.toFixed(1)})`);
+  console.log(`TheHaton abrió ${symbol}${tag} ${r.recommendation} @ ${r.price} (score ${best.toFixed(1)}, ${riskReason})`);
   sendPromises.push(sendTelegram(
     `🏛️ <b>TheHaton abrió ${symbol}${tag} ${r.recommendation}</b>\n` +
     `Score: ${best.toFixed(1)}/10\nEntrada: $${r.price.toFixed(6)}\nStop: $${r.stop.toFixed(6)}\nTP: $${r.t1.toFixed(6)}\n` +
+    `Riesgo de esta operación: ${(riskPct*100).toFixed(1)}% (${riskReason})\n` +
     `Capital de la cuenta: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})`
   ));
   return true;
 }
+
+let sendPromises = [];
 
 async function evaluateAndNotify(name, candles, state, now, ONE_HOUR, tag, source, network, poolAddress){
   if(!candles || candles.length<220){ console.log(name, 'sin datos suficientes'); return; }
@@ -295,25 +387,27 @@ async function main(){
   console.log('--- TheHaton: revisando posiciones abiertas ---');
   await checkOpenPositions(state);
 
-  // ---- Modo de prueba forzado sin depender de la API externa de Binance ----
+  // ---- Modo de prueba: fuerza una operación de test en BTC para confirmar que todo el circuito funciona ----
   if(process.env.FORCE_TEST_TRADE === 'true'){
     console.log('--- MODO DE PRUEBA: forzando una operación de test en BTC ---');
     try{
-      // Datos simulados estables para saltear bloqueos de red en el test
-      const r = { price: 95000, longScore: 8.5, shortScore: 1.5, recommendation: 'LONG', stop: 94000, t1: 96500 };
+      const candles = await fetchBinanceCandles('BTC');
+      const r = scoreCoin(candles);
       const acc = state.account;
       const riskAmount = acc.capital * RISK_PCT;
       const distance = Math.max(Math.abs(r.price - r.stop), r.price*0.001);
       const units = riskAmount / distance;
-      
+      const dir = r.recommendation === 'NO OPERAR' ? 'LONG' : r.recommendation; // si no hay señal, forzamos LONG igual
+      const stopTest = dir==='LONG' ? r.price - distance : r.price + distance;
+      const tpTest = dir==='LONG' ? r.price + distance*1.5 : r.price - distance*1.5;
       acc.openPositions.push({
-        symbol:'BTC', dir: 'LONG', entry:r.price, stop:r.stop, tp:r.t1, units,
+        symbol:'BTC', dir, entry:r.price, stop:stopTest, tp:tpTest, units,
         source:'BINANCE', network:null, poolAddress:null, tag:' (TEST)', openedAt: Date.now()
       });
       await sendTelegram(
-        `🧪 <b>TheHaton — Operación de PRUEBA abierta (BTC LONG)</b>\n` +
+        `🧪 <b>TheHaton — Operación de PRUEBA abierta (BTC ${dir})</b>\n` +
         `Esto es solo para confirmar que el circuito funciona de punta a punta.\n` +
-        `Entrada: $${r.price.toFixed(2)}\nStop: $${r.stop.toFixed(2)}\nTP: $${r.t1.toFixed(2)}\n` +
+        `Entrada: $${r.price.toFixed(2)}\nStop: $${stopTest.toFixed(2)}\nTP: $${tpTest.toFixed(2)}\n` +
         `Capital: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})`
       );
       console.log('Operación de prueba abierta y mensaje de test enviado a Telegram.');
@@ -328,6 +422,17 @@ async function main(){
       await evaluateAndNotify(symbol, candles, state, now, ONE_HOUR, '', 'BINANCE', null, null);
     }catch(e){ console.error('Error con', symbol, e.message); }
     await new Promise(res=>setTimeout(res, 250));
+  }
+
+  console.log('--- Escaneando CUSTOM_COINS (radar multi-exchange: Binance/OKX/Bybit/MEXC/Gate.io) ---');
+  for(const symbol of CUSTOM_COINS){
+    if(pairs.includes(symbol)){ console.log(symbol, 'ya se escaneó en el top', TOP_N_BINANCE, 'de Binance, se omite duplicado.'); continue; }
+    try{
+      const found = await fetchCandlesAnywhere(symbol);
+      if(!found){ console.log(symbol, '-> no se encontró en ninguna de las 5 fuentes.'); continue; }
+      await evaluateAndNotify(symbol, found.candles, state, now, ONE_HOUR, ` (${found.source})`, found.source.toUpperCase(), null, null);
+    }catch(e){ console.error('Error con', symbol, e.message); }
+    await new Promise(res=>setTimeout(res, 300));
   }
 
   console.log('--- Escaneando pools nuevas en DEXs (liquidez >= $20k) ---');
