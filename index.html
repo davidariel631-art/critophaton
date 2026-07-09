@@ -2237,14 +2237,14 @@ async function loadTheHaton(){
   const body = document.getElementById('thehatonBody');
   statusEl4.textContent = 'Cargando estado de TheHaton...';
   body.style.display = 'none';
+  let state = null;
   try{
     const res = await fetch(THEHATON_STATE_URL + '?t=' + Date.now()); // cache-bust
-    if(!res.ok) throw new Error('no encontrado');
-    const state = await res.json();
-    const acc = state.account;
-    if(!acc){ statusEl4.textContent = 'El bot todavía no corrió ninguna vez (o no tiene cuenta creada aún).'; return; }
+    if(res.ok) state = await res.json();
+  }catch(e){ /* seguimos con el panel base */ }
 
-    const trades = acc.closedTrades || [];
+  const acc = state?.account || { id:1, capital:100, initialCapital:100, openPositions:[], closedTrades:[] };
+  const trades = acc.closedTrades || [];
     const wins = trades.filter(t=>t.result==='win');
     const losses = trades.filter(t=>t.result==='loss');
     const winRate = trades.length ? Math.round((wins.length/trades.length)*100) : 0;
@@ -2286,16 +2286,15 @@ async function loadTheHaton(){
       return `<div class="hist-row"><div>${new Date(t.closedAt).toLocaleString()} · ${t.symbol}${t.tag||''} ${t.dir}</div><div><span class="badge ${cls}">${t.result==='win'?'GANÓ':'PERDIÓ'}</span> ${t.pnl>=0?'+':''}${t.pnl.toFixed(2)} USDT</div></div>`;
     }).join('') : '<div class="subrow">Todavía no se cerró ninguna operación.</div>';
 
-    const archived = state.accountHistory || [];
-    document.getElementById('thHistoryNote').textContent = archived.length
-      ? `Esta es la cuenta #${acc.id}. Hay ${archived.length} cuenta(s) anterior(es) agotada(s) y archivada(s) para siempre (nunca se borran).`
-      : `Esta es la primera cuenta de TheHaton (capital inicial: $${acc.initialCapital}).`;
+    const archived = state?.accountHistory || [];
+    document.getElementById('thHistoryNote').textContent = state
+      ? (archived.length
+          ? `Esta es la cuenta #${acc.id}. Hay ${archived.length} cuenta(s) anterior(es) agotada(s) y archivada(s) para siempre (nunca se borran).`
+          : `Esta es la primera cuenta de TheHaton (capital inicial: $${acc.initialCapital}).`)
+      : 'El bot todavía no corrió ninguna vez (o el archivo aún no está subido) — este es el panel de arranque con el capital inicial. Corré el workflow en GitHub Actions para que empiece a llenarse.';
 
     statusEl4.textContent = '';
     body.style.display = 'block';
-  }catch(e){
-    statusEl4.textContent = 'Todavía no hay datos de TheHaton (el bot corre cada 15 min — probá de nuevo en un rato, o confirmá que ya subiste telegram-bot/state.json a tu repo).';
-  }
 }
 
 document.getElementById('cmpBtn').addEventListener('click', async ()=>{
