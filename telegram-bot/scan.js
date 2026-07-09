@@ -146,13 +146,23 @@ async function fetchDexPrice(network, poolAddress){
 
 // ---------- Estado (nunca se borra el historial) ----------
 function loadState(){
-  try{ return JSON.parse(fs.readFileSync(STATE_FILE,'utf8')); }catch(e){
+  let raw;
+  try{ raw = JSON.parse(fs.readFileSync(STATE_FILE,'utf8')); }catch(e){ raw = {}; }
+  if(!raw || typeof raw !== 'object') raw = {};
+  if(!raw.account){
+    // Migración automática desde el formato viejo del bot (solo tenía el mapa de "ya notificado").
+    // Antes, todo el archivo ERA ese mapa; ahora vive adentro de `notified`.
+    const oldNotified = (raw.notified && typeof raw.notified==='object') ? raw.notified : raw;
+    console.log('Migrando state.json de formato viejo a formato con cuenta TheHaton...');
     return {
-      notified: {},
+      notified: oldNotified,
       account: { id:1, capital:100, initialCapital:100, openPositions:[], closedTrades:[], tradesToday:{date:null,count:0} },
-      accountHistory: [] // cuentas anteriores agotadas, archivadas para siempre
+      accountHistory: Array.isArray(raw.accountHistory) ? raw.accountHistory : []
     };
   }
+  if(!raw.notified) raw.notified = {};
+  if(!Array.isArray(raw.accountHistory)) raw.accountHistory = [];
+  return raw;
 }
 function saveState(state){
   fs.mkdirSync('telegram-bot', {recursive:true});
@@ -286,6 +296,33 @@ async function main(){
 
   console.log('--- TheHaton: revisando posiciones abiertas ---');
   await checkOpenPositions(state);
+
+  // ---- Modo de prueba: fuerza una operación de test en BTC para confirmar que todo el circuito funciona ----
+  if(process.env.FORCE_TEST_TRADE === 'true'){
+    console.log('--- MODO DE PRUEBA: forzando una operación de test en BTC ---');
+    try{
+      const candles = await fetchBinanceCandles('BTC');
+      const r = scoreCoin(candles);
+      const acc = state.account;
+      const riskAmount = acc.capital * RISK_PCT;
+      const distance = Math.max(Math.abs(r.price - r.stop), r.price*0.001);
+      const units = riskAmount / distance;
+      const dir = r.recommendation === 'NO OPERAR' ? 'LONG' : r.recommendation; // si no hay señal, forzamos LONG igual
+      const stopTest = dir==='LONG' ? r.price - distance : r.price + distance;
+      const tpTest = dir==='LONG' ? r.price + distance*1.5 : r.price - distance*1.5;
+      acc.openPositions.push({
+        symbol:'BTC', dir, entry:r.price, stop:stopTest, tp:tpTest, units,
+        source:'BINANCE', network:null, poolAddress:null, tag:' (TEST)', openedAt: Date.now()
+      });
+      await sendTelegram(
+        `🧪 <b>TheHaton — Operación de PRUEBA abierta (BTC ${dir})</b>\n` +
+        `Esto es solo para confirmar que el circuito funciona de punta a punta.\n` +
+        `Entrada: $${r.price.toFixed(2)}\nStop: $${stopTest.toFixed(2)}\nTP: $${tpTest.toFixed(2)}\n` +
+        `Capital: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})`
+      );
+      console.log('Operación de prueba abierta y mensaje de test enviado a Telegram.');
+    }catch(e){ console.error('Error en el modo de prueba:', e.message); }
+  }
 
   console.log('--- Escaneando Binance (top', TOP_N_BINANCE, 'por volumen 24h) ---');
   const pairs = await getTopBinancePairs(TOP_N_BINANCE);
