@@ -243,6 +243,7 @@
     <button class="tab-btn" data-tab="dexnuevos">DEX Nuevos</button>
     <button class="tab-btn" data-tab="comparar">Comparar</button>
     <button class="tab-btn" data-tab="historial">Historial</button>
+    <button class="tab-btn" data-tab="thehaton">🏛️ TheHaton</button>
   </div>
 
   <div class="tabpanel active" id="panel-analizar">
@@ -458,6 +459,30 @@
       <div id="historyList" class="subrow">Todavía no analizaste ninguna moneda.</div>
     </div>
   </div>
+
+  <div class="tabpanel" id="panel-thehaton">
+    <div class="card">
+      <h2>🏛️ TheHaton — Cuenta Virtual (100 USDT, nunca opera con dinero real)</h2>
+      <div class="hint" style="margin-top:0;">Opera sola en segundo plano vía el bot de Telegram (GitHub Actions, cada 15 min). Solo abre operaciones nuevas entre las 04:00 y 15:00 (Argentina), máximo 4 por día. Esta vista lee directamente el archivo público que actualiza el bot.</div>
+      <div id="thehatonStatus" class="subrow">Cargando estado de TheHaton...</div>
+      <div id="thehatonBody" style="display:none;">
+        <div class="dual-hero" style="margin-top:14px;">
+          <div><div class="mini-ring-label">Capital actual</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thCapital">—</div></div>
+          <div><div class="mini-ring-label">Win Rate</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thWinRate">—</div></div>
+          <div><div class="mini-ring-label">Profit Factor</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thProfitFactor">—</div></div>
+          <div><div class="mini-ring-label">Cuenta #</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thAccountId">—</div></div>
+        </div>
+        <div class="indi-grid" style="margin-top:18px;">
+          <div class="indi-col"><h3>Operaciones abiertas</h3><div id="thOpenPositions"></div></div>
+          <div class="indi-col"><h3>Racha</h3><div id="thStreak"></div></div>
+          <div class="indi-col"><h3>Mejor / peor operación</h3><div id="thBestWorst"></div></div>
+        </div>
+        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">Últimas operaciones cerradas</h3>
+        <div id="thClosedTrades"></div>
+        <div class="subrow" style="margin-top:14px;" id="thHistoryNote"></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script type="module">
@@ -519,10 +544,10 @@ const FUTURES = 'https://fapi.binance.com';
 const GECKO = 'https://api.geckoterminal.com/api/v2';
 
 const TF_MAP = {
-  '15m': {binance:'15m', gecko:{timeframe:'minute', aggregate:15}},
-  '1h':  {binance:'1h',  gecko:{timeframe:'hour',   aggregate:1}},
-  '4h':  {binance:'4h',  gecko:{timeframe:'hour',   aggregate:4}},
-  '1d':  {binance:'1d',  gecko:{timeframe:'day',    aggregate:1}},
+  '15m': {binance:'15m', okx:'15m', bybit:'15', mexc:'15m', gate:'15m', gecko:{timeframe:'minute', aggregate:15}},
+  '1h':  {binance:'1h',  okx:'1H',  bybit:'60', mexc:'60m', gate:'1h',  gecko:{timeframe:'hour',   aggregate:1}},
+  '4h':  {binance:'4h',  okx:'4H',  bybit:'240', mexc:'4h', gate:'4h',  gecko:{timeframe:'hour',   aggregate:4}},
+  '1d':  {binance:'1d',  okx:'1D',  bybit:'D',  mexc:'1d', gate:'1d',  gecko:{timeframe:'day',    aggregate:1}},
 };
 let currentTF = '4h';
 let riskProfile = 'balanced';
@@ -593,9 +618,80 @@ async function tryGecko(query, tf){
   };
 }
 
+async function tryOKX(symbolRaw, tf){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const instId = `${sym}-USDT`;
+  const bar = TF_MAP[tf].okx;
+  const res = await fetchJSON(`https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=220`);
+  if(!res.data || !res.data.length) throw new Error('OKX sin datos');
+  const candles = res.data.map(r=>({t:+r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]})).sort((a,b)=>a.t-b.t);
+  const tick = await fetchJSON(`https://www.okx.com/api/v5/market/ticker?instId=${instId}`);
+  const t = tick.data?.[0];
+  return {
+    source:'OKX', symbol: instId, displayName: sym,
+    price: parseFloat(t?.last || candles.at(-1).c),
+    change24h: t ? ((parseFloat(t.last)-parseFloat(t.open24h))/parseFloat(t.open24h))*100 : 0,
+    vol24h: parseFloat(t?.volCcy24h || 0), candles, funding:null, oi:null, dexUrl:null, contract:null,
+  };
+}
+async function tryBybit(symbolRaw, tf){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = `${sym}USDT`;
+  const interval = TF_MAP[tf].bybit;
+  const res = await fetchJSON(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${pair}&interval=${interval}&limit=200`);
+  const list = res.result?.list;
+  if(!list || !list.length) throw new Error('Bybit sin datos');
+  const candles = list.map(r=>({t:+r[0],o:+r[1],h:+r[2],l:+r[3],c:+r[4],v:+r[5]})).sort((a,b)=>a.t-b.t);
+  const tick = await fetchJSON(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${pair}`);
+  const t = tick.result?.list?.[0];
+  return {
+    source:'Bybit', symbol: pair, displayName: sym,
+    price: parseFloat(t?.lastPrice || candles.at(-1).c),
+    change24h: t ? parseFloat(t.price24hPcnt)*100 : 0,
+    vol24h: parseFloat(t?.turnover24h || 0), candles, funding:null, oi:null, dexUrl:null, contract:null,
+  };
+}
+async function tryMEXC(symbolRaw, tf){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = `${sym}USDT`;
+  const interval = TF_MAP[tf].mexc;
+  const klines = await fetchJSON(`https://api.mexc.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=220`);
+  if(!Array.isArray(klines) || !klines.length) throw new Error('MEXC sin datos');
+  const candles = klines.map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]})).sort((a,b)=>a.t-b.t);
+  const ticker = await fetchJSON(`https://api.mexc.com/api/v3/ticker/24hr?symbol=${pair}`);
+  return {
+    source:'MEXC', symbol: pair, displayName: sym,
+    price: parseFloat(ticker.lastPrice || candles.at(-1).c),
+    change24h: parseFloat(ticker.priceChangePercent||0),
+    vol24h: parseFloat(ticker.quoteVolume||0), candles, funding:null, oi:null, dexUrl:null, contract:null,
+  };
+}
+async function tryGate(symbolRaw, tf){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = `${sym}_USDT`;
+  const interval = TF_MAP[tf].gate;
+  const rows = await fetchJSON(`https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${pair}&interval=${interval}&limit=220`);
+  if(!Array.isArray(rows) || !rows.length) throw new Error('Gate.io sin datos');
+  // Formato Gate: [timestamp, volumen, close, high, low, open]
+  const candles = rows.map(r=>({t:+r[0]*1000,o:+r[5],h:+r[3],l:+r[4],c:+r[2],v:+r[1]})).sort((a,b)=>a.t-b.t);
+  return {
+    source:'Gate.io', symbol: pair, displayName: sym,
+    price: candles.at(-1).c,
+    change24h: ((candles.at(-1).c-candles.at(0).c)/candles.at(0).c)*100,
+    vol24h: candles.at(-1).v, candles, funding:null, oi:null, dexUrl:null, contract:null,
+  };
+}
+
 async function fetchTokenData(query, tf){
-  try{ return await tryBinance(query, tf); }
-  catch(e){ return await tryGecko(query, tf); }
+  const sources = [tryBinance, tryOKX, tryBybit, tryMEXC, tryGate];
+  for(const src of sources){
+    try{
+      const data = await src(query, tf);
+      if(data.candles && data.candles.length>=30) return data;
+    }catch(e){ /* probamos con la siguiente fuente */ }
+  }
+  // ninguna fuente de exchanges centralizados lo tiene -> probamos DEXs (GeckoTerminal)
+  return await tryGecko(query, tf);
 }
 
 // Tendencia macro (4h, EMA200) usada como filtro: no se opera contra la tendencia mayor sin confluencia extrema
@@ -1713,6 +1809,7 @@ document.getElementById('tabNav').addEventListener('click', e=>{
   document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
   if(btn.dataset.tab==='heatmap' && !heatmapLoaded) loadHeatmap();
   if(btn.dataset.tab==='historial') renderHistory();
+  if(btn.dataset.tab==='thehaton') loadTheHaton();
 });
 
 // ================= TICKER (Fear&Greed + Dominance) =================
@@ -2133,7 +2230,74 @@ document.getElementById('huntToggleBtn').addEventListener('click', async ()=>{
   }
 });
 
-// ================= COMPARAR =================
+// ================= THEHATON (cuenta virtual del bot) =================
+const THEHATON_STATE_URL = 'https://raw.githubusercontent.com/davidariel631-art/critophaton/main/telegram-bot/state.json';
+async function loadTheHaton(){
+  const statusEl4 = document.getElementById('thehatonStatus');
+  const body = document.getElementById('thehatonBody');
+  statusEl4.textContent = 'Cargando estado de TheHaton...';
+  body.style.display = 'none';
+  try{
+    const res = await fetch(THEHATON_STATE_URL + '?t=' + Date.now()); // cache-bust
+    if(!res.ok) throw new Error('no encontrado');
+    const state = await res.json();
+    const acc = state.account;
+    if(!acc){ statusEl4.textContent = 'El bot todavía no corrió ninguna vez (o no tiene cuenta creada aún).'; return; }
+
+    const trades = acc.closedTrades || [];
+    const wins = trades.filter(t=>t.result==='win');
+    const losses = trades.filter(t=>t.result==='loss');
+    const winRate = trades.length ? Math.round((wins.length/trades.length)*100) : 0;
+    const grossWin = wins.reduce((s,t)=>s+t.pnl,0);
+    const grossLoss = Math.abs(losses.reduce((s,t)=>s+t.pnl,0));
+    const profitFactor = grossLoss>0 ? (grossWin/grossLoss).toFixed(2) : (grossWin>0?'∞':'—');
+
+    document.getElementById('thCapital').textContent = `$${acc.capital.toFixed(2)}`;
+    document.getElementById('thCapital').style.color = acc.capital>=acc.initialCapital ? 'var(--teal)' : 'var(--rose)';
+    document.getElementById('thWinRate').textContent = trades.length ? `${winRate}%` : '—';
+    document.getElementById('thProfitFactor').textContent = profitFactor;
+    document.getElementById('thAccountId').textContent = '#' + acc.id;
+
+    document.getElementById('thOpenPositions').innerHTML = (acc.openPositions||[]).length
+      ? acc.openPositions.map(p=>`<div class="indi-line"><div class="il-k">${p.symbol}${p.tag||''}</div><div class="il-v ${p.dir==='LONG'?'up':'down'}">${p.dir}</div></div>`).join('')
+      : '<div class="subrow">Ninguna en este momento.</div>';
+
+    // racha actual (ganadora o perdedora) mirando desde la última operación hacia atrás
+    let streak=0, streakType=null;
+    for(let i=trades.length-1;i>=0;i--){
+      if(streakType===null){ streakType=trades[i].result; streak=1; }
+      else if(trades[i].result===streakType) streak++;
+      else break;
+    }
+    document.getElementById('thStreak').innerHTML = trades.length
+      ? `<div class="indi-hero"><span class="num ${streakType==='win'?'up':'down'}">${streak}</span><span class="tag">${streakType==='win'?'ganadoras seguidas':'perdedoras seguidas'}</span></div>`
+      : '<div class="subrow">Sin operaciones cerradas todavía.</div>';
+
+    const best = trades.length ? trades.reduce((a,b)=>b.pnl>a.pnl?b:a) : null;
+    const worst = trades.length ? trades.reduce((a,b)=>b.pnl<a.pnl?b:a) : null;
+    document.getElementById('thBestWorst').innerHTML = trades.length
+      ? `<div class="indi-line"><div class="il-k">Mejor</div><div class="il-v up">${best.symbol} +${best.pnl.toFixed(2)}</div></div>
+         <div class="indi-line"><div class="il-k">Peor</div><div class="il-v down">${worst.symbol} ${worst.pnl.toFixed(2)}</div></div>`
+      : '<div class="subrow">Sin datos todavía.</div>';
+
+    const recent = trades.slice(-15).reverse();
+    document.getElementById('thClosedTrades').innerHTML = recent.length ? recent.map(t=>{
+      const cls = t.result==='win'?'badge-long':'badge-short';
+      return `<div class="hist-row"><div>${new Date(t.closedAt).toLocaleString()} · ${t.symbol}${t.tag||''} ${t.dir}</div><div><span class="badge ${cls}">${t.result==='win'?'GANÓ':'PERDIÓ'}</span> ${t.pnl>=0?'+':''}${t.pnl.toFixed(2)} USDT</div></div>`;
+    }).join('') : '<div class="subrow">Todavía no se cerró ninguna operación.</div>';
+
+    const archived = state.accountHistory || [];
+    document.getElementById('thHistoryNote').textContent = archived.length
+      ? `Esta es la cuenta #${acc.id}. Hay ${archived.length} cuenta(s) anterior(es) agotada(s) y archivada(s) para siempre (nunca se borran).`
+      : `Esta es la primera cuenta de TheHaton (capital inicial: $${acc.initialCapital}).`;
+
+    statusEl4.textContent = '';
+    body.style.display = 'block';
+  }catch(e){
+    statusEl4.textContent = 'Todavía no hay datos de TheHaton (el bot corre cada 15 min — probá de nuevo en un rato, o confirmá que ya subiste telegram-bot/state.json a tu repo).';
+  }
+}
+
 document.getElementById('cmpBtn').addEventListener('click', async ()=>{
   const a = document.getElementById('cmpA').value.trim();
   const b = document.getElementById('cmpB').value.trim();
