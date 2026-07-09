@@ -389,6 +389,12 @@
       <div class="indi-grid" id="indicatorStatusGrid" style="grid-template-columns:repeat(3,1fr);"></div>
     </div>
 
+    <div class="card" style="margin-top:18px;">
+      <h2>📰 Noticias relevantes (Dios Noticias — 1 voto de 11, no decide solo)</h2>
+      <div class="hint" style="margin-top:0;">Detección automática por palabras clave en titulares de Cointelegraph/CoinDesk — no es un análisis de lenguaje real, es un filtro simple. Por diseño, este voto pesa la mitad que los demás para que nunca sea lo que decida la operación.</div>
+      <div id="newsList" class="subrow" style="margin-top:8px;">Sin datos todavía.</div>
+    </div>
+
     <div class="grid" style="margin-top:18px;">
       <div class="card">
         <h2>On-chain / smart money (revisión manual)</h2>
@@ -984,7 +990,7 @@ function computeStructure(candles, atrArr){
 }
 
 // ---------- Scoring ----------
-function computeScore(data, macro){
+function computeScore(data, macro, newsItems){
   const closes = data.candles.map(c=>c.c);
   const vols = data.candles.map(c=>c.v);
   const price = closes.at(-1);
@@ -1144,13 +1150,49 @@ function computeScore(data, macro){
 
   const vote = s => s>=0.3?'LONG':s<=-0.3?'SHORT':'NEUTRAL';
   const committee = [
-    {name:'📈 Tendencia', signal:trendSignal, vote:vote(trendSignal)},
-    {name:'⚡ Momentum', signal:momentumSignal, vote:vote(momentumSignal)},
-    {name:'🧠 Smart Money (SMC)', signal:structureSignal, vote:vote(structureSignal)},
-    {name:'💰 Derivados', signal:derivSignal, vote:vote(derivSignal)},
+    {name:'📈 Dios de Tendencia', signal:trendSignal, vote:vote(trendSignal)},
+    {name:'⚡ Dios Momentum', signal:momentumSignal, vote:vote(momentumSignal)},
+    {name:'🧠 Dios Smart Money', signal:structureSignal, vote:vote(structureSignal)},
+    {name:'💰 Dios Derivados', signal:derivSignal, vote:vote(derivSignal)},
   ];
-  if(macro) committee.push({name:'🌐 Macro (4h)', signal:macroSignal, vote:vote(macroSignal)});
-  if(mc && mc.btcDominance!=null) committee.push({name:'🌍 Contexto/Dominancias', signal:marketSignal, vote:vote(marketSignal)});
+  if(macro) committee.push({name:'🌐 Dios Macro (4h)', signal:macroSignal, vote:vote(macroSignal)});
+  if(mc && mc.btcDominance!=null) committee.push({name:'🌍 Dios de Dominancias', signal:marketSignal, vote:vote(marketSignal)});
+
+  // ---- Los 4 dioses nuevos: solo votan y explican (no alteran la fórmula del score ya calibrada, para no romper nada existente) ----
+  const capitalFlowSignal = volumeQuality>=0.8 ? 0.4 : volumeQuality<=0.3 ? -0.3 : 0; // proxy: volumen relativo como flujo de capital hacia este activo
+  committee.push({name:'💧 Dios Capital Flow', signal:capitalFlowSignal, vote:vote(capitalFlowSignal)});
+
+  const riskSignalDir = trendSignal!==0 ? Math.sign(trendSignal) : 1;
+  const riskSignal = volat>=10 ? 0.25*riskSignalDir : volat<=4 ? -0.25 : 0; // castiga la convicción si el precio está muy extendido
+  committee.push({name:'⚠️ Dios Gestión de Riesgo', signal:riskSignal, vote:vote(riskSignal)});
+
+  const liquidityOk = (data.vol24h||0) > 1000000;
+  const radarSignal = liquidityOk ? 0.3*riskSignalDir : -0.2; // menos convicción si la liquidez de la fuente es baja
+  committee.push({name:'📡 Dios Radar del Mercado', signal:radarSignal, vote:vote(radarSignal), note: `Fuente: ${data.source}, volumen 24h: $${((data.vol24h||0)/1e6).toFixed(1)}M`});
+
+  let memorySignal = 0, memoryNote = 'Sin historial previo de esta moneda guardado en este navegador.';
+  try{
+    const hist = JSON.parse(localStorage.getItem('fortress_history')||'[]');
+    const prevEntry = hist.find(h=>h.token===data.displayName);
+    if(prevEntry){
+      const consistent = (prevEntry.recommendation==='LONG' && trendSignal>0) || (prevEntry.recommendation==='SHORT' && trendSignal<0);
+      memorySignal = consistent ? 0.3 : -0.2;
+      memoryNote = `Último análisis guardado de ${data.displayName}: ${prevEntry.recommendation} (${consistent?'coincide':'contradice'} la lectura de tendencia actual).`;
+    }
+  }catch(e){}
+  committee.push({name:'🧠 Dios Memoria', signal:memorySignal, vote:vote(memorySignal), note: memoryNote});
+
+  // ---- Dios Noticias (11°): también solo vota, atenuado a la mitad a propósito para que nunca sea lo que decide ----
+  const news = newsItems || [];
+  const newsBullish = news.filter(n=>n.sentiment==='bullish').length;
+  const newsBearish = news.filter(n=>n.sentiment==='bearish').length;
+  const newsRaw = news.length ? (newsBullish-newsBearish)/news.length : 0;
+  const newsSignal = Math.max(-1,Math.min(1,newsRaw)) * 0.5; // atenuado: nunca pesa como si fuera lo único importante
+  const newsNote = news.length
+    ? `${news.length} titular(es) relevante(s) (${newsBullish} con tono alcista, ${newsBearish} con tono bajista). Es 1 voto de 11, no decide solo.`
+    : 'Sin titulares relevantes detectados en este momento.';
+  committee.push({name:'📰 Dios Noticias', signal:newsSignal, vote:vote(newsSignal), note:newsNote});
+
   committee.forEach(c=>c.confidence = Math.round(Math.abs(c.signal)*100));
   const votesLong = committee.filter(c=>c.vote==='LONG').length;
   const votesShort = committee.filter(c=>c.vote==='SHORT').length;
@@ -1160,7 +1202,7 @@ function computeScore(data, macro){
     longScore, shortScore, confidence, stars, recommendation,
     breakdown:[{label:'Tendencia',val:Math.round(trendR),max:25},{label:'Momentum',val:Math.round(momentumR),max:20},{label:'Volumen',val:Math.round(volumeR),max:12},{label:'Volatilidad',val:Math.round(volatR),max:8},{label:'Derivados',val:Math.round(derivR),max:15},{label:'Estructura SMC',val:Math.round(structure.score),max:20}],
     metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct},
-    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus,
+    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, newsItems: news,
     series:{closes,e20,e50,e200,rsiArr,macd:m,bb}
   };
 }
@@ -1641,6 +1683,16 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
     </div>`;
   }).join('');
 
+  const newsListEl = document.getElementById('newsList');
+  if(!result.newsItems || !result.newsItems.length){
+    newsListEl.textContent = 'No se detectaron titulares relevantes para esta moneda o eventos macro en este momento.';
+  } else {
+    newsListEl.innerHTML = result.newsItems.map(n=>{
+      const icon = n.sentiment==='bullish'?'🟢':n.sentiment==='bearish'?'🔴':'⚪';
+      return `<div class="hist-row" style="cursor:default;"><a href="${n.link}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;flex:1;">${icon} ${n.title}</a></div>`;
+    }).join('');
+  }
+
   const query = encodeURIComponent(data.contract || data.displayName);
   const links = [
     {name:'DexScreener', url:`https://dexscreener.com/search?q=${query}`},
@@ -1667,18 +1719,14 @@ async function analyze(qOverride){
   if(!q){ setStatus('Escribí un símbolo o contrato.'); return; }
   lastQuery = q;
   goBtn.disabled = true;
-  setStatus(`Buscando ${q} en Binance (${currentTF})...`);
+  setStatus(`Buscando ${q} (Binance → OKX → Bybit → MEXC → Gate.io → DEX)...`);
   let data;
-  try{ data = await tryBinance(q, currentTF); }
-  catch(e){
-    setStatus('No está en Binance. Buscando en GeckoTerminal (DEX)...');
-    try{ data = await tryGecko(q, currentTF); }
-    catch(e2){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
-  }
+  try{ data = await fetchTokenData(q, currentTF); }
+  catch(e){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
   if(!data.candles || data.candles.length < 30){ setStatus('Datos insuficientes para un análisis confiable.'); goBtn.disabled=false; return; }
-  setStatus('Chequeando tendencia macro (4h) y calculando score...');
-  const macro = await fetchMacroTrend(q);
-  const result = computeScore(data, macro);
+  setStatus('Chequeando tendencia macro (4h), noticias relevantes y calculando score...');
+  const [macro, newsItems] = await Promise.all([ fetchMacroTrend(q), fetchRelevantNews(data.displayName) ]);
+  const result = computeScore(data, macro, newsItems);
   const setup = buildSetup(data, result);
   lastAnalysisData = data;
   renderResults(data, result, setup);
@@ -1687,6 +1735,33 @@ async function analyze(qOverride){
   setStatus(`Listo · ${data.candles.length} velas (${currentTF}) · fuente: ${data.source}`);
   goBtn.disabled = false;
   analyzeMultiTF(q); // fire and forget, updates its own box
+}
+
+// ---------- Noticias relevantes (11° voto del comité, deliberadamente atenuado) ----------
+async function fetchRelevantNews(coinName){
+  const feeds = ['https://cointelegraph.com/rss','https://www.coindesk.com/arc/outboundfeeds/rss/'];
+  const bullishWords = ['surge','rally','bullish','soar','approval','inflow','adoption','breakout','record high','partnership','upgrade','all-time high','buy the dip'];
+  const bearishWords = ['crash','hack','exploit','lawsuit','ban','bearish','sell-off','plunge','liquidation','fraud','investigation','delist','outflow','scam','rug pull'];
+  let matched = [];
+  for(const feedUrl of feeds){
+    try{
+      const res = await fetchJSON(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}&count=25`);
+      if(res.status!=='ok' || !res.items) continue;
+      res.items.forEach(item=>{
+        const title = item.title||'';
+        const lower = title.toLowerCase();
+        const mentionsCoin = coinName && lower.includes(coinName.toLowerCase());
+        const mentionsMacro = /(fomc|cpi|fed |federal reserve|interest rate|sec |etf|halving)/i.test(title);
+        if(mentionsCoin || mentionsMacro){
+          let sentiment = 'neutral';
+          if(bullishWords.some(w=>lower.includes(w))) sentiment='bullish';
+          if(bearishWords.some(w=>lower.includes(w))) sentiment='bearish';
+          matched.push({title, link:item.link, sentiment, mentionsCoin});
+        }
+      });
+    }catch(e){ /* esta fuente no respondió (rate limit u otro), seguimos con la próxima */ }
+  }
+  return matched.slice(0,12);
 }
 
 // ---------- Watchlist ----------
