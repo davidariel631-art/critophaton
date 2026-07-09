@@ -302,6 +302,9 @@ async function main(){
     console.log('--- MODO DE PRUEBA: forzando una operación de test en BTC ---');
     try{
       const candles = await fetchBinanceCandles('BTC');
+      if (!candles || candles.length < 2) {
+        throw new Error('No se pudieron obtener velas de Binance para BTC en este momento.');
+      }
       const r = scoreCoin(candles);
       const acc = state.account;
       const riskAmount = acc.capital * RISK_PCT;
@@ -310,6 +313,7 @@ async function main(){
       const dir = r.recommendation === 'NO OPERAR' ? 'LONG' : r.recommendation; // si no hay señal, forzamos LONG igual
       const stopTest = dir==='LONG' ? r.price - distance : r.price + distance;
       const tpTest = dir==='LONG' ? r.price + distance*1.5 : r.price - distance*1.5;
+      
       acc.openPositions.push({
         symbol:'BTC', dir, entry:r.price, stop:stopTest, tp:tpTest, units,
         source:'BINANCE', network:null, poolAddress:null, tag:' (TEST)', openedAt: Date.now()
