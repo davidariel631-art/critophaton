@@ -18,10 +18,10 @@ const FUTURES = 'https://fapi.binance.com';
 const GECKO = 'https://api.geckoterminal.com/api/v2';
 
 const TF_MAP = {
-  '15m': {binance:'15m', okx:'15m', bybit:'15', mexc:'15m', gate:'15m', gecko:{timeframe:'minute', aggregate:15}},
-  '1h':  {binance:'1h',  okx:'1H',  bybit:'60', mexc:'60m', gate:'1h',  gecko:{timeframe:'hour',   aggregate:1}},
-  '4h':  {binance:'4h',  okx:'4H',  bybit:'240', mexc:'4h', gate:'4h',  gecko:{timeframe:'hour',   aggregate:4}},
-  '1d':  {binance:'1d',  okx:'1D',  bybit:'D',  mexc:'1d', gate:'1d',  gecko:{timeframe:'day',    aggregate:1}},
+  '15m': {binance:'15m', okx:'15m', bybit:'15', mexc:'15m', gate:'15m', kucoin:'15min', kucoinSec:900,  gecko:{timeframe:'minute', aggregate:15}},
+  '1h':  {binance:'1h',  okx:'1H',  bybit:'60', mexc:'60m', gate:'1h',  kucoin:'1hour', kucoinSec:3600, gecko:{timeframe:'hour',   aggregate:1}},
+  '4h':  {binance:'4h',  okx:'4H',  bybit:'240', mexc:'4h', gate:'4h',  kucoin:'4hour', kucoinSec:14400, gecko:{timeframe:'hour',   aggregate:4}},
+  '1d':  {binance:'1d',  okx:'1D',  bybit:'D',  mexc:'1d', gate:'1d',  kucoin:'1day',  kucoinSec:86400, gecko:{timeframe:'day',    aggregate:1}},
 };
 
 async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
@@ -43,6 +43,83 @@ async function tryBinance(symbolRaw, tf){
     price: parseFloat(ticker.lastPrice), change24h: parseFloat(ticker.priceChangePercent),
     vol24h: parseFloat(ticker.quoteVolume), candles, funding, oi:null, dexUrl:null, contract:null,
   };
+}
+
+// ---------- Market Context Matrix: OI + Precio + Funding, combinados (no aislados) ----------
+// Solo disponible para símbolos de Binance: es la única fuente gratis con historial de Open Interest.
+const OI_PERIOD_MAP = { '15m':'15m', '1h':'1h', '4h':'4h', '1d':'1d' };
+
+function classifyTrend(values, tolPct=2){
+  if(!values || values.length<2) return null;
+  const first = values[0], last = values.at(-1);
+  if(first===0) return 'STABLE';
+  const pctChange = ((last-first)/Math.abs(first))*100;
+  if(pctChange > tolPct) return 'RISING';
+  if(pctChange < -tolPct) return 'FALLING';
+  return 'STABLE';
+}
+
+async function fetchOpenInterestTrend(symbolRaw, tf){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+  const period = OI_PERIOD_MAP[tf] || '4h';
+  try{
+    const rows = await fetchJSON(`${FUTURES}/futures/data/openInterestHist?symbol=${pair}&period=${period}&limit=8`);
+    if(!Array.isArray(rows) || rows.length<2) return null;
+    const values = rows.map(r=>parseFloat(r.sumOpenInterest));
+    return { trend: classifyTrend(values, 3), values };
+  }catch(e){ return null; } // el símbolo puede no tener mercado de futuros -> sin dato, no rompe nada
+}
+
+async function fetchFundingTrend(symbolRaw){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+  try{
+    const rows = await fetchJSON(`${FUTURES}/fapi/v1/fundingRate?symbol=${pair}&limit=6`);
+    if(!Array.isArray(rows) || rows.length<2) return null;
+    const values = rows.map(r=>parseFloat(r.fundingRate));
+    return { trend: classifyTrend(values, 15), values }; // funding se mueve en % muy chicos, tolerancia relativa más amplia
+  }catch(e){ return null; }
+}
+
+// Las 27 combinaciones (OI x Precio x Funding), fieles a la matriz que compartiste.
+// signal: -1..1 (dirección y fuerza). flag: true = "algo grande puede venir" (alta incertidumbre, no es ni claramente alcista ni bajista).
+const MARKET_CONTEXT_TABLE = {
+  'RISING_RISING_RISING':   {outlook:'PUMP', note:'Todos compran y piden prestado para comprar. Riesgo de squeeze en etapa tardía.', signal:0.3, flag:false},
+  'RISING_RISING_STABLE':   {outlook:'PUMP', note:'Compradores tranquilos y sostenidos. LONG sano.', signal:0.7, flag:false},
+  'RISING_RISING_FALLING':  {outlook:'SOMETHING BIG COMING', note:'Sube el precio y el OI, pero el funding cae: se está armando una pelea (divergencia).', signal:0, flag:true},
+  'FALLING_RISING_RISING':  {outlook:'PUMP', note:'Precio caro y fondeado por deuda: frágil.', signal:0.2, flag:false},
+  'FALLING_RISING_STABLE':  {outlook:'STABLE', note:'Rebote débil, riesgo de que se apague.', signal:-0.1, flag:false},
+  'FALLING_RISING_FALLING': {outlook:'STABLE', note:'El rally está perdiendo fuerza.', signal:-0.1, flag:false},
+  'STABLE_RISING_RISING':   {outlook:'PUMP', note:'Subida suave, poca convicción.', signal:0.2, flag:false},
+  'STABLE_RISING_STABLE':   {outlook:'STABLE', note:'Mercado fino, propenso a revertir.', signal:-0.1, flag:false},
+  'STABLE_RISING_FALLING':  {outlook:'SOMETHING BIG COMING', note:'Divergencia: sube el precio pero el funding cae.', signal:0, flag:true},
+  'RISING_FALLING_RISING':  {outlook:'SOMETHING BIG COMING', note:'Shorts amontonados con funding subiendo: riesgo de short squeeze.', signal:0.2, flag:true},
+  'RISING_FALLING_STABLE':  {outlook:'DUMP', note:'Tendencia bajista sana.', signal:-0.7, flag:false},
+  'RISING_FALLING_FALLING': {outlook:'SOMETHING BIG COMING', note:'Se está armando una pelea entre compradores y vendedores.', signal:0, flag:true},
+  'FALLING_FALLING_RISING': {outlook:'SOMETHING BIG COMING', note:'Señal mixta: OI cae pero funding sube.', signal:0, flag:true},
+  'FALLING_FALLING_STABLE': {outlook:'DUMP', note:'La bajada está perdiendo fuerza.', signal:-0.4, flag:false},
+  'FALLING_FALLING_FALLING':{outlook:'SOMETHING BIG COMING', note:'Cobertura de shorts dentro de la debilidad (posible rebote temporal).', signal:-0.1, flag:true},
+  'STABLE_FALLING_RISING':  {outlook:'SOMETHING BIG COMING', note:'Longs tercos con riesgo de ser barridos.', signal:-0.2, flag:true},
+  'STABLE_FALLING_STABLE':  {outlook:'DUMP', note:'Bajada débil, poca convicción.', signal:-0.2, flag:false},
+  'STABLE_FALLING_FALLING': {outlook:'DUMP', note:'Control silencioso de los vendedores.', signal:-0.5, flag:false},
+  'RISING_STABLE_RISING':   {outlook:'SOMETHING BIG COMING', note:'Posible armado de squeeze al alza.', signal:0.2, flag:true},
+  'RISING_STABLE_STABLE':   {outlook:'SOMETHING BIG COMING', note:'Dirección poco clara todavía.', signal:0, flag:true},
+  'RISING_STABLE_FALLING':  {outlook:'SOMETHING BIG COMING', note:'Posible armado de squeeze a la baja.', signal:-0.2, flag:true},
+  'FALLING_STABLE_RISING':  {outlook:'SOMETHING BIG COMING', note:'Frágil, riesgo de desarme.', signal:-0.1, flag:true},
+  'FALLING_STABLE_STABLE':  {outlook:'STABLE', note:'Desarme silencioso.', signal:-0.1, flag:false},
+  'FALLING_STABLE_FALLING': {outlook:'SOMETHING BIG COMING', note:'Indecisión del mercado.', signal:0, flag:true},
+  'STABLE_STABLE_RISING':   {outlook:'SOMETHING BIG COMING', note:'Mercado enroscándose con sesgo alcista.', signal:0.15, flag:true},
+  'STABLE_STABLE_STABLE':   {outlook:'STABLE', note:'Verdadero equilibrio, sin sesgo.', signal:0, flag:false},
+  'STABLE_STABLE_FALLING':  {outlook:'SOMETHING BIG COMING', note:'Mercado enroscándose con sesgo bajista.', signal:-0.15, flag:true},
+};
+
+function marketContextMatrix(oiTrend, priceTrend, fundingTrend){
+  if(!oiTrend || !priceTrend || !fundingTrend) return null;
+  const key = `${oiTrend}_${priceTrend}_${fundingTrend}`;
+  const row = MARKET_CONTEXT_TABLE[key];
+  if(!row) return null;
+  return { ...row, oiTrend, priceTrend, fundingTrend };
 }
 
 async function tryGecko(query, tf){
@@ -132,9 +209,30 @@ async function tryGate(symbolRaw, tf){
     vol24h: candles.at(-1).v, candles, funding:null, oi:null, dexUrl:null, contract:null,
   };
 }
+async function tryKuCoin(symbolRaw, tf){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = `${sym}-USDT`;
+  const type = TF_MAP[tf].kucoin;
+  const secPerCandle = TF_MAP[tf].kucoinSec;
+  const endAt = Math.floor(Date.now()/1000);
+  const startAt = endAt - secPerCandle*220; // KuCoin requiere rango de fechas explícito (a diferencia de los otros); lo calculamos según la temporalidad
+  const res = await fetchJSON(`https://api.kucoin.com/api/v1/market/candles?symbol=${pair}&type=${type}&startAt=${startAt}&endAt=${endAt}`);
+  const rows = res.data;
+  if(!Array.isArray(rows) || !rows.length) throw new Error('KuCoin sin datos');
+  // Formato KuCoin: [time, open, close, high, low, volumen, turnover] (¡el orden de close/high/low es distinto al habitual!)
+  const candles = rows.map(r=>({t:+r[0]*1000,o:+r[1],c:+r[2],h:+r[3],l:+r[4],v:+r[5]})).sort((a,b)=>a.t-b.t);
+  const stats = await fetchJSON(`https://api.kucoin.com/api/v1/market/stats?symbol=${pair}`).catch(()=>null);
+  return {
+    source:'KuCoin', symbol: pair, displayName: sym,
+    price: stats?.data?.last ? parseFloat(stats.data.last) : candles.at(-1).c,
+    change24h: stats?.data?.changeRate ? parseFloat(stats.data.changeRate)*100 : 0,
+    vol24h: stats?.data?.volValue ? parseFloat(stats.data.volValue) : 0,
+    candles, funding:null, oi:null, dexUrl:null, contract:null,
+  };
+}
 
 async function fetchTokenData(query, tf){
-  const sources = [tryBinance, tryOKX, tryBybit, tryMEXC, tryGate];
+  const sources = [tryBinance, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin];
   for(const src of sources){
     try{
       const data = await src(query, tf);
@@ -435,7 +533,7 @@ function computeStructure(candles, atrArr){
 }
 
 // ---------- Scoring ----------
-function computeScore(data, macro, newsItems, sharedMemory){
+function computeScore(data, macro, newsItems, sharedMemory, marketContext){
   const closes = data.candles.map(c=>c.c);
   const vols = data.candles.map(c=>c.v);
   const price = closes.at(-1);
@@ -635,6 +733,17 @@ function computeScore(data, macro, newsItems, sharedMemory){
     ? `${news.length} titular(es) relevante(s) (${newsBullish} con tono alcista, ${newsBearish} con tono bajista). Es 1 voto de 11, no decide solo.`
     : 'Sin titulares relevantes detectados en este momento.';
   committee.push({name:'📰 Dios Noticias', signal:newsSignal, vote:vote(newsSignal), note:newsNote});
+
+  // ---- Dios Market Context Matrix (12°): OI + Precio + Funding combinados, no aislados ----
+  const priceTrend = classifyTrend(data.candles.map(c=>c.c).slice(-8), 2);
+  const ctx = marketContext ? marketContextMatrix(marketContext.oiTrend, priceTrend, marketContext.fundingTrend) : null;
+  let contextNote = 'Sin datos de Open Interest para esta fuente (solo disponible en pares de futuros de Binance).';
+  let contextSignal = 0;
+  if(ctx){
+    contextSignal = ctx.signal;
+    contextNote = `OI ${ctx.oiTrend} + Precio ${ctx.priceTrend} + Funding ${ctx.fundingTrend} → ${ctx.outlook}${ctx.flag?' ⚠️':''}: ${ctx.note}`;
+  }
+  committee.push({name:'📊 Dios Market Context Matrix', signal:contextSignal, vote:vote(contextSignal), note:contextNote, flag: ctx?.flag||false});
 
   committee.forEach(c=>c.confidence = Math.round(Math.abs(c.signal)*100));
   const votesLong = committee.filter(c=>c.vote==='LONG').length;
@@ -838,7 +947,8 @@ function fmtPct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
 export {
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews,
-  tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate,
+  fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
+  tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, levelStrength, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectEqualLevels, fibLevels, detectCandlePattern, computeStructure,
