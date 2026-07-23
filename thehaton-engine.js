@@ -302,6 +302,38 @@ function atr(candles, period=14){
   return ema(trs, period);
 }
 
+// ---- Keltner Channel + squeeze (Bollinger dentro de Keltner = compresión, posible ruptura fuerte cerca) ----
+function keltnerChannel(candles, period=20, mult=1.5){
+  const closes = candles.map(c=>c.c);
+  const mid = ema(closes, period).at(-1);
+  const atrLast = atr(candles, period).at(-1);
+  return { mid, upper: mid+mult*atrLast, lower: mid-mult*atrLast };
+}
+function detectSqueeze(candles, bb){
+  if(!bb || bb.upper==null) return null;
+  const kelt = keltnerChannel(candles, 20, 1.5);
+  const squeezeOn = bb.upper < kelt.upper && bb.lower > kelt.lower;
+  return { squeezeOn, bb, keltner: kelt };
+}
+
+// ---- Capital Flow real (DeFiLlama: 100% gratis, sin key, sin límite) ----
+// Compara el total circulante de stablecoins y el TVL global de los últimos ~7 días.
+// Ambos en alza = suele leerse como "hay pólvora seca / capital fluyendo hacia cripto".
+async function fetchCapitalFlowContext(){
+  try{
+    const [stableRes, tvlRes] = await Promise.all([
+      fetchJSON('https://stablecoins.llama.fi/stablecoincharts/all'),
+      fetchJSON('https://api.llama.fi/v2/historicalChainTvl'),
+    ]);
+    const stableVals = stableRes.slice(-8).map(r=> r.totalCirculating?.peggedUSD || 0).filter(v=>v>0);
+    const tvlVals = tvlRes.slice(-8).map(r=>r.tvl).filter(v=>v>0);
+    return {
+      stablecoinTrend: classifyTrend(stableVals, 1),
+      tvlTrend: classifyTrend(tvlVals, 2),
+    };
+  }catch(e){ return null; } // DeFiLlama puede estar caído puntualmente; no rompe el análisis
+}
+
 // ---- Indicadores adicionales para el panel "Estado de indicadores" ----
 function stochRsi(rsiArr, period=14){
   const out = new Array(rsiArr.length).fill(null);
@@ -621,6 +653,15 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext){
     marketNote = `Mercado global: cap. total ${mc.marketCapChange24h>=0?'+':''}${mc.marketCapChange24h?.toFixed(1)}% (24h), dominancia BTC ${mc.btcDominance?.toFixed(1)}%${rotation}${mc.usdStrength!=null?`, USD ${mc.usdStrength>=0?'fortaleciéndose':'debilitándose'} (proxy ${mc.usdStrength.toFixed(2)}% en 7d)`:''}.`;
   }
 
+  // ---- Horario de sesión: Londres ~07-16 UTC, Nueva York ~13-22 UTC. El solapamiento (13-16 UTC) es la ventana de mayor liquidez. ----
+  const utcHour = new Date().getUTCHours();
+  let sessionNote;
+  if(utcHour>=13 && utcHour<16) sessionNote = 'Solapamiento Londres/Nueva York (mayor liquidez del día): las señales ahora tienden a ser más confiables.';
+  else if(utcHour>=7 && utcHour<16) sessionNote = 'Sesión de Londres activa: liquidez razonable.';
+  else if(utcHour>=13 && utcHour<22) sessionNote = 'Sesión de Nueva York activa: liquidez razonable.';
+  else sessionNote = 'Fuera de las sesiones de Londres/Nueva York (Asia/madrugada): liquidez más fina, movimientos pueden ser menos confiables.';
+  marketNote = marketNote + ' ' + sessionNote;
+
   const weights = macro
     ? {trend:0.21,momentum:0.16,deriv:0.13,structure:0.18,macro:0.22,market:0.10}
     : {trend:0.27,momentum:0.21,deriv:0.17,structure:0.23,macro:0,market:0.12};
@@ -702,12 +743,25 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext){
   if(mc && mc.btcDominance!=null) committee.push({name:'🌍 Dios de Dominancias', signal:marketSignal, vote:vote(marketSignal)});
 
   // ---- Los 4 dioses nuevos: solo votan y explican (no alteran la fórmula del score ya calibrada, para no romper nada existente) ----
-  const capitalFlowSignal = volumeQuality>=0.8 ? 0.4 : volumeQuality<=0.3 ? -0.3 : 0; // proxy: volumen relativo como flujo de capital hacia este activo
-  committee.push({name:'💧 Dios Capital Flow', signal:capitalFlowSignal, vote:vote(capitalFlowSignal)});
+  // Capital Flow: usa datos REALES de DeFiLlama (stablecoins + TVL) cuando están disponibles; si no, cae al proxy de volumen.
+  let capitalFlowSignal = volumeQuality>=0.8 ? 0.4 : volumeQuality<=0.3 ? -0.3 : 0;
+  let capitalFlowNote = 'Proxy por volumen relativo (sin datos de DeFiLlama disponibles en este análisis).';
+  if(marketContext?.capitalFlow){
+    const {stablecoinTrend, tvlTrend} = marketContext.capitalFlow;
+    if(stablecoinTrend && tvlTrend){
+      if(stablecoinTrend==='RISING' && tvlTrend==='RISING'){ capitalFlowSignal = 0.5; capitalFlowNote = 'Stablecoins y TVL global en alza: capital entrando a cripto (pólvora seca disponible).'; }
+      else if(stablecoinTrend==='FALLING' && tvlTrend==='FALLING'){ capitalFlowSignal = -0.4; capitalFlowNote = 'Stablecoins y TVL global cayendo: capital saliendo del ecosistema cripto.'; }
+      else { capitalFlowNote = `Stablecoins ${stablecoinTrend}, TVL global ${tvlTrend}: señal mixta de flujo de capital.`; }
+    }
+  }
+  committee.push({name:'💧 Dios Capital Flow', signal:capitalFlowSignal, vote:vote(capitalFlowSignal), note:capitalFlowNote});
 
   const riskSignalDir = trendSignal!==0 ? Math.sign(trendSignal) : 1;
-  const riskSignal = volat>=10 ? 0.25*riskSignalDir : volat<=4 ? -0.25 : 0; // castiga la convicción si el precio está muy extendido
-  committee.push({name:'⚠️ Dios Gestión de Riesgo', signal:riskSignal, vote:vote(riskSignal)});
+  let riskSignal = volat>=10 ? 0.25*riskSignalDir : volat<=4 ? -0.25 : 0; // castiga la convicción si el precio está muy extendido
+  const squeeze = detectSqueeze(data.candles, lastBB);
+  let riskNote = squeeze?.squeezeOn ? 'Compresión de volatilidad detectada (Bollinger dentro de Keltner): posible ruptura fuerte próxima, en cualquier dirección.' : 'Sin compresión de volatilidad relevante ahora mismo.';
+  if(squeeze?.squeezeOn) riskSignal *= 0.6; // en squeeze la dirección es incierta hasta que rompe: se atenúa la convicción
+  committee.push({name:'⚠️ Dios Gestión de Riesgo', signal:riskSignal, vote:vote(riskSignal), note:riskNote, squeezeOn: squeeze?.squeezeOn||false});
 
   const liquidityOk = (data.vol24h||0) > 1000000;
   const radarSignal = liquidityOk ? 0.3*riskSignalDir : -0.2; // menos convicción si la liquidez de la fuente es baja
@@ -948,6 +1002,7 @@ export {
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
+  fetchCapitalFlowContext, keltnerChannel, detectSqueeze,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, levelStrength, findPivots, labelSwings, detectStructureEvents,

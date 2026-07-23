@@ -429,6 +429,13 @@
 
   <div class="tabpanel" id="panel-heatmap">
     <div class="card">
+      <h2>🏆 Top 5 ganadores / 🔻 Top 5 perdedores (24h)</h2>
+      <div class="grid">
+        <div><h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;color:var(--sub);">Ganadores</h3><div id="topGainers" class="subrow">Cargando…</div></div>
+        <div><h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;color:var(--sub);">Perdedores</h3><div id="topLosers" class="subrow">Cargando…</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:18px;">
       <h2>Heatmap — Top 50 por market cap</h2>
       <div class="hint" style="margin-top:0;margin-bottom:12px;">Verde = sube 24h, rojo = baja 24h. Tocá una moneda para analizarla.</div>
       <div id="heatmapStatus" class="subrow">Cargando…</div>
@@ -975,13 +982,14 @@ async function analyze(qOverride){
   try{ data = await fetchTokenData(q, currentTF); }
   catch(e){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
   if(!data.candles || data.candles.length < 30){ setStatus('Datos insuficientes para un análisis confiable.'); goBtn.disabled=false; return; }
-  setStatus('Chequeando tendencia macro (4h), Open Interest, funding, noticias y memoria compartida...');
-  const [macro, newsItems, sharedMemory, oiTrendData, fundingTrendData] = await Promise.all([
+  setStatus('Chequeando tendencia macro (4h), Open Interest, funding, flujo de capital, noticias y memoria compartida...');
+  const [macro, newsItems, sharedMemory, oiTrendData, fundingTrendData, capitalFlow] = await Promise.all([
     fetchMacroTrend(q), fetchRelevantNews(data.displayName), fetchSharedMemory(),
     data.source==='Binance' ? fetchOpenInterestTrend(q, currentTF) : Promise.resolve(null),
     data.source==='Binance' ? fetchFundingTrend(q) : Promise.resolve(null),
+    fetchCapitalFlowContext(),
   ]);
-  const marketContext = { oiTrend: oiTrendData?.trend || null, fundingTrend: fundingTrendData?.trend || null };
+  const marketContext = { oiTrend: oiTrendData?.trend || null, fundingTrend: fundingTrendData?.trend || null, capitalFlow };
   const result = computeScore(data, macro, newsItems, sharedMemory, marketContext);
   const setup = buildSetup(data, result, riskProfile);
   lastAnalysisData = data;
@@ -1244,6 +1252,20 @@ async function loadHeatmap(){
     const list = await fetchJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&price_change_percentage=24h');
     heatmapLoaded = true;
     statusEl2.textContent = '';
+
+    const sorted = [...list].sort((a,b)=>(b.price_change_percentage_24h||0)-(a.price_change_percentage_24h||0));
+    const gainers = sorted.slice(0,5), losers = sorted.slice(-5).reverse();
+    const rowHtml = c => `<div class="setup-row" style="cursor:pointer;" data-sym="${c.symbol.toUpperCase()}"><div class="k">${c.symbol.toUpperCase()}</div><div class="v ${c.price_change_percentage_24h>=0?'green':'red'}">${c.price_change_percentage_24h>=0?'+':''}${(c.price_change_percentage_24h||0).toFixed(1)}%</div></div>`;
+    document.getElementById('topGainers').innerHTML = gainers.map(rowHtml).join('');
+    document.getElementById('topLosers').innerHTML = losers.map(rowHtml).join('');
+    [...document.querySelectorAll('#topGainers [data-sym]'), ...document.querySelectorAll('#topLosers [data-sym]')].forEach(el=>{
+      el.addEventListener('click', ()=>{
+        document.querySelector('.tab-btn[data-tab="analizar"]').click();
+        input.value = el.dataset.sym;
+        analyze(el.dataset.sym);
+      });
+    });
+
     const grid = document.getElementById('heatGrid');
     grid.innerHTML = list.map(c=>{
       const chg = c.price_change_percentage_24h || 0;
