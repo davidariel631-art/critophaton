@@ -1,5 +1,5 @@
 // Fortress Terminal — TheHaton Strategy Center (bot)
-// Corre en GitHub Actions cada 15 min. USA EL MISMO MOTOR que la web
+// Corre en GitHub Actions cada 1 hora. USA EL MISMO MOTOR que la web
 // (../thehaton-engine.js, un único archivo físico en la raíz del repo,
 // el mismo que carga index.html) — no hay una versión "simplificada" acá.
 // Cualquier análisis (Binance top N, CUSTOM_COINS multi-exchange, DEX
@@ -22,7 +22,7 @@
 import fs from 'fs';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
-  fetchOpenInterestTrend, fetchFundingTrend,
+  fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext,
   computeScore, buildSetup, buildAnalystMode
 } from '../thehaton-engine.js';
 
@@ -38,6 +38,7 @@ const WORK_HOUR_END = 15;
 const RISK_PCT = 0.01;
 const THESIS_EXPIRY_HOURS = 18; // si no confirma entrada en este tiempo, se archiva como expirada
 const BREAKEVEN_AT_R = 1;       // mueve el stop a breakeven al alcanzar 1R de ganancia flotante
+const MAX_DAYS_OPEN_LIMIT = 30; // cierre forzado si una tesis queda abierta más de este tiempo sin resolver
 
 // Editá esta lista con las monedas que operás aunque no estén en el top 60 de Binance
 const CUSTOM_COINS = ['TIA','SEI','JUP','PYTH','WIF','ORDI','STRK','ENA','W','TNSR'];
@@ -71,9 +72,37 @@ function loadState(){
   if(!raw.notified) raw.notified = {};
   if(!Array.isArray(raw.accountHistory)) raw.accountHistory = [];
   if(!raw.memory) raw.memory = {};
-  if(!raw.account.theses) raw.account.theses = raw.account.openPositions || []; // migración desde v3
+  if(!raw.account.theses){
+    // Migración desde v3: esas posiciones YA estaban abiertas (no eran tesis "observando"),
+    // así que hay que marcarlas como ACTIVE explícitamente. Este era el bug: al no tener
+    // status, ni confirmTheses (busca WATCHING) ni manageActiveTheses (busca ACTIVE) las
+    // procesaba nunca — quedaban "flotando" para siempre sin chequear TP/SL.
+    raw.account.theses = (raw.account.openPositions || []).map(p => ({
+      ...p,
+      status: p.status || 'ACTIVE',
+      journal: p.journal || [{ts: p.openedAt || Date.now(), note: 'Posición migrada desde una versión anterior del bot (sin diario previo).'}],
+      breakEvenMoved: p.breakEvenMoved || false,
+    }));
+  }
   if(!raw.account.expiredTheses) raw.account.expiredTheses = [];
   if(raw.account.peakCapital == null) raw.account.peakCapital = raw.account.capital;
+
+  // Red de seguridad: cualquier tesis sin status reconocido, o ACTIVE con más de 30 días,
+  // se fuerza a cerrar en vez de quedar invisible para siempre.
+  const MAX_DAYS_OPEN = MAX_DAYS_OPEN_LIMIT;
+  raw.account.theses = raw.account.theses.filter(t=>{
+    if(t.status!=='WATCHING' && t.status!=='ACTIVE'){
+      console.log(`⚠️ Tesis huérfana detectada en ${t.symbol} (status="${t.status}"). Se fuerza a ACTIVE para que no quede trabada.`);
+      t.status = 'ACTIVE';
+      t.journal = t.journal || [];
+    }
+    const ageDays = (Date.now() - (t.detectedAt||t.openedAt||Date.now())) / (1000*60*60*24);
+    if(t.status==='ACTIVE' && ageDays > MAX_DAYS_OPEN){
+      console.log(`⚠️ ${t.symbol} lleva ${ageDays.toFixed(0)} días abierta (límite ${MAX_DAYS_OPEN}). Se marca para cierre forzado esta corrida.`);
+      t.forceClose = true;
+    }
+    return true;
+  });
   return raw;
 }
 function saveState(state){
@@ -104,7 +133,7 @@ function journal(thesis, note){
 }
 
 // ---------- Fase 1: escanear 4h/1D en busca de nuevas tesis (usa el motor completo) ----------
-async function scanForTheses(state, candidates){
+async function scanForTheses(state, candidates, capitalFlow){
   const acc = state.account;
   for(const {symbol, tag} of candidates){
     if(acc.theses.find(t=>t.symbol===symbol)) continue; // ya hay una tesis abierta para esa moneda
@@ -115,7 +144,7 @@ async function scanForTheses(state, candidates){
       const news = await fetchRelevantNews(symbol).catch(()=>[]);
       const oiTrendData = data.source==='Binance' ? await fetchOpenInterestTrend(symbol, '4h').catch(()=>null) : null;
       const fundingTrendData = data.source==='Binance' ? await fetchFundingTrend(symbol).catch(()=>null) : null;
-      const marketContext = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null };
+      const marketContext = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
       const result = computeScore(data, macro, news, state.memory, marketContext);
       const best = Math.max(result.longScore, result.shortScore);
       console.log(`${symbol}${tag}`, result.recommendation, best.toFixed(1));
@@ -162,7 +191,7 @@ function analystSummary(result){
 }
 
 // ---------- Fase 2: confirmar tesis en 15m usando el MISMO motor completo ----------
-async function confirmTheses(state){
+async function confirmTheses(state, capitalFlow){
   const acc = state.account;
   const stillWatching = [];
   for(const thesis of acc.theses){
@@ -180,7 +209,7 @@ async function confirmTheses(state){
       const macro = await fetchMacroTrend(thesis.symbol).catch(()=>null);
       const oiTrendData = data15.source==='Binance' ? await fetchOpenInterestTrend(thesis.symbol, '15m').catch(()=>null) : null;
       const fundingTrendData = data15.source==='Binance' ? await fetchFundingTrend(thesis.symbol).catch(()=>null) : null;
-      const marketContext15 = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null };
+      const marketContext15 = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
       const result15 = computeScore(data15, macro, [], state.memory, marketContext15);
 
       const alineado = result15.recommendation === thesis.dir;
@@ -224,7 +253,29 @@ async function manageActiveTheses(state){
     if(thesis.status !== 'ACTIVE'){ stillOpen.push(thesis); continue; }
     let price = null;
     try{ const d = await fetchTokenData(thesis.symbol, '15m'); price = d.price; }catch(e){}
-    if(price==null){ stillOpen.push(thesis); continue; }
+
+    if(price==null){
+      thesis.priceFailCount = (thesis.priceFailCount||0) + 1;
+      console.log(`⚠️ No se pudo obtener precio de ${thesis.symbol} (falla #${thesis.priceFailCount} seguida).`);
+      if(thesis.priceFailCount===3){ // ~3 horas de fallas seguidas (ahora corre cada 1 hora)
+        sendPromises.push(sendTelegram(`⚠️ <b>TheHaton no puede leer el precio de ${thesis.symbol}${thesis.tag||''} hace 2 horas.</b>\nLa posición sigue abierta pero no se puede chequear TP/SL. Revisá si el símbolo sigue existiendo en su fuente original (${thesis.source}).`));
+      }
+      stillOpen.push(thesis); continue;
+    }
+    thesis.priceFailCount = 0;
+
+    // Cierre forzado: tesis viejas (>30 días) o huérfanas migradas, para que nunca quede algo invisible para siempre
+    if(thesis.forceClose){
+      const pnl = thesis.units * (price-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+      acc.capital = +(acc.capital+pnl).toFixed(4);
+      journal(thesis, `Cierre forzado por antigüedad (más de ${MAX_DAYS_OPEN_LIMIT} días abierta sin resolver). Cerrada al precio actual $${price.toFixed(6)} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT).`);
+      acc.closedTrades.push({...thesis, exit:price, result: pnl>=0?'win':'loss', pnl:+pnl.toFixed(4), closedAt: Date.now()});
+      sendPromises.push(sendTelegram(
+        `⏰ <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir} por antigüedad</b>\n` +
+        `Llevaba abierta demasiado tiempo sin tocar TP ni Stop. Resultado: ${pnl>=0?'GANÓ':'PERDIÓ'} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
+      ));
+      continue;
+    }
 
     const distanceR = Math.abs(thesis.entry - thesis.stop);
     const favorMove = thesis.dir==='LONG' ? (price-thesis.entry) : (thesis.entry-price);
@@ -293,11 +344,15 @@ async function main(){
   if(!BOT_TOKEN || !CHAT_ID){ console.error('Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID.'); process.exit(1); }
   const state = loadState();
 
+  console.log('--- Fase 0: chequeando flujo de capital global (DeFiLlama) ---');
+  const capitalFlow = await fetchCapitalFlowContext();
+  console.log('Capital flow:', capitalFlow);
+
   console.log('--- Fase 1: gestionando tesis ACTIVAS (TP/SL/breakeven) ---');
   await manageActiveTheses(state);
 
   console.log('--- Fase 2: confirmando tesis WATCHING en 15m (motor completo) ---');
-  await confirmTheses(state);
+  await confirmTheses(state, capitalFlow);
 
   console.log('--- Fase 3: escaneando Binance top', TOP_N_BINANCE, 'en busca de nuevas tesis ---');
   const pairs = await getTopBinancePairs(TOP_N_BINANCE);
@@ -305,12 +360,12 @@ async function main(){
   for(const symbol of CUSTOM_COINS){
     if(!pairs.includes(symbol)) candidates.push({symbol, tag:' (custom)'});
   }
-  await scanForTheses(state, candidates);
+  await scanForTheses(state, candidates, capitalFlow);
 
   console.log('--- Fase 4: pools nuevas en DEX ---');
   const dexPools = await getNewDexPools();
   const dexCandidates = dexPools.slice(0,20).map(p=>({symbol:(p.name||'?').split('/')[0].trim(), tag:` (DEX ${p.network})`}));
-  await scanForTheses(state, dexCandidates);
+  await scanForTheses(state, dexCandidates, capitalFlow);
 
   await Promise.all(sendPromises);
   saveState(state);
