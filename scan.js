@@ -37,7 +37,7 @@ const WORK_HOUR_START = 4;
 const WORK_HOUR_END = 15;
 const RISK_PCT = 0.01;
 const THESIS_EXPIRY_HOURS = 18; // si no confirma entrada en este tiempo, se archiva como expirada
-const BREAKEVEN_AT_R = 1;       // mueve el stop a breakeven al alcanzar 1R de ganancia flotante
+// (el breakeven ahora se maneja al tomar el 50% en TP1, ver manageActiveTheses)
 const MAX_DAYS_OPEN_LIMIT = 30; // cierre forzado si una tesis queda abierta más de este tiempo sin resolver
 
 // Editá esta lista con las monedas que operás aunque no estén en el top 60 de Binance
@@ -226,14 +226,32 @@ async function confirmTheses(state, capitalFlow){
         const units = riskAmount / distance;
 
         thesis.status = 'ACTIVE';
-        thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp = setup.t1; thesis.units = units;
-        thesis.riskPct = riskPct; thesis.confirmedAt = Date.now();
-        journal(thesis, `Entrada CONFIRMADA en 15m ${bosAFavor?'(BOS a favor detectado)':'(la confianza del motor subió a '+result15.confidence+'%)'}. Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP: $${setup.t1.toFixed(6)}. ${reason}.`);
+        thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
+        thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
+        journal(thesis, `Entrada CONFIRMADA en 15m ${bosAFavor?'(BOS a favor detectado)':'(la confianza del motor subió a '+result15.confidence+'%)'}. Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
+
+        const analyst = buildAnalystMode(data15, result15, setup, '15m');
+        const rrTp1 = (Math.abs(setup.t1-entryPrice)/distance).toFixed(1);
+        const rrTp2 = (Math.abs(setup.t2-entryPrice)/distance).toFixed(1);
+        const razones = result15.committee.filter(c=>c.vote===thesis.dir).slice(0,4).map(c=>`✅ ${c.name.replace(/^[^\s]+\s/,'')}: ${c.note||'a favor'}`).join('\n');
+        const invalidacion = (analyst.invalidation||[])[0] || `Cierre de vela más allá del stop ($${setup.stop.toFixed(6)}).`;
+
         sendPromises.push(sendTelegram(
-          `🏛️ <b>TheHaton confirmó entrada — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n\n` +
-          `Entrada: $${entryPrice.toFixed(6)}\nStop: $${setup.stop.toFixed(6)}\nTP: $${setup.t1.toFixed(6)}\n` +
-          `Riesgo: ${(riskPct*100).toFixed(1)}% (${reason})\nCapital: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})`
+          `📈 <b>SEÑAL: $${thesis.symbol}${thesis.tag||''} ${thesis.dir==='LONG'?'COMPRA 🟢':'VENTA 🔴'}</b>\n\n` +
+          `<b>¿Por qué ${thesis.dir==='LONG'?'COMPRA':'VENTA'}?</b>\n${razones || 'Confluencia general del comité de 12 dioses.'}\n\n` +
+          `📊 <b>Configuración</b>\n` +
+          `📌 Entrada: $${entryPrice.toFixed(6)}\n` +
+          `🛑 Stop Loss: $${setup.stop.toFixed(6)}\n` +
+          `🎯 TP1: $${setup.t1.toFixed(6)} (R:R ≈ ${rrTp1}:1)\n` +
+          `🚀 TP2: $${setup.t2.toFixed(6)} (R:R ≈ ${rrTp2}:1)\n\n` +
+          `🛠️ <b>Riesgo</b>\n` +
+          `Riesgo: ${(riskPct*100).toFixed(1)}% del capital (${reason})\n` +
+          `Ejecución: TheHaton toma 50% en TP1 y mueve el Stop a Break Even automáticamente. El resto corre hasta TP2 o breakeven.\n` +
+          `❌ Se invalida si: ${invalidacion}\n\n` +
+          `⚡ Score IA: ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10 · Confianza ${result15.confidence}%\n` +
+          `Capital de la cuenta: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})\n\n` +
+          `⚠️ Solo con fines educativos. No es asesoría financiera.`
         ));
       } else {
         journal(thesis, `Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando.`);
@@ -277,27 +295,59 @@ async function manageActiveTheses(state){
       continue;
     }
 
-    const distanceR = Math.abs(thesis.entry - thesis.stop);
-    const favorMove = thesis.dir==='LONG' ? (price-thesis.entry) : (thesis.entry-price);
-    if(!thesis.breakEvenMoved && favorMove >= distanceR*BREAKEVEN_AT_R){
-      thesis.stop = thesis.entry;
-      thesis.breakEvenMoved = true;
-      journal(thesis, `Alcanzó ${BREAKEVEN_AT_R}R de ganancia flotante. Se movió el Stop Loss a Break Even ($${thesis.entry.toFixed(6)}) para proteger capital.`);
+    // Etapa 1: todavía no tomó ganancia parcial -> vigila Stop y TP1
+    if(!thesis.partialTaken){
+      let hitTP1=false, hitSL=false;
+      if(thesis.dir==='LONG'){ if(price<=thesis.stop) hitSL=true; else if(price>=thesis.tp1) hitTP1=true; }
+      else { if(price>=thesis.stop) hitSL=true; else if(price<=thesis.tp1) hitTP1=true; }
+
+      if(hitTP1){
+        const halfUnits = thesis.units/2;
+        const pnl = halfUnits * (thesis.tp1-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+        acc.capital = +(acc.capital+pnl).toFixed(4);
+        thesis.units = halfUnits; // queda el otro 50% corriendo
+        thesis.partialTaken = true;
+        thesis.stop = thesis.entry; // mueve el stop al punto de entrada (breakeven), como pediste
+        journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 50% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 50% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}).`);
+        thesis.partialPnl = pnl;
+        sendPromises.push(sendTelegram(
+          `💰 <b>TheHaton tomó 50% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+          `TP1 alcanzado: $${thesis.tp1.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
+          `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el 50% restante ya no puede terminar en pérdida.\n` +
+          `El resto sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}).\nCapital: ${acc.capital.toFixed(2)} USDT`
+        ));
+        stillOpen.push(thesis);
+      } else if(hitSL){
+        const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+        acc.capital = +(acc.capital+pnl).toFixed(4);
+        journal(thesis, `Stop tocado antes de TP1 (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Capital: ${acc.capital.toFixed(2)}.`);
+        acc.closedTrades.push({...thesis, exit:thesis.stop, result: pnl>=0?'win':'loss', pnl:+pnl.toFixed(4), closedAt: Date.now()});
+        sendPromises.push(sendTelegram(
+          `🛑 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+          `PERDIÓ (${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
+        ));
+      } else {
+        stillOpen.push(thesis);
+      }
+      continue;
     }
 
-    let hitTP=false, hitSL=false;
-    if(thesis.dir==='LONG'){ if(price<=thesis.stop) hitSL=true; else if(price>=thesis.tp) hitTP=true; }
-    else { if(price>=thesis.stop) hitSL=true; else if(price<=thesis.tp) hitTP=true; }
+    // Etapa 2: ya tomó el 50% -> el resto corre hasta TP2 o vuelve a breakeven (stop ya está en el punto de entrada)
+    let hitTP2=false, hitBE=false;
+    if(thesis.dir==='LONG'){ if(price<=thesis.stop) hitBE=true; else if(price>=thesis.tp2) hitTP2=true; }
+    else { if(price>=thesis.stop) hitBE=true; else if(price<=thesis.tp2) hitTP2=true; }
 
-    if(hitTP || hitSL){
-      const exit = hitTP ? thesis.tp : thesis.stop;
+    if(hitTP2 || hitBE){
+      const exit = hitTP2 ? thesis.tp2 : thesis.stop;
       const pnl = thesis.units * (exit-thesis.entry) * (thesis.dir==='LONG'?1:-1);
       acc.capital = +(acc.capital+pnl).toFixed(4);
-      journal(thesis, `Operación cerrada: ${hitTP?'TP alcanzado':'Stop tocado'} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Capital: ${acc.capital.toFixed(2)}.`);
-      acc.closedTrades.push({...thesis, exit, result: hitTP?'win':'loss', pnl:+pnl.toFixed(4), closedAt: Date.now()});
+      const totalPnl = (thesis.partialPnl||0) + pnl;
+      journal(thesis, `${hitTP2?'TP2 alcanzado':'Volvió a breakeven'}: se cierra el 50% restante (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
+      acc.closedTrades.push({...thesis, exit, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
       sendPromises.push(sendTelegram(
-        `${hitTP?'✅':'🛑'} <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
-        `${hitTP?'GANÓ':'PERDIÓ'} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
+        `${hitTP2?'🚀':'⚖️'} <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+        `${hitTP2?'TP2 alcanzado ✅':'Volvió al punto de entrada (breakeven en el 50% restante)'}\n` +
+        `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
       ));
     } else {
       stillOpen.push(thesis);
@@ -340,7 +390,22 @@ async function getNewDexPools(){
   });
 }
 
-async function main(){
+// Monedas de "cap chico" (~$20M-$100M): menos ojos de otros bots encima, más probabilidad de
+// que una señal real de la Market Context Matrix todavía no esté arbitrada por el mercado.
+async function getMidCapCandidates(){
+  try{
+    const pages = await Promise.all([1,2,3,4].map(p=>
+      fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${p}`).then(r=>r.json())
+    ));
+    const flat = pages.flatMap(p=>Array.isArray(p)?p:[]);
+    return flat
+      .filter(c => c.market_cap >= 20_000_000 && c.market_cap <= 100_000_000)
+      .map(c => c.symbol.toUpperCase())
+      .filter(s => /^[A-Z0-9]{2,10}$/.test(s)); // descarta símbolos raros/wrapped con caracteres extraños
+  }catch(e){ console.error('Error trayendo monedas de cap chico:', e.message); return []; }
+}
+
+
   if(!BOT_TOKEN || !CHAT_ID){ console.error('Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID.'); process.exit(1); }
   const state = loadState();
 
@@ -366,6 +431,15 @@ async function main(){
   const dexPools = await getNewDexPools();
   const dexCandidates = dexPools.slice(0,20).map(p=>({symbol:(p.name||'?').split('/')[0].trim(), tag:` (DEX ${p.network})`}));
   await scanForTheses(state, dexCandidates, capitalFlow);
+
+  console.log('--- Fase 5: monedas de cap chico ($20M-$100M) para la Market Context Matrix ---');
+  const midCaps = await getMidCapCandidates();
+  console.log(midCaps.length, 'monedas de cap chico encontradas.');
+  const midCapCandidates = midCaps
+    .filter(s => !pairs.includes(s) && !CUSTOM_COINS.includes(s))
+    .slice(0, 40) // límite para no disparar el tiempo de ejecución ni el rate limit de las 5 exchanges
+    .map(symbol=>({symbol, tag:' (cap chico)'}));
+  await scanForTheses(state, midCapCandidates, capitalFlow);
 
   await Promise.all(sendPromises);
   saveState(state);
