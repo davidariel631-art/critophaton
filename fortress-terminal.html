@@ -1156,14 +1156,11 @@ window.marketContext = null;
 
 async function fetchUsdStrengthProxy(){
   try{
-    const today = await fetchJSON('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY');
-    const d = new Date(); d.setDate(d.getDate()-7);
-    const weekAgo = d.toISOString().slice(0,10);
-    const past = await fetchJSON(`https://api.frankfurter.app/${weekAgo}?from=USD&to=EUR,GBP,JPY`);
-    const pairs = ['EUR','GBP','JPY'];
-    const changes = pairs.map(p=> ((today.rates[p]-past.rates[p])/past.rates[p])*100);
-    const avgChangePct = changes.reduce((a,b)=>a+b,0)/changes.length;
-    return { avgChangePct };
+    // open.er-api.com: gratis, sin key, una sola llamada (evita el problema de CORS que tenía Frankfurter)
+    const res = await fetchJSON('https://open.er-api.com/v6/latest/USD');
+    if(!res || !res.rates) return null;
+    // Mostramos las tasas reales tal cual, sin inventar un "índice de fuerza" que no tenemos base sólida para calcular.
+    return { eurUsd: (1/res.rates.EUR).toFixed(4), gbpUsd: (1/res.rates.GBP).toFixed(4) };
   }catch(e){ return null; }
 }
 
@@ -1208,9 +1205,9 @@ async function loadMarketTicker(){
   try{
     const usd = await fetchUsdStrengthProxy();
     if(usd){
-      document.getElementById('tUsdStrength').textContent = (usd.avgChangePct>=0?'+':'')+usd.avgChangePct.toFixed(2)+'% (7d)';
+      document.getElementById('tUsdStrength').textContent = `EUR/USD ${usd.eurUsd} · GBP/USD ${usd.gbpUsd}`;
       window.marketContext = window.marketContext || {};
-      window.marketContext.usdStrength = usd.avgChangePct;
+      window.marketContext.eurUsd = parseFloat(usd.eurUsd);
     } else { document.getElementById('tUsdStrength').textContent = 'N/D'; }
   }catch(e){ document.getElementById('tUsdStrength').textContent = 'N/D'; }
 }
