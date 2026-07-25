@@ -141,15 +141,19 @@ function marketContextMatrix(oiTrend, priceTrend, fundingTrend){
 
 async function tryGecko(query, tf){
   const search = await fetchJSON(`${GECKO}/search/pools?query=${encodeURIComponent(query)}&page=1`);
-  const pools = search.data;
+  const pools = search?.data;
   if(!pools || !pools.length) throw new Error('No se encontró en GeckoTerminal');
-  pools.sort((a,b)=> (parseFloat(b.attributes.reserve_in_usd)||0) - (parseFloat(a.attributes.reserve_in_usd)||0));
-  const pool = pools[0];
+  // descarta pools sin la estructura esperada (a veces GeckoTerminal devuelve resultados incompletos bajo rate-limit)
+  const validPools = pools.filter(p => p?.relationships?.network?.data?.id && p?.attributes?.address);
+  if(!validPools.length) throw new Error('GeckoTerminal devolvió resultados sin datos completos (posible rate limit)');
+  validPools.sort((a,b)=> (parseFloat(b.attributes.reserve_in_usd)||0) - (parseFloat(a.attributes.reserve_in_usd)||0));
+  const pool = validPools[0];
   const network = pool.relationships.network.data.id;
   const poolAddr = pool.attributes.address;
   const g = TF_MAP[tf].gecko;
   const ohlcv = await fetchJSON(`${GECKO}/networks/${network}/pools/${poolAddr}/ohlcv/${g.timeframe}?aggregate=${g.aggregate}&limit=220`);
-  const list = ohlcv.data.attributes.ohlcv_list;
+  const list = ohlcv?.data?.attributes?.ohlcv_list;
+  if(!list || !list.length) throw new Error('GeckoTerminal no devolvió velas para esta pool');
   const candles = list.reverse().map(r=>({t:r[0]*1000,o:r[1],h:r[2],l:r[3],c:r[4],v:r[5]}));
   const attrs = pool.attributes;
   const baseTokenName = attrs.name.split('/')[0].trim();

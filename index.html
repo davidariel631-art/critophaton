@@ -328,8 +328,8 @@
       <div class="card">
         <h2>Gestión de capital</h2>
         <div class="cap-inputs">
-          <div><label>Capital (USDT)</label><input type="number" id="capInput" value="1000" min="0"></div>
-          <div><label>Riesgo por operación (%)</label><input type="number" id="riskInput" value="1" min="0.1" step="0.1"></div>
+          <div><label for="capInput">Capital (USDT)</label><input type="number" id="capInput" value="1000" min="0"></div>
+          <div><label for="riskInput">Riesgo por operación (%)</label><input type="number" id="riskInput" value="1" min="0.1" step="0.1"></div>
         </div>
         <div id="capOutput"></div>
       </div>
@@ -429,6 +429,13 @@
 
   <div class="tabpanel" id="panel-heatmap">
     <div class="card">
+      <h2>🏆 Top 5 ganadores / 🔻 Top 5 perdedores (24h)</h2>
+      <div class="grid">
+        <div><h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;color:var(--sub);">Ganadores</h3><div id="topGainers" class="subrow">Cargando…</div></div>
+        <div><h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;color:var(--sub);">Perdedores</h3><div id="topLosers" class="subrow">Cargando…</div></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:18px;">
       <h2>Heatmap — Top 50 por market cap</h2>
       <div class="hint" style="margin-top:0;margin-bottom:12px;">Verde = sube 24h, rojo = baja 24h. Tocá una moneda para analizarla.</div>
       <div id="heatmapStatus" class="subrow">Cargando…</div>
@@ -450,8 +457,8 @@
     <div class="card">
       <h2>Comparar dos monedas</h2>
       <div class="cap-inputs">
-        <div><label>Moneda A</label><input type="text" id="cmpA" placeholder="BTC" value="BTC"></div>
-        <div><label>Moneda B</label><input type="text" id="cmpB" placeholder="ETH" value="ETH"></div>
+        <div><label for="cmpA">Moneda A</label><input type="text" id="cmpA" placeholder="BTC" value="BTC"></div>
+        <div><label for="cmpB">Moneda B</label><input type="text" id="cmpB" placeholder="ETH" value="ETH"></div>
       </div>
       <button class="backtest-btn" id="cmpBtn">Comparar</button>
       <div id="cmpStatus" class="subrow" style="margin-top:8px;"></div>
@@ -468,23 +475,33 @@
 
   <div class="tabpanel" id="panel-thehaton">
     <div class="card">
-      <h2>🏛️ TheHaton — Cuenta Virtual (100 USDT, nunca opera con dinero real)</h2>
-      <div class="hint" style="margin-top:0;">Opera sola en segundo plano vía el bot de Telegram (GitHub Actions, cada 15 min). Solo abre operaciones nuevas entre las 04:00 y 15:00 (Argentina), máximo 4 por día. Esta vista lee directamente el archivo público que actualiza el bot.</div>
+      <h2>🏛️ TheHaton Strategy Center</h2>
+      <div class="hint" style="margin-top:0;">Gestor de operaciones virtual (100 USDT, nunca dinero real), usando el mismo TheHaton Engine que la web. Opera en segundo plano vía GitHub Actions cada 15 min: detecta oportunidad en 4h → observa → confirma en 15m → gestiona la posición (breakeven, TP, SL) → registra todo para siempre.</div>
       <div id="thehatonStatus" class="subrow">Cargando estado de TheHaton...</div>
       <div id="thehatonBody" style="display:none;">
         <div class="dual-hero" style="margin-top:14px;">
           <div><div class="mini-ring-label">Capital actual</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thCapital">—</div></div>
           <div><div class="mini-ring-label">Win Rate</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thWinRate">—</div></div>
           <div><div class="mini-ring-label">Profit Factor</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thProfitFactor">—</div></div>
+          <div><div class="mini-ring-label">Drawdown</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thDrawdown">—</div></div>
           <div><div class="mini-ring-label">Cuenta #</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thAccountId">—</div></div>
         </div>
+
         <div class="indi-grid" style="margin-top:18px;">
-          <div class="indi-col"><h3>Operaciones abiertas</h3><div id="thOpenPositions"></div></div>
-          <div class="indi-col"><h3>Racha</h3><div id="thStreak"></div></div>
-          <div class="indi-col"><h3>Mejor / peor operación</h3><div id="thBestWorst"></div></div>
+          <div class="indi-col"><h3>Últimos 7 días</h3><div id="thWeek"></div></div>
+          <div class="indi-col"><h3>Últimos 30 días</h3><div id="thMonth"></div></div>
+          <div class="indi-col"><h3>Racha / mejor / peor</h3><div id="thStreak"></div></div>
         </div>
-        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">Últimas operaciones cerradas</h3>
+
+        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">👀 Observando (WATCHING) — esperando confirmación en 15m</h3>
+        <div id="thWatching" class="subrow">Ninguna en este momento.</div>
+
+        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">🟢 Operaciones activas</h3>
+        <div id="thActive" class="subrow">Ninguna en este momento.</div>
+
+        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">📖 Últimas operaciones cerradas (con diario)</h3>
         <div id="thClosedTrades"></div>
+
         <div class="subrow" style="margin-top:14px;" id="thHistoryNote"></div>
       </div>
     </div>
@@ -586,7 +603,20 @@ const goBtn = document.getElementById('goBtn');
 const input = document.getElementById('tokenInput');
 
 function setStatus(msg){ statusEl.textContent = msg || ''; }
-async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+async function fetchJSON(url){
+  try{
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){
+    try{
+      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+      const r2 = await fetch(proxied);
+      if(!r2.ok) throw new Error('HTTP '+r2.status+' (vía proxy)');
+      return await r2.json();
+    }catch(e2){ throw e; }
+  }
+}
 
 document.getElementById('tfGroup').addEventListener('click', e=>{
   const btn = e.target.closest('.tf-btn'); if(!btn) return;
@@ -965,9 +995,15 @@ async function analyze(qOverride){
   try{ data = await fetchTokenData(q, currentTF); }
   catch(e){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
   if(!data.candles || data.candles.length < 30){ setStatus('Datos insuficientes para un análisis confiable.'); goBtn.disabled=false; return; }
-  setStatus('Chequeando tendencia macro (4h), noticias relevantes, memoria compartida y calculando score...');
-  const [macro, newsItems, sharedMemory] = await Promise.all([ fetchMacroTrend(q), fetchRelevantNews(data.displayName), fetchSharedMemory() ]);
-  const result = computeScore(data, macro, newsItems, sharedMemory);
+  setStatus('Chequeando tendencia macro (4h), Open Interest, funding, flujo de capital, noticias y memoria compartida...');
+  const [macro, newsItems, sharedMemory, oiTrendData, fundingTrendData, capitalFlow] = await Promise.all([
+    fetchMacroTrend(q), fetchRelevantNews(data.displayName), fetchSharedMemory(),
+    data.source==='Binance' ? fetchOpenInterestTrend(q, currentTF) : Promise.resolve(null),
+    data.source==='Binance' ? fetchFundingTrend(q) : Promise.resolve(null),
+    fetchCapitalFlowContext(),
+  ]);
+  const marketContext = { oiTrend: oiTrendData?.trend || null, fundingTrend: fundingTrendData?.trend || null, capitalFlow };
+  const result = computeScore(data, macro, newsItems, sharedMemory, marketContext);
   const setup = buildSetup(data, result, riskProfile);
   lastAnalysisData = data;
   renderResults(data, result, setup);
@@ -1133,14 +1169,11 @@ window.marketContext = null;
 
 async function fetchUsdStrengthProxy(){
   try{
-    const today = await fetchJSON('https://api.frankfurter.app/latest?from=USD&to=EUR,GBP,JPY');
-    const d = new Date(); d.setDate(d.getDate()-7);
-    const weekAgo = d.toISOString().slice(0,10);
-    const past = await fetchJSON(`https://api.frankfurter.app/${weekAgo}?from=USD&to=EUR,GBP,JPY`);
-    const pairs = ['EUR','GBP','JPY'];
-    const changes = pairs.map(p=> ((today.rates[p]-past.rates[p])/past.rates[p])*100);
-    const avgChangePct = changes.reduce((a,b)=>a+b,0)/changes.length;
-    return { avgChangePct };
+    // open.er-api.com: gratis, sin key, una sola llamada (evita el problema de CORS que tenía Frankfurter)
+    const res = await fetchJSON('https://open.er-api.com/v6/latest/USD');
+    if(!res || !res.rates) return null;
+    // Mostramos las tasas reales tal cual, sin inventar un "índice de fuerza" que no tenemos base sólida para calcular.
+    return { eurUsd: (1/res.rates.EUR).toFixed(4), gbpUsd: (1/res.rates.GBP).toFixed(4) };
   }catch(e){ return null; }
 }
 
@@ -1185,9 +1218,9 @@ async function loadMarketTicker(){
   try{
     const usd = await fetchUsdStrengthProxy();
     if(usd){
-      document.getElementById('tUsdStrength').textContent = (usd.avgChangePct>=0?'+':'')+usd.avgChangePct.toFixed(2)+'% (7d)';
+      document.getElementById('tUsdStrength').textContent = `EUR/USD ${usd.eurUsd} · GBP/USD ${usd.gbpUsd}`;
       window.marketContext = window.marketContext || {};
-      window.marketContext.usdStrength = usd.avgChangePct;
+      window.marketContext.eurUsd = parseFloat(usd.eurUsd);
     } else { document.getElementById('tUsdStrength').textContent = 'N/D'; }
   }catch(e){ document.getElementById('tUsdStrength').textContent = 'N/D'; }
 }
@@ -1229,6 +1262,20 @@ async function loadHeatmap(){
     const list = await fetchJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&price_change_percentage=24h');
     heatmapLoaded = true;
     statusEl2.textContent = '';
+
+    const sorted = [...list].sort((a,b)=>(b.price_change_percentage_24h||0)-(a.price_change_percentage_24h||0));
+    const gainers = sorted.slice(0,5), losers = sorted.slice(-5).reverse();
+    const rowHtml = c => `<div class="setup-row" style="cursor:pointer;" data-sym="${c.symbol.toUpperCase()}"><div class="k">${c.symbol.toUpperCase()}</div><div class="v ${c.price_change_percentage_24h>=0?'green':'red'}">${c.price_change_percentage_24h>=0?'+':''}${(c.price_change_percentage_24h||0).toFixed(1)}%</div></div>`;
+    document.getElementById('topGainers').innerHTML = gainers.map(rowHtml).join('');
+    document.getElementById('topLosers').innerHTML = losers.map(rowHtml).join('');
+    [...document.querySelectorAll('#topGainers [data-sym]'), ...document.querySelectorAll('#topLosers [data-sym]')].forEach(el=>{
+      el.addEventListener('click', ()=>{
+        document.querySelector('.tab-btn[data-tab="analizar"]').click();
+        input.value = el.dataset.sym;
+        analyze(el.dataset.sym);
+      });
+    });
+
     const grid = document.getElementById('heatGrid');
     grid.innerHTML = list.map(c=>{
       const chg = c.price_change_percentage_24h || 0;
@@ -1555,62 +1602,95 @@ async function loadTheHaton(){
   body.style.display = 'none';
   let state = null;
   try{
-    const res = await fetch(THEHATON_STATE_URL + '?t=' + Date.now()); // cache-bust
+    const res = await fetch(THEHATON_STATE_URL + '?t=' + Date.now());
     if(res.ok) state = await res.json();
   }catch(e){ /* seguimos con el panel base */ }
 
-  const acc = state?.account || { id:1, capital:100, initialCapital:100, openPositions:[], closedTrades:[] };
+  const acc = state?.account || { id:1, capital:100, initialCapital:100, peakCapital:100, theses:[], closedTrades:[], expiredTheses:[] };
   const trades = acc.closedTrades || [];
-    const wins = trades.filter(t=>t.result==='win');
-    const losses = trades.filter(t=>t.result==='loss');
-    const winRate = trades.length ? Math.round((wins.length/trades.length)*100) : 0;
-    const grossWin = wins.reduce((s,t)=>s+t.pnl,0);
-    const grossLoss = Math.abs(losses.reduce((s,t)=>s+t.pnl,0));
-    const profitFactor = grossLoss>0 ? (grossWin/grossLoss).toFixed(2) : (grossWin>0?'∞':'—');
+  const theses = acc.theses || [];
+  const watching = theses.filter(t=>t.status==='WATCHING');
+  const active = theses.filter(t=>t.status==='ACTIVE');
 
-    document.getElementById('thCapital').textContent = `$${acc.capital.toFixed(2)}`;
-    document.getElementById('thCapital').style.color = acc.capital>=acc.initialCapital ? 'var(--teal)' : 'var(--rose)';
-    document.getElementById('thWinRate').textContent = trades.length ? `${winRate}%` : '—';
-    document.getElementById('thProfitFactor').textContent = profitFactor;
-    document.getElementById('thAccountId').textContent = '#' + acc.id;
+  const wins = trades.filter(t=>t.result==='win');
+  const losses = trades.filter(t=>t.result==='loss');
+  const winRate = trades.length ? Math.round((wins.length/trades.length)*100) : 0;
+  const grossWin = wins.reduce((s,t)=>s+t.pnl,0);
+  const grossLoss = Math.abs(losses.reduce((s,t)=>s+t.pnl,0));
+  const profitFactor = grossLoss>0 ? (grossWin/grossLoss).toFixed(2) : (grossWin>0?'∞':'—');
+  const peak = acc.peakCapital || acc.capital;
+  const drawdown = peak>0 ? Math.round(((peak-acc.capital)/peak)*100) : 0;
 
-    document.getElementById('thOpenPositions').innerHTML = (acc.openPositions||[]).length
-      ? acc.openPositions.map(p=>`<div class="indi-line"><div class="il-k">${p.symbol}${p.tag||''}</div><div class="il-v ${p.dir==='LONG'?'up':'down'}">${p.dir}</div></div>`).join('')
-      : '<div class="subrow">Ninguna en este momento.</div>';
+  document.getElementById('thCapital').textContent = `$${acc.capital.toFixed(2)}`;
+  document.getElementById('thCapital').style.color = acc.capital>=acc.initialCapital ? 'var(--teal)' : 'var(--rose)';
+  document.getElementById('thWinRate').textContent = trades.length ? `${winRate}%` : '—';
+  document.getElementById('thProfitFactor').textContent = profitFactor;
+  document.getElementById('thDrawdown').textContent = `${drawdown}%`;
+  document.getElementById('thDrawdown').style.color = drawdown>15 ? 'var(--rose)' : 'var(--text)';
+  document.getElementById('thAccountId').textContent = '#' + acc.id;
 
-    // racha actual (ganadora o perdedora) mirando desde la última operación hacia atrás
-    let streak=0, streakType=null;
-    for(let i=trades.length-1;i>=0;i--){
-      if(streakType===null){ streakType=trades[i].result; streak=1; }
-      else if(trades[i].result===streakType) streak++;
-      else break;
-    }
-    document.getElementById('thStreak').innerHTML = trades.length
-      ? `<div class="indi-hero"><span class="num ${streakType==='win'?'up':'down'}">${streak}</span><span class="tag">${streakType==='win'?'ganadoras seguidas':'perdedoras seguidas'}</span></div>`
-      : '<div class="subrow">Sin operaciones cerradas todavía.</div>';
+  function statsForWindow(days){
+    const since = Date.now() - days*24*3600*1000;
+    const windowTrades = trades.filter(t=>t.closedAt >= since);
+    const wr = windowTrades.length ? Math.round((windowTrades.filter(t=>t.result==='win').length/windowTrades.length)*100) : 0;
+    const pnl = windowTrades.reduce((s,t)=>s+t.pnl,0);
+    return `<div class="indi-line"><div class="il-k">Operaciones</div><div class="il-v">${windowTrades.length}</div></div>
+            <div class="indi-line"><div class="il-k">Win Rate</div><div class="il-v">${windowTrades.length?wr+'%':'—'}</div></div>
+            <div class="indi-line"><div class="il-k">P&L</div><div class="il-v ${pnl>=0?'up':'down'}">${pnl>=0?'+':''}${pnl.toFixed(2)} USDT</div></div>`;
+  }
+  document.getElementById('thWeek').innerHTML = statsForWindow(7);
+  document.getElementById('thMonth').innerHTML = statsForWindow(30);
 
-    const best = trades.length ? trades.reduce((a,b)=>b.pnl>a.pnl?b:a) : null;
-    const worst = trades.length ? trades.reduce((a,b)=>b.pnl<a.pnl?b:a) : null;
-    document.getElementById('thBestWorst').innerHTML = trades.length
-      ? `<div class="indi-line"><div class="il-k">Mejor</div><div class="il-v up">${best.symbol} +${best.pnl.toFixed(2)}</div></div>
-         <div class="indi-line"><div class="il-k">Peor</div><div class="il-v down">${worst.symbol} ${worst.pnl.toFixed(2)}</div></div>`
-      : '<div class="subrow">Sin datos todavía.</div>';
+  let streak=0, streakType=null;
+  for(let i=trades.length-1;i>=0;i--){
+    if(streakType===null){ streakType=trades[i].result; streak=1; }
+    else if(trades[i].result===streakType) streak++;
+    else break;
+  }
+  const best = trades.length ? trades.reduce((a,b)=>b.pnl>a.pnl?b:a) : null;
+  const worst = trades.length ? trades.reduce((a,b)=>b.pnl<a.pnl?b:a) : null;
+  document.getElementById('thStreak').innerHTML = trades.length ? `
+    <div class="indi-line"><div class="il-k">Racha actual</div><div class="il-v ${streakType==='win'?'up':'down'}">${streak} ${streakType==='win'?'ganadoras':'perdedoras'}</div></div>
+    <div class="indi-line"><div class="il-k">Mejor</div><div class="il-v up">${best.symbol} +${best.pnl.toFixed(2)}</div></div>
+    <div class="indi-line"><div class="il-k">Peor</div><div class="il-v down">${worst.symbol} ${worst.pnl.toFixed(2)}</div></div>
+  ` : '<div class="subrow">Sin operaciones cerradas todavía.</div>';
 
-    const recent = trades.slice(-15).reverse();
-    document.getElementById('thClosedTrades').innerHTML = recent.length ? recent.map(t=>{
-      const cls = t.result==='win'?'badge-long':'badge-short';
-      return `<div class="hist-row"><div>${new Date(t.closedAt).toLocaleString()} · ${t.symbol}${t.tag||''} ${t.dir}</div><div><span class="badge ${cls}">${t.result==='win'?'GANÓ':'PERDIÓ'}</span> ${t.pnl>=0?'+':''}${t.pnl.toFixed(2)} USDT</div></div>`;
-    }).join('') : '<div class="subrow">Todavía no se cerró ninguna operación.</div>';
+  function journalHtml(t){
+    return (t.journal||[]).map(j=>`<div style="font-size:11px;color:var(--sub);padding:3px 0;">• ${new Date(j.ts).toLocaleString()} — ${j.note}</div>`).join('');
+  }
 
-    const archived = state?.accountHistory || [];
-    document.getElementById('thHistoryNote').textContent = state
-      ? (archived.length
-          ? `Esta es la cuenta #${acc.id}. Hay ${archived.length} cuenta(s) anterior(es) agotada(s) y archivada(s) para siempre (nunca se borran).`
-          : `Esta es la primera cuenta de TheHaton (capital inicial: $${acc.initialCapital}).`)
-      : 'El bot todavía no corrió ninguna vez (o el archivo aún no está subido) — este es el panel de arranque con el capital inicial. Corré el workflow en GitHub Actions para que empiece a llenarse.';
+  document.getElementById('thWatching').innerHTML = watching.length ? watching.map(t=>`
+    <div class="hist-row" style="display:block;">
+      <div style="display:flex;justify-content:space-between;"><div>${t.symbol}${t.tag||''}</div><span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir} · observando</span></div>
+      ${journalHtml(t)}
+    </div>`).join('') : 'Ninguna en este momento.';
 
-    statusEl4.textContent = '';
-    body.style.display = 'block';
+  document.getElementById('thActive').innerHTML = active.length ? active.map(t=>`
+    <div class="hist-row" style="display:block;">
+      <div style="display:flex;justify-content:space-between;"><div>${t.symbol}${t.tag||''}</div><span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir} · activa${t.breakEvenMoved?' · BE':''}</span></div>
+      <div class="subrow">Entrada $${t.entry?.toFixed?.(6)} · Stop $${t.stop?.toFixed?.(6)} · TP $${t.tp?.toFixed?.(6)}</div>
+      ${journalHtml(t)}
+    </div>`).join('') : 'Ninguna en este momento.';
+
+  const recent = trades.slice(-10).reverse();
+  document.getElementById('thClosedTrades').innerHTML = recent.length ? recent.map(t=>{
+    const cls = t.result==='win'?'badge-long':'badge-short';
+    return `<div class="hist-row" style="display:block;">
+      <div style="display:flex;justify-content:space-between;"><div>${new Date(t.closedAt).toLocaleString()} · ${t.symbol}${t.tag||''} ${t.dir}</div><div><span class="badge ${cls}">${t.result==='win'?'GANÓ':'PERDIÓ'}</span> ${t.pnl>=0?'+':''}${t.pnl.toFixed(2)} USDT</div></div>
+      ${journalHtml(t)}
+    </div>`;
+  }).join('') : '<div class="subrow">Todavía no se cerró ninguna operación.</div>';
+
+  const archived = state?.accountHistory || [];
+  const expired = acc.expiredTheses || [];
+  document.getElementById('thHistoryNote').textContent = state
+    ? (archived.length
+        ? `Esta es la cuenta #${acc.id}. Hay ${archived.length} cuenta(s) anterior(es) agotada(s) y archivada(s) para siempre, y ${expired.length} tesis expiraron sin confirmar entrada (también archivadas).`
+        : `Esta es la primera cuenta de TheHaton (capital inicial: $${acc.initialCapital}). ${expired.length} tesis expiraron sin confirmar entrada hasta ahora.`)
+    : 'El bot todavía no corrió ninguna vez (o el archivo aún no está subido) — este es el panel de arranque con el capital inicial. Corré el workflow en GitHub Actions para que empiece a llenarse.';
+
+  statusEl4.textContent = '';
+  body.style.display = 'block';
 }
 
 document.getElementById('cmpBtn').addEventListener('click', async ()=>{
