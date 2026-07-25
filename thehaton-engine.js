@@ -24,7 +24,24 @@ const TF_MAP = {
   '1d':  {binance:'1d',  okx:'1D',  bybit:'D',  mexc:'1d', gate:'1d',  kucoin:'1day',  kucoinSec:86400, gecko:{timeframe:'day',    aggregate:1}},
 };
 
-async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+async function fetchJSON(url){
+  try{
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){
+    // Si el navegador bloquea el pedido directo (CORS) o falla la red, reintenta a través
+    // de un proxy público que agrega los headers que el navegador exige.
+    try{
+      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+      const r2 = await fetch(proxied);
+      if(!r2.ok) throw new Error('HTTP '+r2.status+' (vía proxy)');
+      return await r2.json();
+    }catch(e2){
+      throw e; // ni siquiera el proxy funcionó: devolvemos el error original, que la fuente siguiente va a atrapar
+    }
+  }
+}
 
 async function tryBinance(symbolRaw, tf){
   const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');

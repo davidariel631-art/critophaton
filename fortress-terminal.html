@@ -328,8 +328,8 @@
       <div class="card">
         <h2>Gestión de capital</h2>
         <div class="cap-inputs">
-          <div><label>Capital (USDT)</label><input type="number" id="capInput" value="1000" min="0"></div>
-          <div><label>Riesgo por operación (%)</label><input type="number" id="riskInput" value="1" min="0.1" step="0.1"></div>
+          <div><label for="capInput">Capital (USDT)</label><input type="number" id="capInput" value="1000" min="0"></div>
+          <div><label for="riskInput">Riesgo por operación (%)</label><input type="number" id="riskInput" value="1" min="0.1" step="0.1"></div>
         </div>
         <div id="capOutput"></div>
       </div>
@@ -457,8 +457,8 @@
     <div class="card">
       <h2>Comparar dos monedas</h2>
       <div class="cap-inputs">
-        <div><label>Moneda A</label><input type="text" id="cmpA" placeholder="BTC" value="BTC"></div>
-        <div><label>Moneda B</label><input type="text" id="cmpB" placeholder="ETH" value="ETH"></div>
+        <div><label for="cmpA">Moneda A</label><input type="text" id="cmpA" placeholder="BTC" value="BTC"></div>
+        <div><label for="cmpB">Moneda B</label><input type="text" id="cmpB" placeholder="ETH" value="ETH"></div>
       </div>
       <button class="backtest-btn" id="cmpBtn">Comparar</button>
       <div id="cmpStatus" class="subrow" style="margin-top:8px;"></div>
@@ -603,7 +603,20 @@ const goBtn = document.getElementById('goBtn');
 const input = document.getElementById('tokenInput');
 
 function setStatus(msg){ statusEl.textContent = msg || ''; }
-async function fetchJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
+async function fetchJSON(url){
+  try{
+    const r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){
+    try{
+      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+      const r2 = await fetch(proxied);
+      if(!r2.ok) throw new Error('HTTP '+r2.status+' (vía proxy)');
+      return await r2.json();
+    }catch(e2){ throw e; }
+  }
+}
 
 document.getElementById('tfGroup').addEventListener('click', e=>{
   const btn = e.target.closest('.tf-btn'); if(!btn) return;
