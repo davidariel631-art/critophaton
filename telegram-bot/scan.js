@@ -432,7 +432,7 @@ async function getMidCapCandidates(){
   }catch(e){ console.error('Error trayendo monedas de cap chico:', e.message); return []; }
 }
 
-
+async function main(){
   if(!BOT_TOKEN || !CHAT_ID){ console.error('Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID.'); process.exit(1); }
   const state = loadState();
 
