@@ -282,6 +282,33 @@ async function manageActiveTheses(state){
     }
     thesis.priceFailCount = 0;
 
+    // Narración diaria: una vez cada 24h, vuelve a correr el motor completo sobre la tesis activa
+    // y cuenta cómo va evolucionando (sigue en pie / se debilita / conviene cerrar el resto ya).
+    const lastNarration = thesis.lastNarrationAt || thesis.confirmedAt || thesis.detectedAt;
+    if(Date.now() - lastNarration > 24*3600*1000){
+      try{
+        const d = await fetchTokenData(thesis.symbol, '4h');
+        const macroN = await fetchMacroTrend(thesis.symbol).catch(()=>null);
+        const resultN = computeScore(d, macroN, [], state.memory, {});
+        const stillAligned = resultN.recommendation === thesis.dir;
+        const bestN = Math.max(resultN.longScore, resultN.shortScore);
+        const daysOpen = ((Date.now()-(thesis.confirmedAt||thesis.detectedAt))/(1000*60*60*24)).toFixed(1);
+        const pnlFloat = thesis.units * (price-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+
+        let veredicto;
+        if(stillAligned && bestN>=6.5) veredicto = `La tesis sigue en pie: el motor todavía confirma ${thesis.dir} (score ${bestN.toFixed(1)}/10). Se mantiene sin cambios.`;
+        else if(stillAligned) veredicto = `La tesis se debilitó (score bajó a ${bestN.toFixed(1)}/10) pero todavía no se invalida del todo. Se sigue vigilando de cerca.`;
+        else veredicto = `⚠️ El motor ya NO confirma ${thesis.dir} en esta moneda (ahora da ${resultN.recommendation}). La tesis original puede estar equivocada — revisar manualmente si conviene cerrar antes de que toque el stop.`;
+
+        journal(thesis, `Actualización día ${daysOpen}: ${veredicto} P&L flotante: ${pnlFloat>=0?'+':''}${pnlFloat.toFixed(2)} USDT.`);
+        sendPromises.push(sendTelegram(
+          `📅 <b>Actualización — ${thesis.symbol}${thesis.tag||''} ${thesis.dir} (día ${daysOpen})</b>\n\n` +
+          `${veredicto}\n\nP&L flotante: ${pnlFloat>=0?'+':''}${pnlFloat.toFixed(2)} USDT\nPrecio actual: $${price.toFixed(6)}`
+        ));
+        thesis.lastNarrationAt = Date.now();
+      }catch(e){ console.error('Error en narración diaria de', thesis.symbol, e.message); }
+    }
+
     // Cierre forzado: tesis viejas (>30 días) o huérfanas migradas, para que nunca quede algo invisible para siempre
     if(thesis.forceClose){
       const pnl = thesis.units * (price-thesis.entry) * (thesis.dir==='LONG'?1:-1);
