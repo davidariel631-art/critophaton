@@ -25,21 +25,25 @@ const TF_MAP = {
 };
 
 async function fetchJSON(url){
+  let directError = null;
   try{
     const r = await fetch(url);
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok){
+      // Error de la API misma (429 rate-limit, 422, 404, etc.) - reintentar por proxy no sirve, es la fuente la que rechaza.
+      throw new Error('HTTP '+r.status);
+    }
     return await r.json();
   }catch(e){
-    // Si el navegador bloquea el pedido directo (CORS) o falla la red, reintenta a través
-    // de un proxy público que agrega los headers que el navegador exige.
+    directError = e;
+    // Solo vale la pena probar el proxy si el fetch en sí falló (CORS/red), no si la API respondió con un error real.
+    const isNetworkFailure = e instanceof TypeError || /failed to fetch/i.test(e.message||'');
+    if(!isNetworkFailure) throw e;
     try{
       const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
       const r2 = await fetch(proxied);
       if(!r2.ok) throw new Error('HTTP '+r2.status+' (vía proxy)');
       return await r2.json();
-    }catch(e2){
-      throw e; // ni siquiera el proxy funcionó: devolvemos el error original, que la fuente siguiente va a atrapar
-    }
+    }catch(e2){ throw directError; }
   }
 }
 
@@ -806,7 +810,7 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext){
   const newsSignal = Math.max(-1,Math.min(1,newsRaw)) * 0.5; // atenuado: nunca pesa como si fuera lo único importante
   const newsNote = news.length
     ? `${news.length} titular(es) relevante(s) (${newsBullish} con tono alcista, ${newsBearish} con tono bajista). Es 1 voto de 11, no decide solo.`
-    : 'Sin titulares relevantes detectados en este momento.';
+    : 'Desactivado temporalmente (la fuente de noticias gratuita dejó de responder de forma confiable). Voto neutral.';
   committee.push({name:'📰 Dios Noticias', signal:newsSignal, vote:vote(newsSignal), note:newsNote});
 
   // ---- Dios Market Context Matrix (12°): OI + Precio + Funding combinados, no aislados ----
@@ -892,11 +896,16 @@ function buildAnalystMode(data, result, setup, currentTF){
     ? `Si en cambio el precio recupera $${fmt(m.resistance)} con volumen, el escenario pasa a ser alcista, con el próximo objetivo cerca de $${fmt(setup.stop + (m.lastATR*1.5))}.`
     : `Si aparece una confluencia clara hacia un lado (ver checklist), el motor podría pasar de NO OPERAR a una señal activa en la próxima vela.`;
 
-  // Error común / mejor nivel de espera (usa Order Block si existe, si no usa zona de descuento/premium)
+  // Error común / mejor nivel de espera (usa Order Block si existe y está razonablemente cerca del precio actual)
   let mejorEntrada;
   const ob = rec==='LONG' ? st.bullishOB : rec==='SHORT' ? st.bearishOB : null;
-  if(ob){
+  const obMid = ob ? (ob.top+ob.bottom)/2 : null;
+  const obDistancePct = obMid ? Math.abs(m.price - obMid)/m.price*100 : null;
+  if(ob && obDistancePct!=null && obDistancePct <= 15){
     mejorEntrada = `En vez de entrar al precio actual, un trader más paciente esperaría un retroceso hacia la zona de Order Block ($${fmt(ob.bottom)}-$${fmt(ob.top)}), que ofrece mejor relación riesgo/beneficio.`;
+  } else if(ob && obDistancePct!=null){
+    // El OB existe pero está demasiado lejos del precio actual: esperarlo invalidaría el setup, no tiene sentido recomendarlo.
+    mejorEntrada = `Hay un Order Block ${rec==='LONG'?'alcista':'bajista'} en $${fmt(ob.bottom)}-$${fmt(ob.top)}, pero está a ${obDistancePct.toFixed(0)}% del precio actual — esperar ese retroceso significaría que la tendencia ya se invalidó. A este precio, lo más prudente es reducir el tamaño de la posición o esperar una consolidación más cercana en vez de ese retroceso tan profundo.`;
   } else {
     mejorEntrada = rec==='LONG'
       ? `Esperar un retroceso más cerca del soporte ($${fmt(m.support)}) mejoraría la relación riesgo/beneficio frente a entrar al precio actual.`
@@ -987,29 +996,11 @@ function buildSetup(data, result, riskProfile){
 
 
 async function fetchRelevantNews(coinName){
-  const feeds = ['https://cointelegraph.com/rss','https://www.coindesk.com/arc/outboundfeeds/rss/'];
-  const bullishWords = ['surge','rally','bullish','soar','approval','inflow','adoption','breakout','record high','partnership','upgrade','all-time high','buy the dip'];
-  const bearishWords = ['crash','hack','exploit','lawsuit','ban','bearish','sell-off','plunge','liquidation','fraud','investigation','delist','outflow','scam','rug pull'];
-  let matched = [];
-  for(const feedUrl of feeds){
-    try{
-      const res = await fetchJSON(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feedUrl)}&count=25`);
-      if(res.status!=='ok' || !res.items) continue;
-      res.items.forEach(item=>{
-        const title = item.title||'';
-        const lower = title.toLowerCase();
-        const mentionsCoin = coinName && lower.includes(coinName.toLowerCase());
-        const mentionsMacro = /(fomc|cpi|fed |federal reserve|interest rate|sec |etf|halving)/i.test(title);
-        if(mentionsCoin || mentionsMacro){
-          let sentiment = 'neutral';
-          if(bullishWords.some(w=>lower.includes(w))) sentiment='bullish';
-          if(bearishWords.some(w=>lower.includes(w))) sentiment='bearish';
-          matched.push({title, link:item.link, sentiment, mentionsCoin});
-        }
-      });
-    }catch(e){ /* esta fuente no respondió (rate limit u otro), seguimos con la próxima */ }
-  }
-  return matched.slice(0,12);
+  // DESACTIVADO: el tier gratis de rss2json.com dejó de funcionar de forma confiable
+  // (422/408 constantes, incluso vía proxy). En vez de fallar en cada análisis, el
+  // Dios Noticias queda neutral hasta que se consiga una fuente de noticias confiable.
+  // Ver committee.push('📰 Dios Noticias', ...) en computeScore.
+  return [];
 }
 
 

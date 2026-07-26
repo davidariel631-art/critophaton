@@ -114,6 +114,7 @@
   .empty{color:var(--sub);font-size:13px;text-align:center;padding:60px 20px;}
   .checklist{display:flex;flex-direction:column;gap:8px;margin-top:6px;}
   .checklist label{display:flex;gap:9px;font-size:12.5px;color:var(--sub);align-items:flex-start;cursor:pointer;}
+  .checklist-row{display:flex;gap:9px;font-size:12.5px;color:var(--sub);align-items:flex-start;}
   .checklist input{margin-top:2px;}
 
   /* ---- ticker bar ---- */
@@ -390,8 +391,8 @@
     </div>
 
     <div class="card" style="margin-top:18px;">
-      <h2>📰 Noticias relevantes (Dios Noticias — 1 voto de 11, no decide solo)</h2>
-      <div class="hint" style="margin-top:0;">Detección automática por palabras clave en titulares de Cointelegraph/CoinDesk — no es un análisis de lenguaje real, es un filtro simple. Por diseño, este voto pesa la mitad que los demás para que nunca sea lo que decida la operación.</div>
+      <h2>📰 Noticias relevantes (Dios Noticias — desactivado temporalmente)</h2>
+      <div class="hint" style="margin-top:0;">La fuente gratuita de noticias (rss2json) dejó de responder de forma confiable, así que este voto queda neutral por ahora en vez de fallar en cada análisis.</div>
       <div id="newsList" class="subrow" style="margin-top:8px;">Sin datos todavía.</div>
     </div>
 
@@ -606,9 +607,11 @@ function setStatus(msg){ statusEl.textContent = msg || ''; }
 async function fetchJSON(url){
   try{
     const r = await fetch(url);
-    if(!r.ok) throw new Error('HTTP '+r.status);
+    if(!r.ok) throw new Error('HTTP '+r.status); // error de la API misma: reintentar por proxy no sirve
     return await r.json();
   }catch(e){
+    const isNetworkFailure = e instanceof TypeError || /failed to fetch/i.test(e.message||'');
+    if(!isNetworkFailure) throw e;
     try{
       const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
       const r2 = await fetch(proxied);
@@ -883,10 +886,10 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
   const analyst = buildAnalystMode(data, result, setup, currentTF);
   document.getElementById('analystExplanation').textContent = analyst.explanation;
   document.getElementById('confluenceChecklist').innerHTML = analyst.checklist.map(c=>
-    `<label style="cursor:default;"><span>${c.pass?'✅':'❌'}</span> ${c.label}</label>`
+    `<div class="checklist-row"><span>${c.pass?'✅':'❌'}</span> ${c.label}</div>`
   ).join('') + `<div class="subrow" style="margin-top:6px;">${analyst.passCount}/${analyst.totalVotes} especialistas coinciden con la recomendación.</div>`;
   document.getElementById('invalidationList').innerHTML = analyst.invalidation.map(t=>
-    `<label style="cursor:default;"><span>⚠️</span> ${t}</label>`
+    `<div class="checklist-row"><span>⚠️</span> ${t}</div>`
   ).join('');
 
   const m = result.metrics;
@@ -941,7 +944,7 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
     {label:'Equal Lows (liquidez vendedora)', active: !!st2.eqLows},
   ];
   document.getElementById('smcStatus').innerHTML = smcItems.map(i=>
-    `<label style="cursor:default;"><span>${i.active?'🟢':'⚫'}</span> ${i.label}</label>`
+    `<div class="checklist-row"><span>${i.active?'🟢':'⚫'}</span> ${i.label}</div>`
   ).join('');
 
   // ---- Panel de indicadores ampliado (StochRSI, MFI, OBV, ADX, CCI, ROC) ----
