@@ -14,7 +14,7 @@
   },
   "account": {
     "id": 1,
-    "capital": 100,
+    "capital": 98,
     "initialCapital": 100,
     "openPositions": [
       {
@@ -87,13 +87,7 @@
         "riskPct": 0.015
       }
     ],
-    "closedTrades": [],
-    "tradesToday": {
-      "date": "2026-07-21",
-      "count": 0
-    },
-    "peakCapital": 100,
-    "theses": [
+    "closedTrades": [
       {
         "symbol": "BTC",
         "dir": "LONG",
@@ -105,7 +99,19 @@
         "network": null,
         "poolAddress": null,
         "tag": " (TEST)",
-        "openedAt": 1783604606094
+        "openedAt": 1783604606094,
+        "status": "ACTIVE",
+        "journal": [
+          {
+            "ts": 1785104908783,
+            "note": "Stop tocado antes de TP1 (-1.00 USDT). Capital: 99.00."
+          }
+        ],
+        "priceFailCount": 0,
+        "exit": 94000,
+        "result": "loss",
+        "pnl": -1,
+        "closedAt": 1785104908783
       },
       {
         "symbol": "TIA",
@@ -119,8 +125,27 @@
         "poolAddress": null,
         "tag": " (OKX)",
         "openedAt": 1783672813595,
-        "riskPct": 0.01
-      },
+        "riskPct": 0.01,
+        "status": "ACTIVE",
+        "journal": [
+          {
+            "ts": 1785104909297,
+            "note": "Stop tocado antes de TP1 (-1.00 USDT). Capital: 98.00."
+          }
+        ],
+        "priceFailCount": 0,
+        "exit": 0.38952929610860826,
+        "result": "loss",
+        "pnl": -1,
+        "closedAt": 1785104909297
+      }
+    ],
+    "tradesToday": {
+      "date": "2026-07-21",
+      "count": 0
+    },
+    "peakCapital": 100,
+    "theses": [
       {
         "symbol": "PYTH",
         "dir": "LONG",
@@ -133,7 +158,10 @@
         "poolAddress": null,
         "tag": " (OKX)",
         "openedAt": 1783672815065,
-        "riskPct": 0.01
+        "riskPct": 0.01,
+        "status": "ACTIVE",
+        "journal": [],
+        "priceFailCount": 0
       },
       {
         "symbol": "WIF",
@@ -147,7 +175,10 @@
         "poolAddress": null,
         "tag": " (OKX)",
         "openedAt": 1783672815551,
-        "riskPct": 0.01
+        "riskPct": 0.01,
+        "status": "ACTIVE",
+        "journal": [],
+        "priceFailCount": 0
       },
       {
         "symbol": "ORDI",
@@ -161,7 +192,10 @@
         "poolAddress": null,
         "tag": " (OKX)",
         "openedAt": 1783672816041,
-        "riskPct": 0.015
+        "riskPct": 0.015,
+        "status": "ACTIVE",
+        "journal": [],
+        "priceFailCount": 0
       }
     ],
     "expiredTheses": [
@@ -560,28 +594,28 @@
       "ts": 1784278669251
     },
     "SEI": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785005232507
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104912983
     },
     "JUP": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785005261377
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104914073
     },
     "STRK": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785005326815
+      "ts": 1785104915123
     },
     "ENA": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785005345131
+      "lastRecommendation": "LONG",
+      "ts": 1785104916154
     },
     "W": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785005399370
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104917241
     },
     "TNSR": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785005480586
+      "lastRecommendation": "LONG",
+      "ts": 1785104918276
     },
     "WOLF": {
       "lastRecommendation": "SHORT",
@@ -656,8 +690,8 @@
       "ts": 1784331262330
     },
     "RIF": {
-      "lastRecommendation": "LONG",
-      "ts": 1784348049620
+      "lastRecommendation": "SHORT",
+      "ts": 1785104957536
     },
     "USDe": {
       "lastRecommendation": "NO OPERAR",
@@ -746,6 +780,114 @@
     "props": {
       "lastRecommendation": "NO OPERAR",
       "ts": 1784998471936
+    },
+    "TIA": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104911874
+    },
+    "CATE": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104924597
+    },
+    "GEOD": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104927929
+    },
+    "GALA": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104928975
+    },
+    "AB": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104930099
+    },
+    "MET": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104932897
+    },
+    "ZK": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104933901
+    },
+    "NEX": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104934980
+    },
+    "CRCLON": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104936619
+    },
+    "CHEEMS": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104937745
+    },
+    "KMNO": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104938727
+    },
+    "RAIL": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104939849
+    },
+    "FLUID": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104940920
+    },
+    "SENT": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104944263
+    },
+    "GPS": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104946822
+    },
+    "SN64": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104947983
+    },
+    "ATH": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104951199
+    },
+    "EGLD": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104953305
+    },
+    "DBR": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104954419
+    },
+    "INC": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104958770
+    },
+    "BEAM": {
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785104961096
+    },
+    "PRL": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104964472
+    },
+    "ALLO": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104965464
+    },
+    "RSC": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785104966752
+    },
+    "RSR": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104967829
+    },
+    "MELANIA": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104968903
+    },
+    "SAPIEN": {
+      "lastRecommendation": "LONG",
+      "ts": 1785104970266
     }
   }
 }
