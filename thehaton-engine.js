@@ -284,6 +284,18 @@ async function fetchMacroTrend(query){
   }catch(e){ return null; }
 }
 
+// Referencia de BTC para el Dios de Fuerza Relativa: % de cambio de BTC en la misma temporalidad/ventana.
+async function fetchBTCReference(tf){
+  try{
+    const btc = await fetchTokenData('BTC', tf);
+    if(!btc.candles || btc.candles.length<9) return null;
+    const closes = btc.candles.map(c=>c.c);
+    const lookback = Math.min(8, closes.length-1);
+    const pctChange = ((closes.at(-1)-closes[closes.length-1-lookback])/closes[closes.length-1-lookback])*100;
+    return { pctChange };
+  }catch(e){ return null; }
+}
+
 // ---------- Indicators ----------
 function ema(values, period){
   const k = 2/(period+1); const out=[]; let prev;
@@ -593,7 +605,7 @@ function computeStructure(candles, atrArr){
 }
 
 // ---------- Scoring ----------
-function computeScore(data, macro, newsItems, sharedMemory, marketContext){
+function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcReference){
   const closes = data.candles.map(c=>c.c);
   const vols = data.candles.map(c=>c.v);
   const price = closes.at(-1);
@@ -805,16 +817,24 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext){
   }
   committee.push({name:'🧠 Dios Memoria', signal:memorySignal, vote:vote(memorySignal), note: memoryNote});
 
-  // ---- Dios Noticias (11°): también solo vota, atenuado a la mitad a propósito para que nunca sea lo que decide ----
-  const news = newsItems || [];
-  const newsBullish = news.filter(n=>n.sentiment==='bullish').length;
-  const newsBearish = news.filter(n=>n.sentiment==='bearish').length;
-  const newsRaw = news.length ? (newsBullish-newsBearish)/news.length : 0;
-  const newsSignal = Math.max(-1,Math.min(1,newsRaw)) * 0.5; // atenuado: nunca pesa como si fuera lo único importante
-  const newsNote = news.length
-    ? `${news.length} titular(es) relevante(s) (${newsBullish} con tono alcista, ${newsBearish} con tono bajista). Es 1 voto de 11, no decide solo.`
-    : 'Desactivado temporalmente (la fuente de noticias gratuita dejó de responder de forma confiable). Voto neutral.';
-  committee.push({name:'📰 Dios Noticias', signal:newsSignal, vote:vote(newsSignal), note:newsNote});
+  // ---- Dios de Fuerza Relativa vs BTC (11°): resuelve el "problema de la dominancia" ----
+  // Si BTC domina pero esta moneda le está ganando en rendimiento reciente, eso compensa
+  // el castigo ciego que el Dios de Dominancias le mete cuando la dominancia de BTC sube.
+  const coinCloses = data.candles.map(c=>c.c);
+  const lookback = Math.min(8, coinCloses.length-1);
+  const coinPctChange = lookback>0 ? ((coinCloses.at(-1)-coinCloses[coinCloses.length-1-lookback])/coinCloses[coinCloses.length-1-lookback])*100 : 0;
+  let relStrengthSignal = 0;
+  let relStrengthNote = 'Sin datos de BTC para comparar en este análisis.';
+  if(btcReference!=null && data.displayName!=='BTC'){
+    const diff = coinPctChange - btcReference.pctChange;
+    relStrengthSignal = Math.max(-1, Math.min(1, diff/10)); // cada 10 puntos porcentuales de diferencia = señal completa
+    relStrengthNote = diff>=0
+      ? `${data.displayName} rindió ${diff.toFixed(1)}pp mejor que BTC en el mismo período (${coinPctChange.toFixed(1)}% vs ${btcReference.pctChange.toFixed(1)}%): fuerza relativa positiva, compensa una dominancia de BTC alta.`
+      : `${data.displayName} rindió ${Math.abs(diff).toFixed(1)}pp peor que BTC en el mismo período (${coinPctChange.toFixed(1)}% vs ${btcReference.pctChange.toFixed(1)}%): fuerza relativa débil frente al líder del mercado.`;
+  } else if(data.displayName==='BTC'){
+    relStrengthNote = 'No aplica: esta es la propia referencia (BTC).';
+  }
+  committee.push({name:'💪 Dios de Fuerza Relativa (vs BTC)', signal:relStrengthSignal, vote:vote(relStrengthSignal), note:relStrengthNote});
 
   // ---- Dios Market Context Matrix (12°): OI + Precio + Funding combinados, no aislados ----
   const priceTrend = classifyTrend(data.candles.map(c=>c.c).slice(-8), 2);
@@ -831,12 +851,24 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext){
   const votesLong = committee.filter(c=>c.vote==='LONG').length;
   const votesShort = committee.filter(c=>c.vote==='SHORT').length;
 
+  // ---- Sello de calidad de datos: qué le faltó a este análisis, para no confundir "score bajo" con "datos incompletos" ----
+  const missingData = [];
+  if(data.source!=='Binance') missingData.push('Open Interest y Funding (solo disponibles para pares de Binance)');
+  else{
+    if(!marketContext?.oiTrend) missingData.push('Open Interest');
+    if(!marketContext?.fundingTrend) missingData.push('Funding (tendencia)');
+  }
+  if(!macro) missingData.push('Tendencia macro (4h)');
+  if(!marketContext?.capitalFlow) missingData.push('Flujo de capital (DeFiLlama)');
+  if(btcReference==null && data.displayName!=='BTC') missingData.push('Fuerza relativa vs BTC');
+  const dataQuality = { complete: missingData.length===0, missing: missingData };
+
   return {
     score10, bias,
     longScore, shortScore, confidence, stars, recommendation,
     breakdown:[{label:'Tendencia',val:Math.round(trendR),max:25},{label:'Momentum',val:Math.round(momentumR),max:20},{label:'Volumen',val:Math.round(volumeR),max:12},{label:'Volatilidad',val:Math.round(volatR),max:8},{label:'Derivados',val:Math.round(derivR),max:15},{label:'Estructura SMC',val:Math.round(structure.score),max:20}],
     metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct},
-    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, newsItems: news,
+    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality,
     series:{closes,e20,e50,e200,rsiArr,macd:m,bb}
   };
 }
@@ -1015,7 +1047,7 @@ function fmtPct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
 // ============================================================
 export {
   BINANCE, FUTURES, GECKO, TF_MAP,
-  fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews,
+  fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, keltnerChannel, detectSqueeze,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,

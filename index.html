@@ -391,9 +391,9 @@
     </div>
 
     <div class="card" style="margin-top:18px;">
-      <h2>📰 Noticias relevantes (Dios Noticias — desactivado temporalmente)</h2>
-      <div class="hint" style="margin-top:0;">La fuente gratuita de noticias (rss2json) dejó de responder de forma confiable, así que este voto queda neutral por ahora en vez de fallar en cada análisis.</div>
-      <div id="newsList" class="subrow" style="margin-top:8px;">Sin datos todavía.</div>
+      <h2>🏷️ Calidad de datos de este análisis</h2>
+      <div class="hint" style="margin-top:0;">Para no confundir "score bajo" con "análisis incompleto" — te decimos si al motor le faltó algún dato para esta moneda puntual.</div>
+      <div id="dataQualityBox" class="subrow" style="margin-top:8px;">Cargando…</div>
     </div>
 
     <div class="grid" style="margin-top:18px;">
@@ -964,14 +964,12 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
     </div>`;
   }).join('');
 
-  const newsListEl = document.getElementById('newsList');
-  if(!result.newsItems || !result.newsItems.length){
-    newsListEl.textContent = 'No se detectaron titulares relevantes para esta moneda o eventos macro en este momento.';
+  const dqBox = document.getElementById('dataQualityBox');
+  const dq = result.dataQuality;
+  if(dq.complete){
+    dqBox.innerHTML = `<span style="color:var(--teal);font-weight:700;">✅ Análisis completo</span> — el motor tuvo todos los datos disponibles para esta moneda.`;
   } else {
-    newsListEl.innerHTML = result.newsItems.map(n=>{
-      const icon = n.sentiment==='bullish'?'🟢':n.sentiment==='bearish'?'🔴':'⚪';
-      return `<div class="hist-row" style="cursor:default;"><a href="${n.link}" target="_blank" rel="noopener" style="color:var(--text);text-decoration:none;flex:1;">${icon} ${n.title}</a></div>`;
-    }).join('');
+    dqBox.innerHTML = `<span style="color:var(--amber);font-weight:700;">⚠️ Análisis parcial</span> — faltó: ${dq.missing.join(', ')}. El resto del motor funcionó igual, pero tenelo en cuenta.`;
   }
 
   const query = encodeURIComponent(data.contract || data.displayName);
@@ -1005,15 +1003,16 @@ async function analyze(qOverride){
   try{ data = await fetchTokenData(q, currentTF); }
   catch(e){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
   if(!data.candles || data.candles.length < 30){ setStatus('Datos insuficientes para un análisis confiable.'); goBtn.disabled=false; return; }
-  setStatus('Chequeando tendencia macro (4h), Open Interest, funding, flujo de capital, noticias y memoria compartida...');
-  const [macro, newsItems, sharedMemory, oiTrendData, fundingTrendData, capitalFlow] = await Promise.all([
-    fetchMacroTrend(q), fetchRelevantNews(data.displayName), fetchSharedMemory(),
+  setStatus('Chequeando tendencia macro (4h), Open Interest, funding, flujo de capital, fuerza relativa y memoria compartida...');
+  const [macro, sharedMemory, oiTrendData, fundingTrendData, capitalFlow, btcReference] = await Promise.all([
+    fetchMacroTrend(q), fetchSharedMemory(),
     data.source==='Binance' ? fetchOpenInterestTrend(q, currentTF) : Promise.resolve(null),
     data.source==='Binance' ? fetchFundingTrend(q) : Promise.resolve(null),
     fetchCapitalFlowContext(),
+    data.displayName!=='BTC' ? fetchBTCReference(currentTF) : Promise.resolve(null),
   ]);
   const marketContext = { oiTrend: oiTrendData?.trend || null, fundingTrend: fundingTrendData?.trend || null, capitalFlow };
-  const result = computeScore(data, macro, newsItems, sharedMemory, marketContext);
+  const result = computeScore(data, macro, [], sharedMemory, marketContext, btcReference);
   const setup = buildSetup(data, result, riskProfile);
   lastAnalysisData = data;
   renderResults(data, result, setup);
