@@ -24,26 +24,29 @@ const TF_MAP = {
   '1d':  {binance:'1d',  okx:'1D',  bybit:'D',  mexc:'1d', gate:'1d',  kucoin:'1day',  kucoinSec:86400, gecko:{timeframe:'day',    aggregate:1}},
 };
 
+const CORS_PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+  url => `https://thingproxy.freeboard.io/fetch/${url}`,
+];
+
 async function fetchJSON(url){
-  let directError = null;
   try{
     const r = await fetch(url);
-    if(!r.ok){
-      // Error de la API misma (429 rate-limit, 422, 404, etc.) - reintentar por proxy no sirve, es la fuente la que rechaza.
-      throw new Error('HTTP '+r.status);
-    }
+    if(!r.ok) throw new Error('HTTP '+r.status); // error de la API misma: reintentar por proxy no sirve
     return await r.json();
   }catch(e){
-    directError = e;
-    // Solo vale la pena probar el proxy si el fetch en sí falló (CORS/red), no si la API respondió con un error real.
     const isNetworkFailure = e instanceof TypeError || /failed to fetch/i.test(e.message||'');
     if(!isNetworkFailure) throw e;
-    try{
-      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-      const r2 = await fetch(proxied);
-      if(!r2.ok) throw new Error('HTTP '+r2.status+' (vía proxy)');
-      return await r2.json();
-    }catch(e2){ throw directError; }
+    // Prueba varios proxies gratuitos en cadena (uno solo no es confiable: se cae o tarda seguido)
+    for(const buildProxyUrl of CORS_PROXIES){
+      try{
+        const r2 = await fetch(buildProxyUrl(url));
+        if(!r2.ok) continue;
+        return await r2.json();
+      }catch(e2){ /* probamos el siguiente proxy */ }
+    }
+    throw e; // ningún proxy funcionó: devolvemos el error original
   }
 }
 
