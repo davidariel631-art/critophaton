@@ -264,13 +264,27 @@ async function confirmTheses(state, capitalFlow){
 }
 
 // ---------- Fase 3: gestionar tesis activas (TP/SL, breakeven) ----------
+// Chequea el rango real (máximo/mínimo) de precio desde la última vez que se revisó esta tesis,
+// no solo el precio del instante actual — así no se pierden mechas que tocan TP/SL entre corridas.
+async function fetchPriceRange(symbol, sinceTs){
+  try{
+    const d = await fetchTokenData(symbol, '15m');
+    if(!d.candles || !d.candles.length) return null;
+    const marginMs = 20*60*1000; // margen para no perder la vela justo en el borde
+    const relevant = d.candles.filter(c => c.t >= (sinceTs - marginMs));
+    const scope = relevant.length ? relevant : d.candles.slice(-4); // fallback: última hora aprox
+    return { high: Math.max(...scope.map(c=>c.h)), low: Math.min(...scope.map(c=>c.l)), last: d.price };
+  }catch(e){ return null; }
+}
+
 async function manageActiveTheses(state){
   const acc = state.account;
   const stillOpen = [];
   for(const thesis of acc.theses){
     if(thesis.status !== 'ACTIVE'){ stillOpen.push(thesis); continue; }
-    let price = null;
-    try{ const d = await fetchTokenData(thesis.symbol, '15m'); price = d.price; }catch(e){}
+    const sinceTs = thesis.lastCheckedAt || thesis.confirmedAt || thesis.detectedAt;
+    const range = await fetchPriceRange(thesis.symbol, sinceTs);
+    const price = range?.last ?? null;
 
     if(price==null){
       thesis.priceFailCount = (thesis.priceFailCount||0) + 1;
@@ -281,6 +295,9 @@ async function manageActiveTheses(state){
       stillOpen.push(thesis); continue;
     }
     thesis.priceFailCount = 0;
+    const isReconciliation = !thesis.lastCheckedAt; // primera vez que se revisa con la lógica de rango nuevo
+    thesis.lastCheckedAt = Date.now();
+
 
     // Narración diaria: una vez cada 24h, vuelve a correr el motor completo sobre la tesis activa
     // y cuenta cómo va evolucionando (sigue en pie / se debilita / conviene cerrar el resto ya).
@@ -322,11 +339,11 @@ async function manageActiveTheses(state){
       continue;
     }
 
-    // Etapa 1: todavía no tomó ganancia parcial -> vigila Stop y TP1
+    // Etapa 1: todavía no tomó ganancia parcial -> vigila Stop y TP1 (con el rango real, no solo el precio actual)
     if(!thesis.partialTaken){
       let hitTP1=false, hitSL=false;
-      if(thesis.dir==='LONG'){ if(price<=thesis.stop) hitSL=true; else if(price>=thesis.tp1) hitTP1=true; }
-      else { if(price>=thesis.stop) hitSL=true; else if(price<=thesis.tp1) hitTP1=true; }
+      if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitSL=true; else if(range.high>=thesis.tp1) hitTP1=true; }
+      else { if(range.high>=thesis.stop) hitSL=true; else if(range.low<=thesis.tp1) hitTP1=true; }
 
       if(hitTP1){
         const halfUnits = thesis.units/2;
@@ -338,6 +355,7 @@ async function manageActiveTheses(state){
         journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 50% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 50% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}).`);
         thesis.partialPnl = pnl;
         sendPromises.push(sendTelegram(
+          (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
           `💰 <b>TheHaton tomó 50% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
           `TP1 alcanzado: $${thesis.tp1.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
           `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el 50% restante ya no puede terminar en pérdida.\n` +
@@ -350,6 +368,7 @@ async function manageActiveTheses(state){
         journal(thesis, `Stop tocado antes de TP1 (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Capital: ${acc.capital.toFixed(2)}.`);
         acc.closedTrades.push({...thesis, exit:thesis.stop, result: pnl>=0?'win':'loss', pnl:+pnl.toFixed(4), closedAt: Date.now()});
         sendPromises.push(sendTelegram(
+          (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
           `🛑 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
           `PERDIÓ (${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
         ));
@@ -359,10 +378,10 @@ async function manageActiveTheses(state){
       continue;
     }
 
-    // Etapa 2: ya tomó el 50% -> el resto corre hasta TP2 o vuelve a breakeven (stop ya está en el punto de entrada)
+    // Etapa 2: ya tomó el 50% -> el resto corre hasta TP2 o vuelve a breakeven (con el rango real)
     let hitTP2=false, hitBE=false;
-    if(thesis.dir==='LONG'){ if(price<=thesis.stop) hitBE=true; else if(price>=thesis.tp2) hitTP2=true; }
-    else { if(price>=thesis.stop) hitBE=true; else if(price<=thesis.tp2) hitTP2=true; }
+    if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE=true; else if(range.high>=thesis.tp2) hitTP2=true; }
+    else { if(range.high>=thesis.stop) hitBE=true; else if(range.low<=thesis.tp2) hitTP2=true; }
 
     if(hitTP2 || hitBE){
       const exit = hitTP2 ? thesis.tp2 : thesis.stop;
@@ -372,6 +391,7 @@ async function manageActiveTheses(state){
       journal(thesis, `${hitTP2?'TP2 alcanzado':'Volvió a breakeven'}: se cierra el 50% restante (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
       acc.closedTrades.push({...thesis, exit, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
       sendPromises.push(sendTelegram(
+        (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
         `${hitTP2?'🚀':'⚖️'} <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
         `${hitTP2?'TP2 alcanzado ✅':'Volvió al punto de entrada (breakeven en el 50% restante)'}\n` +
         `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
