@@ -541,6 +541,29 @@ function detectEqualLevels(labeledPivots, tolerancePct=0.0015){
   return {eqHighs, eqLows};
 }
 
+// Barrida de liquidez RECIENTE: no es "dónde descansa la liquidez" (eso ya lo hace detectEqualLevels/EQH-EQL),
+// es "¿ya se barrió una mecha agresiva y el precio rechazó?" — la trampa alcista/bajista que se arma
+// justo antes de girar. Mirar las últimas ~10 velas alcanza para esto (no hace falta todo el historial).
+function detectLiquiditySweep(candles, lookback=30){
+  const recent = candles.slice(-lookback);
+  if(recent.length<3) return {sweptUp:false, sweptDown:false, strengthUp:0, strengthDown:0};
+  let sweptUp=false, sweptDown=false, strengthUp=0, strengthDown=0;
+  for(let i=1;i<recent.length;i++){
+    const c = recent[i], prev = recent[i-1];
+    if(c.h > prev.h*1.015 && c.c < c.o){
+      sweptUp = true;
+      strengthUp = Math.max(strengthUp, ((c.h/prev.h)-1)*100); // % que se pasó del máximo previo: más grande = mecha más agresiva
+    }
+    if(c.l < prev.l*0.985 && c.c > c.o){
+      sweptDown = true;
+      strengthDown = Math.max(strengthDown, (1-(c.l/prev.l))*100);
+    }
+  }
+  // Rango comprimido: señal propia (no solo un extra del sweep) — coiling cerca de liquidez conocida ya es informativo.
+  const rangePct = (Math.max(...recent.map(c=>c.h)) - Math.min(...recent.map(c=>c.l))) / recent.at(-1).c;
+  return {sweptUp, sweptDown, strengthUp, strengthDown, compressed: rangePct < 0.018};
+}
+
 function fibLevels(labeledPivots){
   const last = labeledPivots.slice(-2);
   if(last.length<2) return null;
@@ -584,6 +607,7 @@ function computeStructure(candles, atrArr){
   const {eqHighs, eqLows} = detectEqualLevels(pivots);
   const fib = fibLevels(pivots);
   const candlePattern = detectCandlePattern(candles);
+  const liquiditySweep = detectLiquiditySweep(candles);
 
   let score=10, notes=[];
   const bias = events.trendStructure;
@@ -599,9 +623,15 @@ function computeStructure(candles, atrArr){
   if(bearFVG){ score-=1; notes.push(`FVG bajista sin mitigar ($${fmt(bearFVG.bottom)}-$${fmt(bearFVG.top)}) puede actuar de resistencia.`); }
   if(eqHighs){ notes.push(`Equal Highs (EQH) detectados ~$${fmt(eqHighs)}: liquidez compradora (buy-side) reposando ahí, posible objetivo de un liquidity sweep.`); }
   if(eqLows){ notes.push(`Equal Lows (EQL) detectados ~$${fmt(eqLows)}: liquidez vendedora (sell-side) reposando ahí.`); }
+  if(liquiditySweep.sweptUp){ const impact = Math.min(6, 2+liquiditySweep.strengthUp); score-=impact; notes.push(`🚨 Barrida de liquidez alcista reciente (mecha ${liquiditySweep.strengthUp.toFixed(1)}% por encima del máximo previo, cerró débil): posible trampa a compradores, cuidado entrando en LONG ahora mismo.`); }
+  if(liquiditySweep.sweptDown){ const impact = Math.min(6, 2+liquiditySweep.strengthDown); score-=impact; notes.push(`🚨 Barrida de liquidez bajista reciente (mecha ${liquiditySweep.strengthDown.toFixed(1)}% por debajo del mínimo previo, cerró fuerte): posible trampa a vendedores, cuidado entrando en SHORT ahora mismo.`); }
+  if(liquiditySweep.compressed){
+    if(eqHighs || eqLows){ score-=3; notes.push('Rango comprimido justo cerca de liquidez conocida (Equal High/Low): el riesgo de un movimiento brusco en cualquier dirección es mayor a lo normal.'); }
+    else { score-=1; notes.push('Rango comprimido (baja volatilidad reciente): posible antesala de una ruptura, dirección todavía sin definir.'); }
+  }
   if(candlePattern){ notes.push(`Última vela: ${candlePattern}.`); }
   score = Math.max(0, Math.min(20, score));
-  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqLows, fib, pivots, candlePattern};
+  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqLows, fib, pivots, candlePattern, liquiditySweep};
 }
 
 // ---------- Scoring ----------
@@ -801,6 +831,10 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const squeeze = detectSqueeze(data.candles, lastBB);
   let riskNote = squeeze?.squeezeOn ? 'Compresión de volatilidad detectada (Bollinger dentro de Keltner): posible ruptura fuerte próxima, en cualquier dirección.' : 'Sin compresión de volatilidad relevante ahora mismo.';
   if(squeeze?.squeezeOn) riskSignal *= 0.6; // en squeeze la dirección es incierta hasta que rompe: se atenúa la convicción
+  // Barrida de liquidez reciente en contra de la dirección que este dios venía sugiriendo: penaliza fuerte (trampa detectada)
+  const sweep = structure.liquiditySweep;
+  if(sweep?.sweptUp && riskSignalDir>0){ const penalty = Math.min(0.7, 0.3+sweep.strengthUp/10); riskSignal = Math.min(riskSignal, -penalty); riskNote += ` 🚨 Además, se detectó una barrida de liquidez alcista reciente (mecha ${sweep.strengthUp.toFixed(1)}%): entrar en LONG justo ahora tiene riesgo de trampa.`; }
+  if(sweep?.sweptDown && riskSignalDir<0){ const penalty = Math.min(0.7, 0.3+sweep.strengthDown/10); riskSignal = Math.max(riskSignal, penalty); riskNote += ` 🚨 Además, se detectó una barrida de liquidez bajista reciente (mecha ${sweep.strengthDown.toFixed(1)}%): entrar en SHORT justo ahora tiene riesgo de trampa.`; }
   committee.push({name:'⚠️ Dios Gestión de Riesgo', signal:riskSignal, vote:vote(riskSignal), note:riskNote, squeezeOn: squeeze?.squeezeOn||false});
 
   const liquidityOk = (data.vol24h||0) > 1000000;
@@ -1053,7 +1087,7 @@ export {
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, levelStrength, findPivots, labelSwings, detectStructureEvents,
-  detectOrderBlocks, detectFVG, detectEqualLevels, fibLevels, detectCandlePattern, computeStructure,
+  detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
   fmt, fmtPct
 };

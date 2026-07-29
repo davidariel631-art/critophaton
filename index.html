@@ -949,6 +949,9 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
     {label:'Fair Value Gap sin llenar', active: (st2.fvgs||[]).length>0},
     {label:'Equal Highs (liquidez compradora)', active: !!st2.eqHighs},
     {label:'Equal Lows (liquidez vendedora)', active: !!st2.eqLows},
+    {label:`Barrida de liquidez alcista reciente ${st2.liquiditySweep?.sweptUp?'('+st2.liquiditySweep.strengthUp.toFixed(1)+'%)':''}`, active: !!st2.liquiditySweep?.sweptUp},
+    {label:`Barrida de liquidez bajista reciente ${st2.liquiditySweep?.sweptDown?'('+st2.liquiditySweep.strengthDown.toFixed(1)+'%)':''}`, active: !!st2.liquiditySweep?.sweptDown},
+    {label:'Rango comprimido (posible ruptura próxima)', active: !!st2.liquiditySweep?.compressed},
   ];
   document.getElementById('smcStatus').innerHTML = smcItems.map(i=>
     `<div class="checklist-row"><span>${i.active?'🟢':'⚫'}</span> ${i.label}</div>`
