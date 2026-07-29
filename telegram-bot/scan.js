@@ -22,7 +22,8 @@
 import fs from 'fs';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
-  fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext,
+  fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
+  confluenceScore15m, fetchFearGreedIndex,
   computeScore, buildSetup, buildAnalystMode
 } from '../thehaton-engine.js';
 
@@ -209,26 +210,47 @@ async function confirmTheses(state, capitalFlow){
       const macro = await fetchMacroTrend(thesis.symbol).catch(()=>null);
       const oiTrendData = data15.source==='Binance' ? await fetchOpenInterestTrend(thesis.symbol, '15m').catch(()=>null) : null;
       const fundingTrendData = data15.source==='Binance' ? await fetchFundingTrend(thesis.symbol).catch(()=>null) : null;
+      const btcReference = data15.displayName!=='BTC' ? await fetchBTCReference('15m').catch(()=>null) : null;
       const marketContext15 = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
-      const result15 = computeScore(data15, macro, [], state.memory, marketContext15);
+      const result15 = computeScore(data15, macro, [], state.memory, marketContext15, btcReference);
 
       const alineado = result15.recommendation === thesis.dir;
       const bosAFavor = thesis.dir==='LONG' ? result15.structure?.events?.bos==='bullish' : result15.structure?.events?.bos==='bearish';
       const confianzaSubio = result15.confidence >= thesis.conviction;
+      // Score de Confluencia: no depender solo del BOS (que suele confirmar tarde) — MACD acelerando +
+      // Stochastic saliendo recién de un extremo (no ya agotado adentro) + velas con cuerpo fuerte.
+      const confluence = confluenceScore15m(data15.candles);
+      const confluenceAFavor = thesis.dir==='LONG' ? confluence.bullConfluence>=2 : confluence.bearConfluence>=2;
 
-      if(alineado && (bosAFavor || confianzaSubio)){
+      // Filtro macro suave (Fear & Greed): no bloquea del todo, solo exige más evidencia en contextos extremos adversos.
+      const fng = await fetchFearGreedIndex().catch(()=>null);
+      const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<25) || (thesis.dir==='SHORT' && fng>80));
+      if(macroAdverso && !bosAFavor){
+        journal(thesis, `Todavía esperando confirmación (Fear&Greed en ${fng}, contexto adverso para ${thesis.dir} — se exige BOS claro, no alcanza con confluencia sola en este contexto).`);
+        stillWatching.push(thesis);
+        continue;
+      }
+
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
         const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence);
         const riskAmount = acc.capital * riskPct;
         const distance = Math.abs(entryPrice - setup.stop);
         if(distance<=0){ stillWatching.push(thesis); continue; }
+        const rrToTp1 = Math.abs(setup.t1-entryPrice)/distance;
+        if(rrToTp1 < 1.5){
+          journal(thesis, `Confirmación técnica presente pero R:R a TP1 es solo ${rrToTp1.toFixed(2)}:1 (mínimo exigido 1.5:1). Se sigue observando en vez de forzar una entrada con mala relación riesgo/beneficio.`);
+          stillWatching.push(thesis);
+          continue;
+        }
         const units = riskAmount / distance;
 
         thesis.status = 'ACTIVE';
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
-        journal(thesis, `Entrada CONFIRMADA en 15m ${bosAFavor?'(BOS a favor detectado)':'(la confianza del motor subió a '+result15.confidence+'%)'}. Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
+        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/3: MACD/Stochastic/velas fuertes)` : `la confianza del motor subió a ${result15.confidence}%`;
+        journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
         const analyst = buildAnalystMode(data15, result15, setup, '15m');
