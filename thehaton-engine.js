@@ -356,6 +356,46 @@ function detectSqueeze(candles, bb){
   return { squeezeOn, bb, keltner: kelt };
 }
 
+// ---- Score de Confluencia (para confirmar entrada en 15m sin depender solo de un BOS estricto) ----
+// La idea: no exigir SIEMPRE una ruptura de estructura para confirmar. Si el momentum (MACD acelerando)
+// + el Stochastic saliendo recién de una zona extrema (no ya agotado adentro) + velas con cuerpo fuerte
+// coinciden, es una entrada razonable — y más temprana que esperar el BOS (que suele confirmar tarde,
+// cuando el impulso ya corrió bastante).
+function confluenceScore15m(candles){
+  if(!candles || candles.length<30) return {bullConfluence:0, bearConfluence:0};
+  const closes = candles.map(c=>c.c);
+  const rsiArr = rsi(closes,14);
+  const stoch = stochRsi(rsiArr,14).filter(v=>v!=null);
+  const macdData = macd(closes);
+  const lastStoch = stoch.at(-1), prevStoch = stoch.at(-2);
+  const lastHist = macdData.hist.at(-1), prevHist = macdData.hist.at(-2);
+
+  const macdAccelerating = lastHist!=null && prevHist!=null && Math.abs(lastHist) > Math.abs(prevHist);
+  const macdBull = lastHist>0 && macdAccelerating;
+  const macdBear = lastHist<0 && macdAccelerating;
+
+  // Sale de sobreventa (no ya en sobrecompra) / sale de sobrecompra (no ya en sobreventa): evita entrar agotado.
+  const stochBull = lastStoch!=null && prevStoch!=null && prevStoch<30 && lastStoch>prevStoch && lastStoch<65;
+  const stochBear = lastStoch!=null && prevStoch!=null && prevStoch>70 && lastStoch<prevStoch && lastStoch>35;
+
+  const last3 = candles.slice(-3);
+  const strongBullCandles = last3.filter(c=> (c.c-c.o)>0 && (c.c-c.o)/((c.h-c.l)||1e-9) > 0.5).length;
+  const strongBearCandles = last3.filter(c=> (c.o-c.c)>0 && (c.o-c.c)/((c.h-c.l)||1e-9) > 0.5).length;
+
+  const bullConfluence = [macdBull, stochBull, strongBullCandles>=2].filter(Boolean).length;
+  const bearConfluence = [macdBear, stochBear, strongBearCandles>=2].filter(Boolean).length;
+
+  return { bullConfluence, bearConfluence, macdBull, macdBear, stochBull, stochBear, strongBullCandles, strongBearCandles, lastStoch };
+}
+
+// ---- Fear & Greed (para el filtro macro suave) ----
+async function fetchFearGreedIndex(){
+  try{
+    const res = await fetchJSON('https://api.alternative.me/fng/?limit=1');
+    return parseInt(res?.data?.[0]?.value, 10) || null;
+  }catch(e){ return null; }
+}
+
 // ---- Capital Flow real (DeFiLlama: 100% gratis, sin key, sin límite) ----
 // Compara el total circulante de stablecoins y el TVL global de los últimos ~7 días.
 // Ambos en alza = suele leerse como "hay pólvora seca / capital fluyendo hacia cripto".
@@ -1083,7 +1123,7 @@ export {
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
-  fetchCapitalFlowContext, keltnerChannel, detectSqueeze,
+  fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, levelStrength, findPivots, labelSwings, detectStructureEvents,
