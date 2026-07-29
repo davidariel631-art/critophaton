@@ -220,18 +220,27 @@ async function confirmTheses(state, capitalFlow){
       // Score de Confluencia: no depender solo del BOS (que suele confirmar tarde) — MACD acelerando +
       // Stochastic saliendo recién de un extremo (no ya agotado adentro) + velas con cuerpo fuerte.
       const confluence = confluenceScore15m(data15.candles);
-      const confluenceAFavor = thesis.dir==='LONG' ? confluence.bullConfluence>=2 : confluence.bearConfluence>=2;
+      const rawConfluenceAFavor = thesis.dir==='LONG' ? confluence.bullConfluence>=2 : confluence.bearConfluence>=2;
 
-      // Filtro macro suave (Fear & Greed): no bloquea del todo, solo exige más evidencia en contextos extremos adversos.
+      // Combinar confluencia con liquidez (no eran independientes antes):
+      // - Si hay un sweep EN CONTRA de la dirección (trampa reciente a favor nuestro), la confluencia sola no alcanza para confirmar.
+      // - Si hay un sweep A FAVOR (bear trap barrido y rechazado para un LONG, o al revés), eso en sí mismo es una confirmación fuerte.
+      const sweep = result15.structure?.liquiditySweep;
+      const sweepEnContra = thesis.dir==='LONG' ? sweep?.sweptUp : sweep?.sweptDown;
+      const sweepAFavor = thesis.dir==='LONG' ? sweep?.sweptDown : sweep?.sweptUp; // bear trap para LONG / bull trap barrido para SHORT
+      const confluenceAFavor = rawConfluenceAFavor && !sweepEnContra;
+      const bearTrapConfirmacion = sweepAFavor && alineado; // "Bear Trap + Test Pump" que proponías: el sweep en contra del mercado, a favor nuestro, ya es señal
+
+      // Filtro macro suave (Fear & Greed): F&G<30 (no solo <25) ya se considera zona de miedo relevante para exigir más evidencia.
       const fng = await fetchFearGreedIndex().catch(()=>null);
-      const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<25) || (thesis.dir==='SHORT' && fng>80));
-      if(macroAdverso && !bosAFavor){
-        journal(thesis, `Todavía esperando confirmación (Fear&Greed en ${fng}, contexto adverso para ${thesis.dir} — se exige BOS claro, no alcanza con confluencia sola en este contexto).`);
+      const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<30) || (thesis.dir==='SHORT' && fng>75));
+      if(macroAdverso && !bosAFavor && !bearTrapConfirmacion){
+        journal(thesis, `Todavía esperando confirmación (Fear&Greed en ${fng}, contexto adverso para ${thesis.dir} — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto).`);
         stillWatching.push(thesis);
         continue;
       }
 
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor)){
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
         const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence);
@@ -249,7 +258,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.status = 'ACTIVE';
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
-        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/3: MACD/Stochastic/velas fuertes)` : `la confianza del motor subió a ${result15.confidence}%`;
+        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/3: MACD/Stochastic/velas fuertes)` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
