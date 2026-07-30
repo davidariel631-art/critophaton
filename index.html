@@ -219,7 +219,9 @@
   .cap-inputs input{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:13px;}
 
   /* ---- heatmap ---- */
-  .heat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px;}
+  .heat-grid{position:relative;width:100%;height:520px;}
+  .heat-tile{position:absolute;box-sizing:border-box;border:2px solid var(--bg);border-radius:6px;padding:6px;cursor:pointer;overflow:hidden;display:flex;flex-direction:column;justify-content:center;align-items:center;transition:filter .15s;}
+  .heat-tile:hover{filter:brightness(1.25);}
   .heat-tile{border-radius:9px;padding:10px 8px;cursor:pointer;text-align:center;}
   .heat-tile .hs{font-weight:700;font-size:12.5px;}
   .heat-tile .hp{font-size:10.5px;opacity:0.85;margin-top:2px;}
@@ -1521,6 +1523,53 @@ setInterval(loadMacroAssets, 30*60*1000); // cada 30 min para no gastar la cuota
 
 // ================= HEATMAP =================
 let heatmapLoaded = false;
+// ================= TREEMAP (algoritmo squarify) =================
+function worstAspect(row, side, areaOverride){
+  const areaSum = areaOverride ?? row.reduce((s,r)=>s+r.area,0);
+  const rowLength = areaSum/side;
+  let worst = 0;
+  for(const item of row){
+    const itemSide = item.area/rowLength;
+    const ratio = Math.max(rowLength/itemSide, itemSide/rowLength);
+    if(ratio>worst) worst = ratio;
+  }
+  return worst;
+}
+function squarify(data, x0, y0, w0, h0){
+  const totalValue = data.reduce((s,d)=>s+d.value,0);
+  const totalArea = w0*h0;
+  const scale = totalValue>0 ? totalArea/totalValue : 0;
+  const items = data.map(d=>({...d, area: Math.max(d.value*scale, 0.0001)}));
+  const results = [];
+  let remaining = items.slice();
+  let x=x0, y=y0, w=w0, h=h0;
+  while(remaining.length){
+    const side = Math.min(w,h);
+    let row = [remaining[0]];
+    let rowArea = remaining[0].area;
+    let bestRatio = worstAspect(row, side);
+    let i=1;
+    for(; i<remaining.length; i++){
+      const testRow = row.concat([remaining[i]]);
+      const testArea = rowArea + remaining[i].area;
+      const testRatio = worstAspect(testRow, side, testArea);
+      if(testRatio<=bestRatio){ row=testRow; rowArea=testArea; bestRatio=testRatio; }
+      else break;
+    }
+    const rowLength = rowArea/side;
+    let offset=0;
+    if(w>=h){
+      for(const item of row){ const itemH=item.area/rowLength; results.push({...item,x,y:y+offset,w:rowLength,h:itemH}); offset+=itemH; }
+      x+=rowLength; w-=rowLength;
+    } else {
+      for(const item of row){ const itemW=item.area/rowLength; results.push({...item,x:x+offset,y,w:itemW,h:rowLength}); offset+=itemW; }
+      y+=rowLength; h-=rowLength;
+    }
+    remaining = remaining.slice(row.length);
+  }
+  return results;
+}
+
 async function loadHeatmap(){
   const statusEl2 = document.getElementById('heatmapStatus');
   statusEl2.textContent = 'Cargando top 50 por market cap...';
@@ -1543,13 +1592,17 @@ async function loadHeatmap(){
     });
 
     const grid = document.getElementById('heatGrid');
-    grid.innerHTML = list.map(c=>{
-      const chg = c.price_change_percentage_24h || 0;
-      const intensity = Math.min(Math.abs(chg)/10, 1);
-      const bg = chg>=0 ? `rgba(63,193,176,${0.15+intensity*0.5})` : `rgba(232,83,107,${0.15+intensity*0.5})`;
-      return `<div class="heat-tile" style="background:${bg}" data-sym="${c.symbol.toUpperCase()}">
-        <div class="hs">${c.symbol.toUpperCase()}</div>
-        <div class="hp">${chg>=0?'+':''}${chg.toFixed(1)}%</div>
+    const containerW = grid.clientWidth || 900;
+    const containerH = 520;
+    const treemapData = list.filter(c=>c.market_cap>0).map(c=>({sym:c.symbol.toUpperCase(), value:c.market_cap, chg: c.price_change_percentage_24h||0}));
+    const layout = squarify(treemapData.sort((a,b)=>b.value-a.value), 0, 0, containerW, containerH);
+    grid.innerHTML = layout.map(t=>{
+      const intensity = Math.min(Math.abs(t.chg)/10, 1);
+      const bg = t.chg>=0 ? `rgba(16,185,129,${0.2+intensity*0.55})` : `rgba(239,68,68,${0.2+intensity*0.55})`;
+      const fontBig = Math.min(t.w,t.h) > 55;
+      return `<div class="heat-tile" style="left:${t.x}px;top:${t.y}px;width:${t.w}px;height:${t.h}px;background:${bg};" data-sym="${t.sym}">
+        <div class="hs" style="font-size:${fontBig?'13px':'10px'};">${t.sym}</div>
+        ${t.w>38 && t.h>34 ? `<div class="hp">${t.chg>=0?'+':''}${t.chg.toFixed(1)}%</div>` : ''}
       </div>`;
     }).join('');
     grid.querySelectorAll('.heat-tile').forEach(t=>{
