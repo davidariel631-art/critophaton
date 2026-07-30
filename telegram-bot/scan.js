@@ -784,9 +784,16 @@ async function main(){
   console.log('--- Fase 5: monedas de cap chico ($20M-$100M) para la Market Context Matrix ---');
   const midCaps = await getMidCapCandidates();
   console.log(midCaps.length, 'monedas de cap chico encontradas.');
-  const midCapCandidates = midCaps
-    .filter(s => !pairs.includes(s) && !CUSTOM_COINS.includes(s))
-    .slice(0, 40) // límite para no disparar el tiempo de ejecución ni el rate limit de las 5 exchanges
+  const eligibleMidCaps = midCaps.filter(s => !pairs.includes(s) && !CUSTOM_COINS.includes(s));
+  // Rotación: en vez de mirar siempre las primeras 40 (y nunca las otras ~500), usamos la hora
+  // actual para ir rotando qué "tanda" de 40 se revisa — así con el tiempo se cubren todas.
+  const BATCH_SIZE = 40;
+  const totalBatches = Math.max(1, Math.ceil(eligibleMidCaps.length / BATCH_SIZE));
+  const batchIndex = new Date().getUTCHours() % totalBatches;
+  const offset = batchIndex * BATCH_SIZE;
+  console.log(`Revisando tanda ${batchIndex+1}/${totalBatches} de monedas de cap chico (rotando por hora).`);
+  const midCapCandidates = eligibleMidCaps
+    .slice(offset, offset+BATCH_SIZE)
     .map(symbol=>({symbol, tag:' (cap chico)'}));
   await scanForTheses(state, midCapCandidates, capitalFlow, btcReference4h);
 
