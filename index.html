@@ -537,10 +537,18 @@
 
   <div class="tabpanel" id="panel-heatmap">
     <div class="card">
-      <h2>🏆 Top 5 ganadores / 🔻 Top 5 perdedores (24h)</h2>
-      <div class="grid">
-        <div><h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;color:var(--sub);">Ganadores</h3><div id="topGainers" class="subrow">Cargando…</div></div>
-        <div><h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;color:var(--sub);">Perdedores</h3><div id="topLosers" class="subrow">Cargando…</div></div>
+      <h2>📊 Los valores con mayor variación hoy 💪🏻</h2>
+      <div class="hint" style="margin-top:0;">Se busca entre ~2000 monedas (no solo las 50 más grandes), para que aparezcan también las chicas que se están moviendo fuerte.</div>
+      <div id="topMoversStatus" class="subrow">Cargando…</div>
+      <div id="topMoversBox" style="display:none;margin-top:10px;">
+        <h3 style="font-family:var(--display);font-size:13px;color:var(--teal);margin:14px 0 8px;">🟢 Mayores ganancias</h3>
+        <div id="topGainers"></div>
+        <h3 style="font-family:var(--display);font-size:13px;color:var(--rose);margin:18px 0 8px;">🔴 Mayores pérdidas</h3>
+        <div id="topLosers"></div>
+        <h3 style="font-family:var(--display);font-size:13px;color:var(--teal);margin:18px 0 8px;">🎯 Enfoque (el volumen respalda la variación)</h3>
+        <div id="topFocus" class="subrow"></div>
+        <h3 style="font-family:var(--display);font-size:13px;color:var(--rose);margin:18px 0 8px;">⚠️ Evitar (poco volumen — posible ruido/manipulación)</h3>
+        <div id="topAvoid" class="subrow"></div>
       </div>
     </div>
     <div class="card" style="margin-top:18px;">
@@ -1463,7 +1471,7 @@ function switchTab(tabName){
   document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
   document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+tabName).classList.add('active');
-  if(tabName==='heatmap' && !heatmapLoaded) loadHeatmap();
+  if(tabName==='heatmap' && !heatmapLoaded){ loadHeatmap(); loadTopMovers(); }
   if(tabName==='historial') renderHistory();
   if(tabName==='thehaton') loadTheHaton();
 }
@@ -1620,6 +1628,63 @@ function squarify(data, x0, y0, w0, h0){
   return results;
 }
 
+function formatVol(v){
+  if(v>=1e9) return '$'+(v/1e9).toFixed(2)+'B';
+  if(v>=1e6) return '$'+(v/1e6).toFixed(2)+'M';
+  if(v>=1e3) return '$'+(v/1e3).toFixed(2)+'K';
+  return '$'+v.toFixed(0);
+}
+async function loadTopMovers(){
+  const statusEl3 = document.getElementById('topMoversStatus');
+  const box = document.getElementById('topMoversBox');
+  statusEl3.textContent = 'Buscando entre ~2000 monedas...';
+  try{
+    // Traemos 8 páginas (250 cada una = ~2000 monedas) para no quedarnos solo con el top 50 de
+    // siempre — así aparecen también monedas chicas que se están moviendo fuerte hoy.
+    const pages = await Promise.all(Array.from({length:8},(_,i)=>
+      fetchJSON(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${i+1}&price_change_percentage=24h`).catch(()=>[])
+    ));
+    const all = pages.flat().filter(c=>c && c.price_change_percentage_24h!=null && c.total_volume!=null);
+    statusEl3.textContent = '';
+
+    const sorted = [...all].sort((a,b)=>(b.price_change_percentage_24h||0)-(a.price_change_percentage_24h||0));
+    const gainers = sorted.slice(0,5);
+    const losers = sorted.slice(-5).reverse();
+    const medals = ['🥇','🥈','🥉','4.','5.'];
+
+    function rowHtml(c, i){
+      return `<div class="setup-row" style="cursor:pointer;" data-sym="${c.symbol.toUpperCase()}">
+        <div class="k">${medals[i]} ${c.symbol.toUpperCase()} ${c.price_change_percentage_24h>=0?'+':''}${c.price_change_percentage_24h.toFixed(2)}%</div>
+        <div class="v subrow" style="margin:0;">Volumen: ${formatVol(c.total_volume)}</div>
+      </div>`;
+    }
+    document.getElementById('topGainers').innerHTML = gainers.map(rowHtml).join('');
+    document.getElementById('topLosers').innerHTML = losers.map(rowHtml).join('');
+
+    // Enfoque vs Evitar: si el volumen respalda la variación (movimiento real) o no (ruido/manipulación).
+    // Umbral simple: >=$20M de volumen = respaldo real; <$5M = poco fiable para una variación grande.
+    const combined = [...gainers, ...losers];
+    const backed = combined.filter(c=>c.total_volume>=20_000_000).sort((a,b)=>b.total_volume-a.total_volume).slice(0,3);
+    const risky = combined.filter(c=>c.total_volume<10_000_000).sort((a,b)=>a.total_volume-b.total_volume).slice(0,3);
+
+    document.getElementById('topFocus').innerHTML = backed.length ? backed.map(c=>
+      `✅ ${c.symbol.toUpperCase()} ${c.price_change_percentage_24h>=0?'+':''}${c.price_change_percentage_24h.toFixed(2)}% | ${formatVol(c.total_volume)} de volumen — liquidez real que lo respalda.<br>`
+    ).join('') : 'Ninguno de los movimientos de hoy tiene volumen grande de respaldo.';
+    document.getElementById('topAvoid').innerHTML = risky.length ? risky.map(c=>
+      `❌ ${c.symbol.toUpperCase()} ${c.price_change_percentage_24h>=0?'+':''}${c.price_change_percentage_24h.toFixed(2)}% con solo ${formatVol(c.total_volume)} de volumen — poca liquidez, señal poco fiable.<br>`
+    ).join('') : 'Ninguno de los movimientos de hoy tiene volumen sospechosamente bajo.';
+
+    box.style.display = 'block';
+    document.querySelectorAll('#topGainers [data-sym], #topLosers [data-sym]').forEach(el=>{
+      el.addEventListener('click', ()=>{
+        document.querySelector('.tab-btn[data-tab="analizar"]').click();
+        input.value = el.dataset.sym;
+        analyze(el.dataset.sym);
+      });
+    });
+  }catch(e){ statusEl3.textContent = 'No se pudo cargar (CoinGecko puede estar limitando pedidos, probá de nuevo en un minuto).'; }
+}
+
 async function loadHeatmap(){
   const statusEl2 = document.getElementById('heatmapStatus');
   statusEl2.textContent = 'Cargando top 50 por market cap...';
@@ -1627,19 +1692,6 @@ async function loadHeatmap(){
     const list = await fetchJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&price_change_percentage=24h');
     heatmapLoaded = true;
     statusEl2.textContent = '';
-
-    const sorted = [...list].sort((a,b)=>(b.price_change_percentage_24h||0)-(a.price_change_percentage_24h||0));
-    const gainers = sorted.slice(0,5), losers = sorted.slice(-5).reverse();
-    const rowHtml = c => `<div class="setup-row" style="cursor:pointer;" data-sym="${c.symbol.toUpperCase()}"><div class="k">${c.symbol.toUpperCase()}</div><div class="v ${c.price_change_percentage_24h>=0?'green':'red'}">${c.price_change_percentage_24h>=0?'+':''}${(c.price_change_percentage_24h||0).toFixed(1)}%</div></div>`;
-    document.getElementById('topGainers').innerHTML = gainers.map(rowHtml).join('');
-    document.getElementById('topLosers').innerHTML = losers.map(rowHtml).join('');
-    [...document.querySelectorAll('#topGainers [data-sym]'), ...document.querySelectorAll('#topLosers [data-sym]')].forEach(el=>{
-      el.addEventListener('click', ()=>{
-        document.querySelector('.tab-btn[data-tab="analizar"]').click();
-        input.value = el.dataset.sym;
-        analyze(el.dataset.sym);
-      });
-    });
 
     const grid = document.getElementById('heatGrid');
     const containerW = grid.clientWidth || 900;
