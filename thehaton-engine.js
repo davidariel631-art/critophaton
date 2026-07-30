@@ -30,24 +30,18 @@ const CORS_PROXIES = [
   url => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
 
-async function fetchWithTimeout(url, ms=10000){
-  const controller = new AbortController();
-  const t = setTimeout(()=>controller.abort(), ms);
-  try{ return await fetch(url, {signal: controller.signal}); }
-  finally{ clearTimeout(t); }
-}
 async function fetchJSON(url){
   try{
-    const r = await fetchWithTimeout(url);
+    const r = await fetch(url);
     if(!r.ok) throw new Error('HTTP '+r.status); // error de la API misma: reintentar por proxy no sirve
     return await r.json();
   }catch(e){
-    const isNetworkFailure = e instanceof TypeError || e.name==='AbortError' || /failed to fetch/i.test(e.message||'');
+    const isNetworkFailure = e instanceof TypeError || /failed to fetch/i.test(e.message||'');
     if(!isNetworkFailure) throw e;
     // Prueba varios proxies gratuitos en cadena (uno solo no es confiable: se cae o tarda seguido)
     for(const buildProxyUrl of CORS_PROXIES){
       try{
-        const r2 = await fetchWithTimeout(buildProxyUrl(url));
+        const r2 = await fetch(buildProxyUrl(url));
         if(!r2.ok) continue;
         return await r2.json();
       }catch(e2){ /* probamos el siguiente proxy */ }
@@ -410,6 +404,33 @@ async function fetchFearGreedIndex(){
     const res = await fetchJSON('https://api.alternative.me/fng/?limit=1');
     return parseInt(res?.data?.[0]?.value, 10) || null;
   }catch(e){ return null; }
+}
+
+// ---- Calendario FOMC (fechas reales publicadas por la Reserva Federal, no inventadas) ----
+// El anuncio de tasas sale a las 14:00 hora del Este (ET) el segundo día de cada reunión.
+// Horarios ya convertidos a UTC (considerando horario de verano en EE.UU. donde corresponde).
+// NOTA: hay que actualizar esta lista cuando la Fed publique el calendario de 2027 (normalmente
+// lo anuncia a mediados del año anterior).
+const FOMC_ANNOUNCEMENTS_UTC = [
+  '2026-01-28T19:00:00Z', // EST (UTC-5)
+  '2026-03-18T18:00:00Z', // EDT (UTC-4, ya en horario de verano)
+  '2026-04-29T18:00:00Z',
+  '2026-06-17T18:00:00Z',
+  '2026-07-29T18:00:00Z',
+  '2026-09-16T18:00:00Z',
+  '2026-10-28T18:00:00Z',
+  '2026-12-09T19:00:00Z', // EST de nuevo (UTC-5)
+];
+function getFOMCWindow(bufferHours=3){
+  const now = Date.now();
+  for(const iso of FOMC_ANNOUNCEMENTS_UTC){
+    const t = new Date(iso).getTime();
+    const diffHours = (t-now)/(3600*1000);
+    if(Math.abs(diffHours) <= bufferHours){
+      return { isNear:true, hoursUntil: diffHours, announcementTime: iso };
+    }
+  }
+  return { isNear:false, hoursUntil:null, announcementTime:null };
 }
 
 // ---- Capital Flow real (DeFiLlama: 100% gratis, sin key, sin límite) ----
@@ -895,6 +916,12 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   else if(utcHour>=13 && utcHour<22) sessionNote = 'Sesión de Nueva York activa: liquidez razonable.';
   else sessionNote = 'Fuera de las sesiones de Londres/Nueva York (Asia/madrugada): liquidez más fina, movimientos pueden ser menos confiables.';
   marketNote = marketNote + ' ' + sessionNote;
+  const fomc = getFOMCWindow(3);
+  if(fomc.isNear){
+    marketNote += fomc.hoursUntil>0
+      ? ` ⚠️ Anuncio de la Fed (FOMC) en ${fomc.hoursUntil.toFixed(1)}hs: el mercado puede moverse fuerte y errático por esto, no por el análisis técnico.`
+      : ` ⚠️ El anuncio de la Fed (FOMC) fue hace ${Math.abs(fomc.hoursUntil).toFixed(1)}hs: la volatilidad reciente puede deberse a esto.`;
+  }
 
   const weights = macro
     ? {trend:0.21,momentum:0.16,deriv:0.13,structure:0.18,macro:0.22,market:0.10}
@@ -1292,7 +1319,7 @@ export {
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
-  fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex,
+  fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
