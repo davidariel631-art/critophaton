@@ -118,7 +118,7 @@ function updateSharedMemory(state, displayName, recommendation){
 function argentinaHourNow(){ return (new Date().getUTCHours() - 3 + 24) % 24; }
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
-function computeDynamicRisk(acc, confidencePct){
+function computeDynamicRisk(acc, confidencePct, patternQuality){
   acc.peakCapital = Math.max(acc.peakCapital, acc.capital);
   const drawdown = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
   const recent = acc.closedTrades.slice(-3);
@@ -126,6 +126,9 @@ function computeDynamicRisk(acc, confidencePct){
   let risk = RISK_PCT, reason = 'riesgo base (1%)';
   if(drawdown>0.15 || recentLosses>=2){ risk=0.005; reason=`riesgo reducido a 0.5% (drawdown ${(drawdown*100).toFixed(0)}% o ${recentLosses} pérdidas seguidas)`; }
   else if(confidencePct>=90 && recentLosses===0 && drawdown<0.05){ risk=0.015; reason=`riesgo aumentado a 1.5% (alta confianza, sin pérdidas recientes)`; }
+  // Patrones "de manual" (BOS de estructura, Bear/Bull Trap confirmado) son entradas más limpias que una
+  // confluencia genérica de indicadores — se les da un poco más de tamaño dentro del mismo rango permitido.
+  if(patternQuality==='high' && risk < 0.015){ risk = Math.min(0.015, risk*1.2); reason += ' · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor'; }
   return { risk: Math.max(0.005, Math.min(0.015, risk)), reason };
 }
 
@@ -238,7 +241,7 @@ async function confirmTheses(state, capitalFlow){
       // Score de Confluencia: no depender solo del BOS (que suele confirmar tarde) — MACD acelerando +
       // Stochastic saliendo recién de un extremo (no ya agotado adentro) + velas con cuerpo fuerte.
       const confluence = confluenceScore15m(data15.candles);
-      const rawConfluenceAFavor = thesis.dir==='LONG' ? confluence.bullConfluence>=2 : confluence.bearConfluence>=2;
+      const rawConfluenceAFavor = thesis.dir==='LONG' ? confluence.bullConfluence>=3 : confluence.bearConfluence>=3;
 
       // Combinar confluencia con liquidez (no eran independientes antes):
       // - Si hay un sweep EN CONTRA de la dirección (trampa reciente a favor nuestro), la confluencia sola no alcanza para confirmar.
@@ -275,7 +278,8 @@ async function confirmTheses(state, capitalFlow){
       if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
-        const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence);
+        const patternQuality = (bosAFavor || bearTrapConfirmacion) ? 'high' : 'normal';
+        const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence, patternQuality);
         const riskAmount = acc.capital * riskPct;
         const distance = Math.abs(entryPrice - setup.stop);
         if(distance<=0){ stillWatching.push(thesis); continue; }
@@ -291,7 +295,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
-        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/3: MACD/Stochastic/velas fuertes)` : `la confianza del motor subió a ${result15.confidence}%`;
+        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
