@@ -524,6 +524,50 @@ function analyzeLevelTests(candles, level, isResistance, lookback=80, tolPct=0.0
   return {testCount:touches.length, weakening, strengthening, lastRejection:touches.at(-1)};
 }
 
+// ---- Patrón compuesto: Acumulación + Test Pumps + Bear Trap ("Buy here") ----
+// El patrón: el precio pasa mucho tiempo en un rango (acumulación), testea la resistencia varias
+// veces SIN romperla ("test pumps" fallidos), y recién ahí aparece una barrida por debajo del
+// soporte del rango (bear trap) que rechaza fuerte — ESE es el punto de entrada, no un sweep
+// aislado cualquiera. Es más específico y más confiable que un bear trap suelto, porque confirma
+// que hubo un rango real construyéndose antes.
+function detectAccumulationBearTrap(candles){
+  const lookback = Math.min(150, candles.length);
+  if(lookback<40) return {patternDetected:false};
+  const recent = candles.slice(-lookback);
+  const preSweep = recent.slice(0, -15); // el rango se mide ANTES de la barrida reciente, para no inflarlo con la propia mecha
+  if(preSweep.length<25) return {patternDetected:false};
+  const rangeHigh = Math.max(...preSweep.map(c=>c.h));
+  const rangeLow = Math.min(...preSweep.map(c=>c.l));
+  const rangeWidthPct = (rangeHigh-rangeLow)/rangeLow;
+  const isAccumulation = rangeWidthPct < 0.35; // rango relativamente angosto sostenido en el tiempo
+
+  const testPumps = analyzeLevelTests(candles, rangeHigh, true, lookback, 0.02); // tests fallidos contra la resistencia del rango
+  const sweep = detectLiquiditySweep(candles, 15); // barrida reciente
+
+  const patternDetected = isAccumulation && testPumps.testCount>=2 && sweep.sweptDown;
+  return { patternDetected, isAccumulation, rangeHigh, rangeLow, rangeWidthPct, testPumpCount: testPumps.testCount, sweep };
+}
+
+// Espejo para SHORT: Distribución (rango) + varios "test dumps" fallidos contra el soporte +
+// un Bull Trap (barrida por encima de la resistencia del rango) = señal de venta.
+function detectDistributionBullTrap(candles){
+  const lookback = Math.min(150, candles.length);
+  if(lookback<40) return {patternDetected:false};
+  const recent = candles.slice(-lookback);
+  const preSweep = recent.slice(0, -15);
+  if(preSweep.length<25) return {patternDetected:false};
+  const rangeHigh = Math.max(...preSweep.map(c=>c.h));
+  const rangeLow = Math.min(...preSweep.map(c=>c.l));
+  const rangeWidthPct = (rangeHigh-rangeLow)/rangeLow;
+  const isDistribution = rangeWidthPct < 0.35;
+
+  const testDumps = analyzeLevelTests(candles, rangeLow, false, lookback, 0.02);
+  const sweep = detectLiquiditySweep(candles, 15);
+
+  const patternDetected = isDistribution && testDumps.testCount>=2 && sweep.sweptUp;
+  return { patternDetected, isDistribution, rangeHigh, rangeLow, rangeWidthPct, testDumpCount: testDumps.testCount, sweep };
+}
+
 // ---------- Market structure (SMC) engine ----------
 function findPivots(candles, k=3){
   const pivots = [];
@@ -717,6 +761,18 @@ function computeStructure(candles, atrArr){
     }
     else { score-=1; notes.push('Rango comprimido (baja volatilidad reciente): posible antesala de una ruptura, dirección todavía sin definir.'); }
   }
+
+  // Patrón compuesto (más fuerte que un sweep suelto): Acumulación + Test Pumps fallidos + Bear Trap = compra.
+  const accBearTrap = detectAccumulationBearTrap(candles);
+  if(accBearTrap.patternDetected){
+    score += 6;
+    notes.push(`🎯 PATRÓN: Acumulación + Bear Trap confirmado — rango de ${(accBearTrap.rangeWidthPct*100).toFixed(0)}% con ${accBearTrap.testPumpCount} test(s) fallido(s) contra la resistencia ($${fmt(accBearTrap.rangeHigh)}), y ahora una barrida por debajo del soporte ($${fmt(accBearTrap.rangeLow)}) que rechazó. Señal de compra de alta calidad, más confiable que un sweep aislado.`);
+  }
+  const distBullTrap = detectDistributionBullTrap(candles);
+  if(distBullTrap.patternDetected){
+    score -= 6;
+    notes.push(`🎯 PATRÓN: Distribución + Bull Trap confirmado — rango de ${(distBullTrap.rangeWidthPct*100).toFixed(0)}% con ${distBullTrap.testDumpCount} test(s) fallido(s) contra el soporte ($${fmt(distBullTrap.rangeLow)}), y ahora una barrida por encima de la resistencia ($${fmt(distBullTrap.rangeHigh)}) que rechazó. Señal de venta de alta calidad, más confiable que un sweep aislado.`);
+  }
   if(candlePattern){ notes.push(`Última vela: ${candlePattern}.`); }
 
   // Fuerza en tests sucesivos: ¿el soporte/resistencia se está debilitando o fortaleciendo con cada toque?
@@ -733,7 +789,7 @@ function computeStructure(candles, atrArr){
   }
 
   score = Math.max(0, Math.min(20, score));
-  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, resistanceTests, supportTests};
+  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, resistanceTests, supportTests, accBearTrap, distBullTrap};
 }
 
 // ---------- Scoring ----------
@@ -1234,7 +1290,7 @@ export {
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
-  detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, fibLevels, detectCandlePattern, computeStructure,
+  detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
   fmt, fmtPct
 };
