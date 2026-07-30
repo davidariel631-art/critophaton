@@ -514,6 +514,67 @@ function stochRsi(rsiArr, period=14){
   }
   return out;
 }
+// Estocástico clásico (%K/%D), a diferencia de stochRsi de arriba que es Estocástico DE RSI —
+// este usa directamente los máximos/mínimos de precio, que es "el estocástico" que la mayoría
+// de los traders conoce y pide.
+function stochasticOscillator(candles, period=14, smoothK=3, smoothD=3){
+  const rawK = new Array(candles.length).fill(null);
+  for(let i=period-1; i<candles.length; i++){
+    const window = candles.slice(i-period+1, i+1);
+    const lowestLow = Math.min(...window.map(c=>c.l));
+    const highestHigh = Math.max(...window.map(c=>c.h));
+    rawK[i] = highestHigh>lowestLow ? ((candles[i].c-lowestLow)/(highestHigh-lowestLow))*100 : 50;
+  }
+  function sma(arr, n){
+    return arr.map((v,i)=>{
+      if(i<n-1) return null;
+      const w = arr.slice(i-n+1,i+1).filter(x=>x!=null);
+      return w.length===n ? w.reduce((a,b)=>a+b,0)/n : null;
+    });
+  }
+  const k = sma(rawK, smoothK);
+  const d = sma(k, smoothD);
+  return { k, d };
+}
+// Perfil de liquidez (mismo algoritmo que "Liquidity Pro Map [ChartPrime]", MPL 2.0, portado):
+// solo la parte matemática (dominancia + POC), sin dibujar nada — así el bot puede usar el mismo
+// cálculo que ya se ve en la pestaña Liquidez de la web, sin duplicar lógica.
+function computeLiquidityProfile(candles, price, lookback=200){
+  const recent = candles.slice(-Math.min(lookback, candles.length));
+  const closes = candles.map(c=>c.c);
+  function stdevAt(idx){
+    const w = closes.slice(Math.max(0,idx-24), idx+1);
+    if(w.length<2) return 0;
+    const mean = w.reduce((a,b)=>a+b,0)/w.length;
+    return Math.sqrt(w.reduce((a,b)=>a+(b-mean)**2,0)/w.length);
+  }
+  const priceRefs = recent.map((c,i)=>{
+    const globalIdx = closes.length - recent.length + i;
+    const dev = stdevAt(globalIdx) * 2;
+    return c.c > c.o ? c.l - dev : c.h + dev;
+  });
+  const minP = Math.min(...priceRefs), maxP = Math.max(...priceRefs);
+  const nBins = 60;
+  const priceStep = (maxP-minP)/nBins || 1;
+  const bins = Array.from({length:nBins},()=>0);
+  recent.forEach((c,i)=>{
+    const bin = Math.min(nBins-1, Math.max(0, Math.floor((priceRefs[i]-minP)/priceStep)));
+    const binMid = minP + bin*priceStep + priceStep/2;
+    if(Math.abs(price-binMid) < priceStep*2) return;
+    bins[bin] += c.v;
+  });
+  let sellTotal=0, buyTotal=0, pocSell=null, pocBuy=null;
+  for(let b=0;b<nBins;b++){
+    const binMid = minP + b*priceStep + priceStep/2;
+    if(binMid > price){ sellTotal+=bins[b]; if(!pocSell || bins[b]>pocSell.v) pocSell={price:binMid,v:bins[b]}; }
+    else { buyTotal+=bins[b]; if(!pocBuy || bins[b]>pocBuy.v) pocBuy={price:binMid,v:bins[b]}; }
+  }
+  const totalVol = sellTotal+buyTotal || 1;
+  return {
+    domUpPct: sellTotal/totalVol*100, domDownPct: buyTotal/totalVol*100,
+    pocAbove: pocSell, pocBelow: pocBuy,
+  };
+}
 function mfi(candles, period=14){
   const typical = candles.map(c=>(c.h+c.l+c.c)/3);
   const mf = typical.map((t,i)=> i===0?0:t*candles[i].v);
@@ -901,6 +962,8 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const atrArr = atr(data.candles,14);
   const lastATR = atrArr.at(-1);
   let {support, resistance} = findSupportResistance(data.candles);
+  const stochOsc = stochasticOscillator(data.candles);
+  const lastStochK = stochOsc.k.filter(v=>v!=null).at(-1);
 
   let trend=15, trendBias='neutral';
   if(price>lastE20 && lastE20>lastE50 && lastE50>lastE200){ trend=30; trendBias='bull'; }
@@ -908,11 +971,14 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   else if(price<lastE20 && lastE20<lastE50 && lastE50<lastE200){ trend=3; trendBias='bear'; }
   else if(price<lastE20 && lastE50>lastE200){ trend=10; trendBias='bear'; }
 
+  // Momentum ahora basado en el Estocástico clásico (%K), no en RSI — el Estocástico reacciona más
+  // rápido a cambios recientes de precio, que es lo que se pidió acá.
   let momentum=12;
-  if(lastRSI>=50 && lastRSI<=70) momentum=20;
-  else if(lastRSI>30 && lastRSI<50) momentum=11;
-  else if(lastRSI>=70) momentum=8;
-  else if(lastRSI<=30) momentum=15;
+  if(lastStochK==null) momentum=12;
+  else if(lastStochK>=40 && lastStochK<=80) momentum=20;
+  else if(lastStochK>20 && lastStochK<40) momentum=11;
+  else if(lastStochK>=80) momentum=8;
+  else if(lastStochK<=20) momentum=15;
   if(lastHist>0 && lastHist>prevHist) momentum=Math.min(25,momentum+5);
   if(lastHist<0 && lastHist<prevHist) momentum=Math.max(0,momentum-3);
 
@@ -1008,14 +1074,14 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const volatQuality = volat>=10?1 : volat<=4?0.8 : 0.9;
   bullishness = Math.max(-1,Math.min(1, bullishness*(0.75+0.25*volumeQuality)*volatQuality));
 
-  // ---- Confluencia avanzada: cruce RSI + estructura SMC + funding (short/long squeeze setup) ----
+  // ---- Confluencia avanzada: cruce Estocástico + estructura SMC + funding (short/long squeeze setup) ----
   let confluenceNote = null;
-  if(lastRSI<=32 && structBias==='bull' && data.funding!=null && data.funding<0){
+  if(lastStochK!=null && lastStochK<=20 && structBias==='bull' && data.funding!=null && data.funding<0){
     bullishness = Math.max(bullishness, 0.9);
-    confluenceNote = '🔥 Confluencia fuerte ALCISTA: RSI en sobreventa + estructura SMC alcista + funding negativo (shorts sobreapalancados) → posible short squeeze.';
-  } else if(lastRSI>=68 && structBias==='bear' && data.funding!=null && data.funding>0.0005){
+    confluenceNote = '🔥 Confluencia fuerte ALCISTA: Estocástico en sobreventa + estructura SMC alcista + funding negativo (shorts sobreapalancados) → posible short squeeze.';
+  } else if(lastStochK!=null && lastStochK>=80 && structBias==='bear' && data.funding!=null && data.funding>0.0005){
     bullishness = Math.min(bullishness, -0.9);
-    confluenceNote = '🔥 Confluencia fuerte BAJISTA: RSI en sobrecompra + estructura SMC bajista + funding muy positivo (longs sobreapalancados) → riesgo de long squeeze.';
+    confluenceNote = '🔥 Confluencia fuerte BAJISTA: Estocástico en sobrecompra + estructura SMC bajista + funding muy positivo (longs sobreapalancados) → riesgo de long squeeze.';
   }
 
   const longScore = Math.max(0, Math.min(10, +(5+5*bullishness).toFixed(1)));
@@ -1169,7 +1235,7 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
     score10, bias,
     longScore, shortScore, confidence, stars, recommendation,
     breakdown:[{label:'Tendencia',val:Math.round(trendR),max:25},{label:'Momentum',val:Math.round(momentumR),max:20},{label:'Volumen',val:Math.round(volumeR),max:12},{label:'Volatilidad',val:Math.round(volatR),max:8},{label:'Derivados',val:Math.round(derivR),max:15},{label:'Estructura SMC',val:Math.round(structure.score),max:20}],
-    metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct},
+    metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastStochK,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct},
     derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality,
     series:{closes,e20,e50,e200,rsiArr,macd:m,bb}
   };
@@ -1196,7 +1262,7 @@ function buildAnalystMode(data, result, setup, currentTF){
     resumen = `El mercado no muestra una ventaja clara ahora mismo: los especialistas internos están divididos (${result.votesLong} a favor de long, ${result.votesShort} de short). Cuando no hay confluencia, lo más profesional es esperar en vez de forzar una entrada.`;
   } else {
     const dirWord = rec==='LONG' ? 'alcista' : 'bajista';
-    resumen = `La estructura es ${dirWord} en ${currentTF}. ${passCount} de ${totalVotes} especialistas internos coinciden en ${rec}, con RSI en ${m.lastRSI?.toFixed(0)} (${m.lastRSI>=70?'zona de sobrecompra, cuidado':m.lastRSI<=30?'zona de sobreventa':'zona sana'}) y volumen ${m.lastVol>m.avgVol?'por encima':'por debajo'} del promedio.${result.confluenceNote?' Además hay una confluencia fuerte que refuerza la señal.':''} Por eso el motor recomienda ${rec}, con ${result.confidence}% de confianza.`;
+    resumen = `La estructura es ${dirWord} en ${currentTF}. ${passCount} de ${totalVotes} especialistas internos coinciden en ${rec}, con Estocástico en ${m.lastStochK?.toFixed(0)??'—'} (${m.lastStochK>=80?'zona de sobrecompra, cuidado':m.lastStochK<=20?'zona de sobreventa':'zona sana'}) y volumen ${m.lastVol>m.avgVol?'por encima':'por debajo'} del promedio.${result.confluenceNote?' Además hay una confluencia fuerte que refuerza la señal.':''} Por eso el motor recomienda ${rec}, con ${result.confidence}% de confianza.`;
   }
 
   // Qué apoya / qué no acompaña
@@ -1212,8 +1278,8 @@ function buildAnalystMode(data, result, setup, currentTF){
 
   // Riesgos activos
   const riesgos = [];
-  if(m.lastRSI>=70) riesgos.push('RSI en sobrecompra: el movimiento podría estar agotado en el corto plazo.');
-  if(m.lastRSI<=30) riesgos.push('RSI en sobreventa: cuidado con un rebote técnico que no sea reversión real.');
+  if(m.lastStochK>=80) riesgos.push('Estocástico en sobrecompra: el movimiento podría estar agotado en el corto plazo.');
+  if(m.lastStochK<=20) riesgos.push('Estocástico en sobreventa: cuidado con un rebote técnico que no sea reversión real.');
   if(st.events.choch) riesgos.push('Hay un CHoCH reciente: la estructura previa está en duda, mayor probabilidad de falso quiebre.');
   if(result.macroNote && ((rec==='LONG' && result.macroNote.includes('BAJISTA')) || (rec==='SHORT' && result.macroNote.includes('ALCISTA')))) riesgos.push('La tendencia macro de 4h todavía no confirma esta dirección — es ir parcialmente contra la corriente mayor.');
   if(setup.volPct>5) riesgos.push('Volatilidad (ATR) alta: el stop se agranda y el tamaño de posición debería ser más chico.');
@@ -1413,7 +1479,7 @@ export {
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
-  ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
+  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
