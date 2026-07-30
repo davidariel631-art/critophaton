@@ -737,16 +737,41 @@ async function getNewDexPools(){
 
 // Monedas de "cap chico" (~$20M-$100M): menos ojos de otros bots encima, más probabilidad de
 // que una señal real de la Market Context Matrix todavía no esté arbitrada por el mercado.
+// Listas reales de qué se puede operar — para no analizar monedas que después no se puedan tradear.
+async function fetchBinanceFuturesSymbols(){
+  try{
+    const res = await fetch('https://fapi.binance.com/fapi/v1/exchangeInfo').then(r=>r.json());
+    return new Set((res.symbols||[]).filter(s=>s.status==='TRADING' && s.quoteAsset==='USDT').map(s=>s.baseAsset));
+  }catch(e){ console.error('Error trayendo símbolos de Binance Futures:', e.message); return null; }
+}
+async function fetchBitunixFuturesSymbols(){
+  try{
+    const res = await fetch('https://fapi.bitunix.com/api/v1/futures/market/trading_pairs').then(r=>r.json());
+    const list = res?.data || res || [];
+    return new Set(list.map(p => (p.symbol||p.base||'').toUpperCase().replace('USDT','')).filter(Boolean));
+  }catch(e){ console.error('Error trayendo símbolos de Bitunix Futures:', e.message); return null; }
+}
+
 async function getMidCapCandidates(){
   try{
     const pages = await Promise.all([1,2,3,4].map(p=>
       fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${p}`).then(r=>r.json())
     ));
     const flat = pages.flatMap(p=>Array.isArray(p)?p:[]);
-    return flat
-      .filter(c => c.market_cap >= 20_000_000 && c.market_cap <= 100_000_000)
+    const rawSymbols = flat
+      .filter(c => c.market_cap >= 1_000_000 && c.market_cap <= 100_000_000)
       .map(c => c.symbol.toUpperCase())
       .filter(s => /^[A-Z0-9]{2,10}$/.test(s)); // descarta símbolos raros/wrapped con caracteres extraños
+
+    // Cruce contra futuros reales de Binance y Bitunix: solo dejamos pasar lo que sí se puede operar.
+    const [binanceSet, bitunixSet] = await Promise.all([fetchBinanceFuturesSymbols(), fetchBitunixFuturesSymbols()]);
+    if(!binanceSet && !bitunixSet){
+      console.error('⚠️ No se pudo traer ninguna lista de futuros (Binance ni Bitunix) — se sigue sin filtrar por esta vez, para no dejar de escanear del todo.');
+      return rawSymbols;
+    }
+    const tradeable = rawSymbols.filter(s => (binanceSet && binanceSet.has(s)) || (bitunixSet && bitunixSet.has(s)));
+    console.log(`Filtro de futuros: ${rawSymbols.length} candidatas por cap → ${tradeable.length} realmente operables (Binance/Bitunix).`);
+    return tradeable;
   }catch(e){ console.error('Error trayendo monedas de cap chico:', e.message); return []; }
 }
 
@@ -776,18 +801,13 @@ async function main(){
   }
   await scanForTheses(state, candidates, capitalFlow, btcReference4h);
 
-  console.log('--- Fase 4: pools nuevas en DEX ---');
-  const dexPools = await getNewDexPools();
-  const dexCandidates = dexPools.slice(0,20).map(p=>({symbol:(p.name||'?').split('/')[0].trim(), tag:` (DEX ${p.network})`}));
-  await scanForTheses(state, dexCandidates, capitalFlow, btcReference4h);
-
-  console.log('--- Fase 5: monedas de cap chico ($20M-$100M) para la Market Context Matrix ---');
+  console.log('--- Fase 4: monedas de cap chico ($1M-$100M) para la Market Context Matrix ---');
   const midCaps = await getMidCapCandidates();
   console.log(midCaps.length, 'monedas de cap chico encontradas.');
   const eligibleMidCaps = midCaps.filter(s => !pairs.includes(s) && !CUSTOM_COINS.includes(s));
-  // Rotación: en vez de mirar siempre las primeras 40 (y nunca las otras ~500), usamos la hora
-  // actual para ir rotando qué "tanda" de 40 se revisa — así con el tiempo se cubren todas.
-  const BATCH_SIZE = 40;
+  // Rotación: en vez de mirar siempre las primeras 60 (y nunca las demás), usamos la hora
+  // actual para ir rotando qué "tanda" se revisa — así con el tiempo se cubren todas.
+  const BATCH_SIZE = 60; // subido de 40 a 60: sacamos la fase de DEX, así que hay más margen por corrida
   const totalBatches = Math.max(1, Math.ceil(eligibleMidCaps.length / BATCH_SIZE));
   const batchIndex = new Date().getUTCHours() % totalBatches;
   const offset = batchIndex * BATCH_SIZE;
