@@ -23,7 +23,7 @@ import fs from 'fs';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
-  confluenceScore15m, fetchFearGreedIndex, rsi,
+  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, rsi,
   computeScore, buildSetup, buildAnalystMode
 } from '../thehaton-engine.js';
 
@@ -54,55 +54,6 @@ async function sendTelegram(text){
     body: JSON.stringify({chat_id: CHAT_ID, text, parse_mode:'HTML'})
   });
   if(!res.ok){ console.error('Error enviando a Telegram:', await res.text()); }
-}
-
-// Genera una imagen del gráfico (vía QuickChart.io, gratis, sin key) con las velas recientes y
-// los niveles de entrada/stop/TP1/TP2 marcados como líneas horizontales. Devuelve una URL corta
-// que Telegram puede usar directo como foto. Si falla, devuelve null (el mensaje de texto sigue andando igual).
-async function buildChartUrl(candles, entry, stop, tp1, tp2, dir, symbol){
-  try{
-    const recent = candles.slice(-40);
-    const labels = recent.map((c,i)=> i%5===0 ? new Date(c.t).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}) : '');
-    const closes = recent.map(c=>c.c);
-    const lineColor = dir==='LONG' ? '#10b981' : '#ef4444';
-    const config = {
-      type:'line',
-      data:{ labels, datasets:[{ label:symbol, data:closes, fill:false, borderColor:lineColor, borderWidth:2, pointRadius:0, tension:0.15 }] },
-      options:{
-        title:{ display:true, text:`${symbol} — ${dir}`, fontColor:'#eef3f8' },
-        legend:{ display:false },
-        scales:{
-          xAxes:[{ gridLines:{ color:'#242c38' }, ticks:{ fontColor:'#8b98a8' } }],
-          yAxes:[{ gridLines:{ color:'#242c38' }, ticks:{ fontColor:'#8b98a8' } }]
-        },
-        annotation:{ annotations:[
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:entry, borderColor:'#00d9ff', borderWidth:2, label:{ enabled:true, content:'Entrada', backgroundColor:'#00d9ff', position:'left' } },
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:stop, borderColor:'#ef4444', borderWidth:2, borderDash:[6,4], label:{ enabled:true, content:'Stop', backgroundColor:'#ef4444', position:'left' } },
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tp1, borderColor:'#10b981', borderWidth:2, borderDash:[6,4], label:{ enabled:true, content:'TP1', backgroundColor:'#10b981', position:'left' } },
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tp2, borderColor:'#10b981', borderWidth:2, borderDash:[2,3], label:{ enabled:true, content:'TP2', backgroundColor:'#10b981', position:'left' } },
-        ]}
-      }
-    };
-    const res = await fetch('https://quickchart.io/chart/create', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ width:700, height:450, backgroundColor:'#0b0e14', version:'2', chart: config })
-    });
-    if(!res.ok) return null;
-    const data = await res.json();
-    return data.success ? data.url : null;
-  }catch(e){ console.error('Error generando gráfico:', e.message); return null; }
-}
-
-async function sendTelegramPhoto(photoUrl, caption){
-  try{
-    const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`;
-    const res = await fetch(url, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({chat_id: CHAT_ID, photo: photoUrl, caption, parse_mode:'HTML'})
-    });
-    if(!res.ok){ console.error('Error enviando foto a Telegram:', await res.text()); return false; }
-    return true;
-  }catch(e){ console.error('Error enviando foto:', e.message); return false; }
 }
 
 // ---------- Estado / memoria compartida (única para toda la plataforma) ----------
@@ -371,6 +322,21 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
+      // Filtro FOMC: antes del anuncio de la Fed no hay análisis técnico que valga (es un evento binario,
+      // no una señal de mercado) — se pausa por completo. Después del anuncio, se exige más evidencia,
+      // igual que con Fear&Greed, porque el mercado puede estar reaccionando de forma errática todavía.
+      const fomc = getFOMCWindow(3);
+      if(fomc.isNear && fomc.hoursUntil>0){
+        journal(thesis, `Pausado: anuncio de la Fed (FOMC) en ${fomc.hoursUntil.toFixed(1)}hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe.`);
+        stillWatching.push(thesis);
+        continue;
+      }
+      if(fomc.isNear && fomc.hoursUntil<=0 && !bosAFavor && !bearTrapConfirmacion){
+        journal(thesis, `Todavía esperando confirmación (el anuncio de la Fed fue hace ${Math.abs(fomc.hoursUntil).toFixed(1)}hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente).`);
+        stillWatching.push(thesis);
+        continue;
+      }
+
       if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
@@ -400,12 +366,6 @@ async function confirmTheses(state, capitalFlow){
         const rrTp2 = (Math.abs(setup.t2-entryPrice)/distance).toFixed(1);
         const razones = result15.committee.filter(c=>c.vote===thesis.dir).slice(0,4).map(c=>`✅ ${c.name.replace(/^[^\s]+\s/,'')}: ${c.note||'a favor'}`).join('\n');
         const invalidacion = (analyst.invalidation||[])[0] || `Cierre de vela más allá del stop ($${setup.stop.toFixed(6)}).`;
-
-        // Gráfico con los niveles marcados, antes del mensaje de texto con el detalle completo.
-        const chartUrl = await buildChartUrl(data15.candles, entryPrice, setup.stop, setup.t1, setup.t2, thesis.dir, thesis.symbol);
-        if(chartUrl){
-          sendPromises.push(sendTelegramPhoto(chartUrl, `📈 ${thesis.symbol}${thesis.tag||''} ${thesis.dir} — Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`));
-        }
 
         sendPromises.push(sendTelegram(
           `📈 <b>SEÑAL: $${thesis.symbol}${thesis.tag||''} ${thesis.dir==='LONG'?'COMPRA 🟢':'VENTA 🔴'}</b>\n\n` +
