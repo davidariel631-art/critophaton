@@ -18,13 +18,13 @@
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#05070a; --panel:#0e1218; --panel2:#141a22; --border:#212a35;
     --text:#eef3f8; --sub:#8b98a8; --amber:#00d9ff; --rose:#ff4d6d; --teal:#00e6a8;
     --accent2:#7c5cff;
-    --mono:'JetBrains Mono', monospace; --display:'Sora', sans-serif;
+    --mono:'Manrope', sans-serif; --display:'Plus Jakarta Sans', sans-serif;
   }
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
@@ -140,6 +140,24 @@
 
   /* ---- tabs ---- */
   .tabnav{display:flex;gap:6px;margin-bottom:18px;padding:6px;background:var(--panel);border:1px solid var(--border);border-radius:16px;position:sticky;top:8px;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+
+  /* Barra inferior estilo app (Mercado Pago / fintech): oculta en el navegador normal, visible solo instalada */
+  .bottom-nav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;background:rgba(10,13,18,0.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--border);padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;}
+  .bn-btn{background:none;border:none;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--display);font-size:10.5px;font-weight:600;padding:4px 6px;border-radius:12px;flex:1;max-width:80px;}
+  .bn-btn .bn-icon{font-size:21px;line-height:1;}
+  .bn-btn.active{color:var(--amber);}
+  @media (display-mode: standalone){
+    .tabnav{display:none;}
+    .bottom-nav{display:flex;}
+    .wrap{padding-bottom:96px;}
+    header{padding-top:4px;}
+    header h1{font-size:19px;}
+  }
+  .more-sheet{display:none;position:fixed;inset:0;z-index:60;background:rgba(0,0,0,0.6);backdrop-filter:blur(2px);}
+  .more-sheet.open{display:flex;align-items:flex-end;}
+  .more-sheet-inner{width:100%;background:var(--panel);border-radius:20px 20px 0 0;padding:18px 14px calc(18px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);animation:fadeIn .2s ease;}
+  .more-item{background:var(--panel2);border:1px solid var(--border);color:var(--text);font-family:var(--display);font-weight:600;font-size:15px;padding:14px 16px;border-radius:13px;text-align:left;}
+  .more-item:last-child{color:var(--sub);background:transparent;border:none;text-align:center;margin-top:4px;}
   .tabnav button{background:transparent;border:none;color:var(--sub);padding:10px 16px;font-family:var(--display);font-weight:600;font-size:13px;cursor:pointer;border-radius:11px;white-space:nowrap;transition:background .15s,color .15s;}
   .tabnav button.active{color:#00131a;background:linear-gradient(135deg,var(--amber),var(--accent2));}
   .tabpanel{display:none;}
@@ -261,6 +279,23 @@
     <button class="tab-btn" data-tab="historial">Historial</button>
     <button class="tab-btn" data-tab="wallet">👛 Wallet</button>
     <button class="tab-btn" data-tab="thehaton">🏛️ TheHaton</button>
+  </div>
+
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="bn-btn active" data-tab="analizar"><span class="bn-icon">📊</span><span>Analizar</span></button>
+    <button class="bn-btn" data-tab="heatmap"><span class="bn-icon">🔥</span><span>Heatmap</span></button>
+    <button class="bn-btn" data-tab="thehaton"><span class="bn-icon">🏛️</span><span>TheHaton</span></button>
+    <button class="bn-btn" data-tab="wallet"><span class="bn-icon">👛</span><span>Wallet</span></button>
+    <button class="bn-btn" id="bnMoreBtn"><span class="bn-icon">☰</span><span>Más</span></button>
+  </nav>
+
+  <div class="more-sheet" id="moreSheet">
+    <div class="more-sheet-inner">
+      <button class="more-item" data-tab="dexnuevos">🆕 DEX Nuevos</button>
+      <button class="more-item" data-tab="comparar">⚖️ Comparar</button>
+      <button class="more-item" data-tab="historial">🕓 Historial</button>
+      <button class="more-item" id="moreCloseBtn">✕ Cerrar</button>
+    </div>
   </div>
 
   <div class="tabpanel active" id="panel-analizar">
@@ -1296,15 +1331,28 @@ async function loadNewPools(){
 }
 
 // ================= TABS =================
+function switchTab(tabName){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
+  document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
+  document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+tabName).classList.add('active');
+  if(tabName==='heatmap' && !heatmapLoaded) loadHeatmap();
+  if(tabName==='historial') renderHistory();
+  if(tabName==='thehaton') loadTheHaton();
+}
 document.getElementById('tabNav').addEventListener('click', e=>{
   const btn = e.target.closest('.tab-btn'); if(!btn) return;
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
-  if(btn.dataset.tab==='heatmap' && !heatmapLoaded) loadHeatmap();
-  if(btn.dataset.tab==='historial') renderHistory();
-  if(btn.dataset.tab==='thehaton') loadTheHaton();
+  switchTab(btn.dataset.tab);
+});
+document.getElementById('bottomNav').addEventListener('click', e=>{
+  const btn = e.target.closest('.bn-btn'); if(!btn) return;
+  if(btn.id==='bnMoreBtn'){ document.getElementById('moreSheet').classList.add('open'); return; }
+  switchTab(btn.dataset.tab);
+});
+document.getElementById('moreSheet').addEventListener('click', e=>{
+  if(e.target.id==='moreSheet' || e.target.id==='moreCloseBtn'){ document.getElementById('moreSheet').classList.remove('open'); return; }
+  const item = e.target.closest('.more-item[data-tab]');
+  if(item){ switchTab(item.dataset.tab); document.getElementById('moreSheet').classList.remove('open'); }
 });
 
 // ================= TICKER (Fear&Greed + Dominance) =================
