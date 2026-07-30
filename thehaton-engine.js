@@ -30,18 +30,24 @@ const CORS_PROXIES = [
   url => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
 
+async function fetchWithTimeout(url, ms=10000){
+  const controller = new AbortController();
+  const t = setTimeout(()=>controller.abort(), ms);
+  try{ return await fetch(url, {signal: controller.signal}); }
+  finally{ clearTimeout(t); }
+}
 async function fetchJSON(url){
   try{
-    const r = await fetch(url);
+    const r = await fetchWithTimeout(url);
     if(!r.ok) throw new Error('HTTP '+r.status); // error de la API misma: reintentar por proxy no sirve
     return await r.json();
   }catch(e){
-    const isNetworkFailure = e instanceof TypeError || /failed to fetch/i.test(e.message||'');
+    const isNetworkFailure = e instanceof TypeError || e.name==='AbortError' || /failed to fetch/i.test(e.message||'');
     if(!isNetworkFailure) throw e;
     // Prueba varios proxies gratuitos en cadena (uno solo no es confiable: se cae o tarda seguido)
     for(const buildProxyUrl of CORS_PROXIES){
       try{
-        const r2 = await fetch(buildProxyUrl(url));
+        const r2 = await fetchWithTimeout(buildProxyUrl(url));
         if(!r2.ok) continue;
         return await r2.json();
       }catch(e2){ /* probamos el siguiente proxy */ }

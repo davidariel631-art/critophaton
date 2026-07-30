@@ -29,14 +29,25 @@
   *{box-sizing:border-box;}
   body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
   .wrap{max-width:1220px;margin:0 auto;padding:28px 20px 90px;}
+  @media(max-width:640px){
+    .wrap{padding:16px 14px 100px;}
+    .card{padding:16px;margin-bottom:14px !important;border-radius:16px;}
+    .card + .card{margin-top:14px;}
+    .card h2{font-size:12.5px;margin-bottom:12px;}
+    header h1{font-size:18px;}
+    header small{font-size:11px;}
+    .signal-text, .subrow{line-height:1.65;font-size:13px;}
+    .indi-line, .setup-row, .hist-row{padding:10px 0 !important;}
+    button, .tf-btn, .backtest-btn{min-height:42px;}
+  }
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:14px;}
   .auth-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
   .auth-row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
   .auth-input{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-family:var(--mono);font-size:12px;width:140px;}
   .auth-error{color:var(--rose);font-size:11px;min-height:14px;}
   .brand{display:flex;align-items:center;gap:12px;}
-  .brand .mark{width:44px;height:44px;border-radius:11px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 1px var(--border), 0 4px 16px rgba(0,217,255,0.15);}
-  .brand .mark img{width:100%;height:100%;object-fit:cover;}
+  .brand .mark{width:46px;height:46px;border-radius:13px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:2px;background:linear-gradient(135deg,var(--amber),var(--accent2));box-shadow:0 4px 20px rgba(0,217,255,0.35);}
+  .brand .mark img{width:100%;height:100%;object-fit:cover;border-radius:10px;background:#000;}
   .brand h1{font-family:var(--display);font-size:19px;margin:0;letter-spacing:0.3px;}
   .brand small{color:var(--sub);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
   .searchrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
@@ -697,17 +708,23 @@ const CORS_PROXIES_WEB = [
   url => `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
   url => `https://thingproxy.freeboard.io/fetch/${url}`,
 ];
+async function fetchWithTimeout(url, ms=10000){
+  const controller = new AbortController();
+  const t = setTimeout(()=>controller.abort(), ms);
+  try{ return await fetch(url, {signal: controller.signal}); }
+  finally{ clearTimeout(t); }
+}
 async function fetchJSON(url){
   try{
-    const r = await fetch(url);
+    const r = await fetchWithTimeout(url);
     if(!r.ok) throw new Error('HTTP '+r.status); // error de la API misma: reintentar por proxy no sirve
     return await r.json();
   }catch(e){
-    const isNetworkFailure = e instanceof TypeError || /failed to fetch/i.test(e.message||'');
+    const isNetworkFailure = e instanceof TypeError || e.name==='AbortError' || /failed to fetch/i.test(e.message||'');
     if(!isNetworkFailure) throw e;
     for(const buildProxyUrl of CORS_PROXIES_WEB){
       try{
-        const r2 = await fetch(buildProxyUrl(url));
+        const r2 = await fetchWithTimeout(buildProxyUrl(url));
         if(!r2.ok) continue;
         return await r2.json();
       }catch(e2){ /* probamos el siguiente proxy */ }
