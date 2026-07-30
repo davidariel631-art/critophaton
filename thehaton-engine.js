@@ -1116,10 +1116,32 @@ async function fetchRelevantNews(coinName){
 function fmt(n){ if(n==null||isNaN(n)) return '—'; if(n>=1000) return n.toLocaleString('en-US',{maximumFractionDigits:2}); if(n>=1) return n.toFixed(4); return n.toPrecision(4); }
 function fmtPct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
 
+// ---- Memoria estadística por "Dios": qué especialista acertó más históricamente ----
+// Necesita que cada operación cerrada tenga guardado un `committeeSnapshot` (nombre+voto de cada
+// dios al momento de confirmar la entrada). Cuenta, de las veces que cada dios votó en la MISMA
+// dirección que terminó teniendo la operación, cuántas ganaron vs perdieron.
+function computeGodPerformance(closedTrades){
+  const stats = {}; // { [godName]: {agreedWins, agreedLosses, agreedTotal} }
+  for(const trade of (closedTrades||[])){
+    if(!Array.isArray(trade.committeeSnapshot)) continue;
+    for(const god of trade.committeeSnapshot){
+      if(god.vote !== trade.dir) continue; // solo cuenta cuando el dios coincidió con la dirección tomada
+      if(!stats[god.name]) stats[god.name] = {agreedWins:0, agreedLosses:0, agreedTotal:0};
+      stats[god.name].agreedTotal++;
+      if(trade.result==='win') stats[god.name].agreedWins++; else stats[god.name].agreedLosses++;
+    }
+  }
+  const ranking = Object.entries(stats).map(([name, s])=>({
+    name, ...s, winRate: s.agreedTotal>0 ? Math.round((s.agreedWins/s.agreedTotal)*100) : null
+  })).sort((a,b)=> (b.winRate||0)-(a.winRate||0));
+  return ranking;
+}
+
 // ============================================================
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
+  computeGodPerformance,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,

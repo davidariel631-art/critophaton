@@ -500,6 +500,10 @@
         <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">🟢 Operaciones activas</h3>
         <div id="thActive" class="subrow">Ninguna en este momento.</div>
 
+        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">🏆 Rendimiento por Dios (memoria estadística)</h3>
+        <div class="hint" style="margin-top:0;">Cuenta, de las veces que cada especialista votó en la misma dirección que terminó tomando la operación, cuántas ganaron. Solo cuenta a partir de las operaciones confirmadas con esta versión (las anteriores no tienen esta foto guardada).</div>
+        <div id="thGodPerformance" class="subrow" style="margin-top:8px;">Sin datos suficientes todavía.</div>
+
         <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">📖 Últimas operaciones cerradas (con diario)</h3>
         <div id="thClosedTrades"></div>
 
@@ -1666,6 +1670,12 @@ async function loadTheHaton(){
     <div class="indi-line"><div class="il-k">Mejor</div><div class="il-v up">${best.symbol} +${best.pnl.toFixed(2)}</div></div>
     <div class="indi-line"><div class="il-k">Peor</div><div class="il-v down">${worst.symbol} ${worst.pnl.toFixed(2)}</div></div>
   ` : '<div class="subrow">Sin operaciones cerradas todavía.</div>';
+
+  const godRanking = computeGodPerformance(trades);
+  document.getElementById('thGodPerformance').innerHTML = godRanking.length ? godRanking.map(g=>{
+    const cls = g.winRate>=60?'up':g.winRate<40?'down':'';
+    return `<div class="indi-line"><div class="il-k">${g.name}</div><div class="il-v ${cls}">${g.winRate}% (${g.agreedWins}G/${g.agreedLosses}P de ${g.agreedTotal})</div></div>`;
+  }).join('') : 'Sin datos suficientes todavía (hacen falta operaciones cerradas con la versión nueva del bot).';
 
   function journalHtml(t){
     return (t.journal||[]).map(j=>`<div style="font-size:11px;color:var(--sub);padding:3px 0;">• ${new Date(j.ts).toLocaleString()} — ${j.note}</div>`).join('');
