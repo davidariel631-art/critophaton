@@ -257,6 +257,7 @@
       <div style="min-width:0;overflow:hidden;"><h1>KRAX CAPITAL</h1><small>Análisis técnico + Smart Money</small> <span class="pill live" style="margin-left:6px;">En vivo</span></div>
     </div>
     <div class="avatar-wrap" id="avatarWrap">
+      <button class="avatar-btn" id="notifBtn" style="margin-right:8px;background:var(--panel2);" title="Activar notificaciones">🔔</button>
       <button class="avatar-btn" id="avatarBtn">👤</button>
       <div class="avatar-dropdown" id="avatarDropdown">
         <div id="authLoggedOut">
@@ -705,6 +706,11 @@
       if(!auth.currentUser) return null;
       const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
       return snap.exists() ? (snap.data().photoDataUrl || null) : null;
+    },
+    async savePushSubscription(sub){
+      // No requiere sesión iniciada: cualquiera puede activar notificaciones, con o sin cuenta.
+      await addDoc(collection(db, 'push_subscriptions'), {sub: JSON.stringify(sub), createdAt: Date.now()});
+      return true;
     }
   };
 
@@ -1391,6 +1397,46 @@ function compressImageToDataUrl(file, size=128){
     reader.readAsDataURL(file);
   });
 }
+// ================= NOTIFICACIONES PUSH DE VERDAD (llegan con la app cerrada) =================
+const VAPID_PUBLIC_KEY = 'BPXgVxHRjeFdsHoHmlRSMx8LlpSu2fWy-Pm6y32m8PYbjpvtg0691ctw46NCnoXyqndoitb98ljppeh26faP9Gk';
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map(c=>c.charCodeAt(0)));
+}
+function updateNotifBtnState(){
+  const btn = document.getElementById('notifBtn');
+  if(!('Notification' in window)){ btn.style.display='none'; return; }
+  if(Notification.permission==='granted'){ btn.textContent='🔔'; btn.title='Notificaciones activadas'; btn.style.opacity='1'; }
+  else { btn.textContent='🔕'; btn.title='Activar notificaciones'; btn.style.opacity='0.6'; }
+}
+document.getElementById('notifBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('notifBtn');
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    alert('Tu navegador no soporta notificaciones push.'); return;
+  }
+  if(Notification.permission==='denied'){
+    alert('Bloqueaste las notificaciones para esta app. Para activarlas, tenés que habilitarlas manualmente desde la configuración del navegador (ícono de candado al lado de la dirección → Notificaciones).');
+    return;
+  }
+  btn.textContent = '⏳';
+  try{
+    const permission = await Notification.requestPermission();
+    if(permission!=='granted'){ updateNotifBtnState(); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    }
+    if(window.fb) await window.fb.savePushSubscription(sub.toJSON());
+    localStorage.setItem('krax_push_subscribed', '1');
+    alert('✅ Notificaciones activadas. Te vamos a avisar de las señales de TheHaton aunque tengas la app cerrada.');
+  }catch(e){ console.error('Error activando notificaciones:', e); alert('No se pudo activar: ' + e.message); }
+  updateNotifBtnState();
+});
+updateNotifBtnState();
+
 document.getElementById('changePhotoBtn').addEventListener('click', ()=> document.getElementById('photoFileInput').click());
 document.getElementById('avatarPreviewBtn').addEventListener('click', ()=> document.getElementById('photoFileInput').click());
 document.getElementById('photoFileInput').addEventListener('change', async (e)=>{
