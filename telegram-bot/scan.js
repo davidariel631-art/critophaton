@@ -230,18 +230,6 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
 
       updateSharedMemory(state, symbol, result.recommendation);
 
-      // Alerta instantánea existente (igual que siempre), no depende de la tesis
-      if(best>=THRESHOLD && result.recommendation!=='NO OPERAR'){
-        const key = symbol+'_'+result.recommendation;
-        const now = Date.now();
-        if(now - (state.notified[key]||0) > 60*60*1000){
-          sendPromises.push(sendTelegram(
-            `🚨 <b>SIGNAL — ${symbol}${tag} ${result.recommendation}</b>\n\nScore: ${best.toFixed(1)}/10\nPrecio: $${data.price.toFixed(6)}\n\n⚠️ Análisis automatizado, no es asesoría financiera.`
-          ));
-          state.notified[key] = now;
-        }
-      }
-
       if(best < THRESHOLD || result.recommendation === 'NO OPERAR') continue;
 
       const hour = argentinaHourNow();
@@ -458,8 +446,10 @@ async function fetchPriceRange(symbol, sinceTs){
     const d = await fetchTokenData(symbol, '15m');
     if(!d.candles || !d.candles.length) return null;
     const marginMs = 20*60*1000; // margen para no perder la vela justo en el borde
-    const relevant = d.candles.filter(c => c.t >= (sinceTs - marginMs));
-    const scope = relevant.length ? relevant : d.candles.slice(-4); // fallback: última hora aprox
+    const minLookbackMs = 6*3600*1000; // colchón mínimo: GitHub Actions a veces salta o atrasa corridas programadas
+    const effectiveSince = Math.min(sinceTs, Date.now()-minLookbackMs);
+    const relevant = d.candles.filter(c => c.t >= (effectiveSince - marginMs));
+    const scope = relevant.length ? relevant : d.candles.slice(-24); // fallback: últimas 6hs aprox (24 velas de 15m)
     return { high: Math.max(...scope.map(c=>c.h)), low: Math.min(...scope.map(c=>c.l)), last: d.price };
   }catch(e){ return null; }
 }
@@ -469,6 +459,15 @@ async function manageActiveTheses(state){
   const stillOpen = [];
   for(const thesis of acc.theses){
     if(thesis.status !== 'ACTIVE'){ stillOpen.push(thesis); continue; }
+
+    // Migración defensiva: tesis viejas (de antes del sistema de 50%-en-TP1) tenían un solo campo
+    // `tp`, no `tp1`/`tp2`. Sin esto, `thesis.tp1` queda undefined para siempre y la tesis nunca
+    // se cierra (exactamente lo que le pasó a WIF). Las tratamos como cierre completo en un solo TP.
+    if(thesis.tp1==null && thesis.tp!=null){
+      thesis.tp1 = thesis.tp; thesis.tp2 = thesis.tp; thesis.partialTaken = true;
+      console.log(`⚠️ ${thesis.symbol}: tesis con esquema viejo (sin tp1/tp2) migrada a cierre completo en $${thesis.tp}.`);
+    }
+
     const sinceTs = thesis.lastCheckedAt || thesis.confirmedAt || thesis.detectedAt;
     const range = await fetchPriceRange(thesis.symbol, sinceTs);
     const price = range?.last ?? null;
