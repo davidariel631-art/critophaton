@@ -1770,13 +1770,26 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const price = data.price;
 
     // Cada zona tiene un "peso" (cuántos toques la respaldan) — más peso = banda más ancha/marcada.
+    // "kind" distingue niveles estructurales reales (pivots de precio, donde de verdad rebotó el
+    // mercado) de niveles psicológicos redondos (que son una referencia, pero no son ta.pivothigh/low).
     const zones = [];
-    if(st.eqHighs) zones.push({price:st.eqHighs, label:`Equal Highs (${st.eqHighsCount}x toques)`, dir:'above', weight:st.eqHighsCount||2});
-    if(st.eqLows) zones.push({price:st.eqLows, label:`Equal Lows (${st.eqLowsCount}x toques)`, dir:'below', weight:st.eqLowsCount||2});
-    if(st.bullishOB){ const mid=(st.bullishOB.top+st.bullishOB.bottom)/2; zones.push({price:mid, label:'Order Block alcista sin mitigar', dir: mid>price?'above':'below', weight:2.5}); }
-    if(st.bearishOB){ const mid=(st.bearishOB.top+st.bearishOB.bottom)/2; zones.push({price:mid, label:'Order Block bajista sin mitigar', dir: mid>price?'above':'below', weight:2.5}); }
+    if(st.eqHighs) zones.push({price:st.eqHighs, label:`Equal Highs (${st.eqHighsCount}x toques)`, dir:'above', weight:st.eqHighsCount||2, kind:'pivot'});
+    if(st.eqLows) zones.push({price:st.eqLows, label:`Equal Lows (${st.eqLowsCount}x toques)`, dir:'below', weight:st.eqLowsCount||2, kind:'pivot'});
+    if(st.bullishOB){ const mid=(st.bullishOB.top+st.bullishOB.bottom)/2; zones.push({price:mid, label:'Order Block alcista sin mitigar', dir: mid>price?'above':'below', weight:2.5, kind:'pivot'}); }
+    if(st.bearishOB){ const mid=(st.bearishOB.top+st.bearishOB.bottom)/2; zones.push({price:mid, label:'Order Block bajista sin mitigar', dir: mid>price?'above':'below', weight:2.5, kind:'pivot'}); }
+    // Swing highs/lows individuales (equivalente a ta.pivothigh(5,5)/ta.pivotlow(5,5)) — no solo el
+    // cluster de Equal Highs/Lows, sino cada pivot reciente por separado, que es lo que de verdad
+    // se compara para calcular "Nivel cercano".
+    (st.pivots||[]).slice(-16).forEach(p=>{
+      const isHigh = p.type==='high';
+      zones.push({
+        price: p.price, kind:'pivot', weight: 1.5,
+        label: `Swing ${isHigh?'high':'low'} (${p.label||''})`,
+        dir: p.price>price ? 'above' : 'below',
+      });
+    });
     findRoundLevels(price).forEach(lvl=>{
-      if(Math.abs(lvl-price)/price > 0.001) zones.push({price:lvl, label:'Nivel psicológico redondo', dir: lvl>price?'above':'below', weight:1});
+      if(Math.abs(lvl-price)/price > 0.001) zones.push({price:lvl, label:'Nivel psicológico redondo', dir: lvl>price?'above':'below', weight:1, kind:'round'});
     });
     zones.sort((a,b)=>b.price-a.price);
 
@@ -1796,8 +1809,11 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     document.getElementById('liqDomUp').style.flex = pctUp;
     document.getElementById('liqDomDown').textContent = `Dom. Abajo ${pctDown}%`;
     document.getElementById('liqDomDown').style.flex = pctDown;
-    const nearUp = zones.filter(z=>z.dir==='above').sort((a,b)=>a.price-b.price)[0];
-    const nearDown = zones.filter(z=>z.dir==='below').sort((a,b)=>b.price-a.price)[0];
+    // "Nivel cercano" usa SOLO niveles estructurales reales (pivots/Equal Highs-Lows/Order Blocks),
+    // nunca números redondos — un número redondo no es un lugar donde el precio realmente rebotó.
+    const structuralZones = zones.filter(z=>z.kind==='pivot');
+    const nearUp = structuralZones.filter(z=>z.dir==='above').sort((a,b)=>a.price-b.price)[0];
+    const nearDown = structuralZones.filter(z=>z.dir==='below').sort((a,b)=>b.price-a.price)[0];
     document.getElementById('liqNearUp').textContent = nearUp ? `$${fmt(nearUp.price)}` : '—';
     document.getElementById('liqNearDown').textContent = nearDown ? `$${fmt(nearDown.price)}` : '—';
     domBox.style.display = 'block';
@@ -1823,7 +1839,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     zones.forEach(z=>{
       const intensity = 0.3 + (z.weight/maxWeight)*0.4;
       const color = z.dir==='above' ? `rgba(239,68,68,${intensity})` : `rgba(16,185,129,${intensity})`;
-      candleSeries.createPriceLine({ price:z.price, color, lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible:true, title: z.label.split(' ')[0] });
+      candleSeries.createPriceLine({ price:z.price, color, lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible:false });
     });
     liqChart.timeScale().fitContent();
 
