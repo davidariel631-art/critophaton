@@ -34,6 +34,7 @@ const TOP_N_BINANCE = 60;
 const DEX_NETWORKS = ['solana','base','eth'];
 const STATE_FILE = 'telegram-bot/state.json';
 const MAX_TRADES_PER_DAY = 4;
+const KILL_SWITCH_DRAWDOWN = 0.30; // si el drawdown supera esto, se pausa la apertura de operaciones nuevas hasta revisión manual
 const WORK_HOUR_START = 4;
 const WORK_HOUR_END = 15;
 const RISK_PCT = 0.01;
@@ -136,6 +137,22 @@ function journal(thesis, note){
 // ---------- Fase 1: escanear 4h/1D en busca de nuevas tesis (usa el motor completo) ----------
 async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
   const acc = state.account;
+  if(acc.peakCapital==null) acc.peakCapital = acc.capital;
+  const drawdownNow = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
+  if(drawdownNow >= KILL_SWITCH_DRAWDOWN){
+    const todayKey2 = todayKey();
+    if(state.killSwitchNotifiedDate !== todayKey2){
+      sendPromises.push(sendTelegram(
+        `🛑 <b>KILL SWITCH activado — TheHaton (cuenta #${acc.id})</b>\n\n` +
+        `Drawdown actual: ${(drawdownNow*100).toFixed(1)}% (límite: ${(KILL_SWITCH_DRAWDOWN*100).toFixed(0)}%).\n` +
+        `Se pausa la apertura de operaciones NUEVAS hasta revisión manual. Las tesis y operaciones ya abiertas se siguen gestionando normalmente (TP/SL/breakeven).\n\n` +
+        `Para reactivar: revisá qué está fallando (motor, condiciones de mercado) y reiniciá manualmente el capital o ajustá KILL_SWITCH_DRAWDOWN en el código si corresponde.`
+      ));
+      state.killSwitchNotifiedDate = todayKey2;
+    }
+    console.log(`🛑 Kill switch activo (drawdown ${(drawdownNow*100).toFixed(1)}%) — no se abren tesis nuevas esta corrida.`);
+    return;
+  }
   for(const {symbol, tag} of candidates){
     if(acc.theses.find(t=>t.symbol===symbol)) continue; // ya hay una tesis abierta para esa moneda
     try{
@@ -232,6 +249,20 @@ async function confirmTheses(state, capitalFlow){
       const confluenceAFavor = rawConfluenceAFavor && !sweepEnContra;
       const bearTrapConfirmacion = sweepAFavor && alineado; // "Bear Trap + Test Pump" que proponías: el sweep en contra del mercado, a favor nuestro, ya es señal
 
+      // Momentum Continuation: en una tendencia ya fuerte, un pullback a EMA20/50 o al Order Block
+      // (sin romper la tendencia) es una entrada conservadora clásica de trend-following.
+      const mt = result15.metrics;
+      const st15 = result15.structure;
+      const priceNow = mt.price;
+      const nearEMA20 = Math.abs(priceNow - mt.lastE20)/priceNow < 0.01;
+      const nearEMA50 = Math.abs(priceNow - mt.lastE50)/priceNow < 0.015;
+      const ob15 = thesis.dir==='LONG' ? st15?.bullishOB : st15?.bearishOB;
+      const nearOB = ob15 && priceNow <= ob15.top*1.02 && priceNow >= ob15.bottom*0.98;
+      const trendFuerte = thesis.dir==='LONG'
+        ? (priceNow>mt.lastE20 && mt.lastE20>mt.lastE50)
+        : (priceNow<mt.lastE20 && mt.lastE20<mt.lastE50);
+      const pullbackConfirmacion = trendFuerte && (nearEMA20 || nearEMA50 || nearOB) && alineado && !sweepEnContra;
+
       // Filtro macro suave (Fear & Greed): F&G<30 (no solo <25) ya se considera zona de miedo relevante para exigir más evidencia.
       const fng = await fetchFearGreedIndex().catch(()=>null);
       const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<30) || (thesis.dir==='SHORT' && fng>75));
@@ -241,7 +272,7 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion)){
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
         const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence);
@@ -259,7 +290,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.status = 'ACTIVE';
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
-        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/3: MACD/Stochastic/velas fuertes)` : `la confianza del motor subió a ${result15.confidence}%`;
+        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/3: MACD/Stochastic/velas fuertes)` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
