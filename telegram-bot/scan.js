@@ -355,24 +355,19 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
       journal(thesis, `Tesis detectada en 4h: ${result.recommendation} (score ${best.toFixed(1)}/10, confianza ${result.confidence}%). ${analystSummary(result)} Bajando a 15m a buscar confirmación de entrada.`);
       acc.theses.push(thesis);
 
-      // Mensaje rico de "por qué la estoy observando" — antes esto era un mensaje simple con solo
-      // el score, sin explicar nada. Ahora dice por qué, qué falta para confirmar, y cómo quedaría
-      // el setup SI se confirma (todo teórico todavía, se recalcula de verdad en la confirmación).
-      const razonesDeteccion = result.committee.filter(c=>c.vote===result.recommendation).slice(0,4).map(c=>`✅ ${c.name.replace(/^[^\s]+\s/,'')}: ${c.note||'a favor'}`).join('\n');
+      // Mensaje de "en radar" — a propósito con formato bien distinto al de la SEÑAL confirmada
+      // (más corto, sin la caja de "Configuración/Riesgo"), para que de un vistazo se note que
+      // esto todavía NO es una entrada real, solo algo a seguir.
+      const razonesDeteccion = result.committee.filter(c=>c.vote===result.recommendation).slice(0,3).map(c=>`• ${c.name.replace(/^[^\s]+\s/,'')}`).join('\n');
       const nivelClave = result.recommendation==='LONG' ? result.metrics.resistance : result.metrics.support;
       const nivelLabel = result.recommendation==='LONG' ? 'resistencia' : 'soporte';
       sendPromises.push(sendTelegram(
-        `👀 <b>Observando: $${symbol}${tag||''} ${result.recommendation==='LONG'?'COMPRA 🟢':'VENTA 🔴'}</b> (todavía sin confirmar)\n\n` +
-        `<b>¿Por qué la estoy mirando?</b>\n${razonesDeteccion || 'Confluencia general del comité.'}\n\n` +
-        `<b>¿Qué estoy esperando para confirmar en 15m?</b>\n` +
-        `Que rompa el nivel clave (~$${nivelClave?.toFixed(6)}, ${nivelLabel} de 4h) con un BOS real, o que aparezcan 5 factores de confluencia (MACD+Stochastic+velas+volumen+ADX), o una barrida de liquidez (Bear/Bull Trap) a favor. El precio EXACTO de entrada se recalcula recién ahí, no ahora.\n\n` +
-        `<b>Si se confirma, el setup teórico de HOY quedaría así</b> (puede cambiar cuando se confirme de verdad):\n` +
-        `📌 Entrada aprox: $${result.metrics.price.toFixed(6)}\n` +
-        `🛑 Stop teórico: $${theoSetup.stop.toFixed(6)}\n` +
-        `🎯 TP1 teórico: $${theoSetup.t1.toFixed(6)}\n` +
-        `🚀 TP2 teórico: $${theoSetup.t2.toFixed(6)}\n\n` +
-        `⚡ Score: ${best.toFixed(1)}/10 · Confianza: ${result.confidence}%\n` +
-        `⚠️ Todavía NO es una entrada — solo observando. Se avisa aparte si se confirma.`
+        `🔭 <b>EN RADAR — $${symbol}${tag||''}</b> (posible ${result.recommendation==='LONG'?'COMPRA 🟢':'VENTA 🔴'}, todavía NO es entrada)\n\n` +
+        `<i>Por qué está en el radar:</i>\n${razonesDeteccion || '• Confluencia general del comité'}\n\n` +
+        `<i>Esperando:</i> ruptura de $${nivelClave?.toFixed(6)} (${nivelLabel} 4h) con BOS, o confluencia técnica, o un Bear/Bull Trap a favor.\n\n` +
+        `<i>Si confirma (estimado, puede cambiar):</i> Entrada ~$${result.metrics.price.toFixed(6)} · SL ~$${theoSetup.stop.toFixed(6)} · TP1 ~$${theoSetup.t1.toFixed(6)} · TP2 ~$${theoSetup.t2.toFixed(6)}\n\n` +
+        `Score ${best.toFixed(1)}/10 · ${result.confidence}% confianza\n` +
+        `<i>Avisamos aparte si se confirma de verdad.</i>`
       ));
     }catch(e){ console.error('Error escaneando', symbol, e.message); }
     await new Promise(res=>setTimeout(res, 300));
