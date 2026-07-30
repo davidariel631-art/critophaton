@@ -1199,11 +1199,34 @@ function computeGodPerformance(closedTrades){
   return ranking;
 }
 
+// ---- Modo Aprendizaje Pasivo: ¿el filtro de confirmación en 15m realmente ayuda? ----
+// Compara el win rate REAL de las operaciones confirmadas contra el win rate SIMULADO de las
+// tesis que expiraron sin confirmar (si igual se hubiera entrado con el setup teórico de 4h).
+// Si el simulado termina siendo mayor, es señal de que el filtro está descartando buenas
+// oportunidades; si es menor, confirma que el filtro está cumpliendo su función.
+function computeFilterEffectiveness(closedTrades, expiredTheses){
+  const confirmed = closedTrades||[];
+  const confirmedWins = confirmed.filter(t=>t.result==='win').length;
+  const confirmedWinRate = confirmed.length ? Math.round((confirmedWins/confirmed.length)*100) : null;
+
+  const decided = (expiredTheses||[]).filter(t=>t.wouldHaveWon!=null);
+  const simulatedWins = decided.filter(t=>t.wouldHaveWon===true).length;
+  const simulatedWinRate = decided.length ? Math.round((simulatedWins/decided.length)*100) : null;
+
+  let veredicto = 'Todavía no hay suficientes datos (hacen falta más operaciones confirmadas y más tesis expiradas con resultado simulado definido).';
+  if(confirmedWinRate!=null && simulatedWinRate!=null && confirmed.length>=5 && decided.length>=5){
+    if(simulatedWinRate > confirmedWinRate+10) veredicto = '⚠️ El filtro de confirmación en 15m parece estar descartando buenas oportunidades (las que expiraron sin confirmar hubieran ganado más seguido que las confirmadas).';
+    else if(confirmedWinRate > simulatedWinRate+10) veredicto = '✅ El filtro de confirmación en 15m está cumpliendo su función (las confirmadas ganan más seguido que las que se hubieran tomado sin filtrar).';
+    else veredicto = 'El filtro no muestra una diferencia clara todavía — parecido con o sin confirmación.';
+  }
+  return { confirmedWinRate, confirmedCount: confirmed.length, simulatedWinRate, simulatedCount: decided.length, veredicto };
+}
+
 // ============================================================
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
-  computeGodPerformance,
+  computeGodPerformance, computeFilterEffectiveness,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
