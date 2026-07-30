@@ -537,6 +537,7 @@ async function confirmTheses(state, capitalFlow){
           `${thesis.dir==='LONG'?'🟢':'🔴'} Señal: ${thesis.symbol} ${thesis.dir}`,
           `Entrada $${entryPrice.toFixed(6)} · Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`
         ));
+        stillWatching.push(thesis); // CRÍTICO: sin esto, la tesis recién confirmada se perdía al reemplazar acc.theses al final
       } else {
         journal(thesis, `Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando.`);
         stillWatching.push(thesis);
