@@ -602,7 +602,10 @@
           <div class="indi-line"><div class="il-k">Nivel cercano ↑</div><div class="il-v" id="liqNearUp">—</div></div>
           <div class="indi-line"><div class="il-k">Nivel cercano ↓</div><div class="il-v" id="liqNearDown">—</div></div>
         </div>
-        <div id="liqChartContainer" style="width:100%;height:420px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;"></div>
+        <div id="liqChartContainer" style="width:100%;height:420px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
+          <div id="liqChartInner" style="width:100%;height:100%;"></div>
+          <canvas id="liqProfileCanvas" style="position:absolute;top:0;right:0;height:100%;pointer-events:none;z-index:5;"></canvas>
+        </div>
       </div>
       <div id="liqResults" style="margin-top:14px;"></div>
     </div>
@@ -1799,10 +1802,12 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     document.getElementById('liqNearDown').textContent = nearDown ? `$${fmt(nearDown.price)}` : '—';
     domBox.style.display = 'block';
 
-    // Mapa visual: velas + bandas horizontales de liquidez (más ancha = más peso/toques)
+    // Mapa visual: velas + histograma de volumen por nivel de precio (perfil de volumen real),
+    // igual de "grosor variable" que un indicador profesional, no solo líneas finitas.
+    const chartInner = document.getElementById('liqChartInner');
+    chartInner.innerHTML = '';
     const container = document.getElementById('liqChartContainer');
-    container.innerHTML = '';
-    liqChart = LightweightCharts.createChart(container, {
+    liqChart = LightweightCharts.createChart(chartInner, {
       width: container.clientWidth, height: 420,
       layout: { background:{color:'transparent'}, textColor:'#8b98a8', fontFamily:"'Manrope',sans-serif" },
       grid: { vertLines:{color:'#1a2029'}, horzLines:{color:'#1a2029'} },
@@ -1811,13 +1816,52 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     });
     const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
     candleSeries.setData(data.candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c })));
+
+    // Marcamos las zonas detectadas (Equal Highs/Lows, Order Blocks, redondos) como líneas finas de
+    // referencia con etiqueta...
     const maxWeight = Math.max(...zones.map(z=>z.weight));
     zones.forEach(z=>{
-      const intensity = 0.15 + (z.weight/maxWeight)*0.45;
+      const intensity = 0.3 + (z.weight/maxWeight)*0.4;
       const color = z.dir==='above' ? `rgba(239,68,68,${intensity})` : `rgba(16,185,129,${intensity})`;
-      candleSeries.createPriceLine({ price:z.price, color, lineWidth: Math.max(1, Math.round(z.weight)), lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible:true, title: z.label.split(' ')[0] });
+      candleSeries.createPriceLine({ price:z.price, color, lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible:true, title: z.label.split(' ')[0] });
     });
     liqChart.timeScale().fitContent();
+
+    // ...y ADEMÁS dibujamos el perfil de volumen de verdad (grosor variable según volumen real
+    // operado en cada nivel de precio), que es lo que se ve "profesional" en indicadores pagos.
+    requestAnimationFrame(()=>{
+      const canvas = document.getElementById('liqProfileCanvas');
+      const dpr = window.devicePixelRatio||1;
+      const cssW = container.clientWidth*0.32, cssH = 420; // el perfil ocupa ~32% del ancho, del lado derecho
+      canvas.style.width = cssW+'px'; canvas.style.height = cssH+'px';
+      canvas.width = cssW*dpr; canvas.height = cssH*dpr;
+      const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,cssW,cssH);
+
+      const allHighs = data.candles.map(c=>c.h), allLows = data.candles.map(c=>c.l);
+      const maxP = Math.max(...allHighs), minP = Math.min(...allLows);
+      const nBins = 40;
+      const binSize = (maxP-minP)/nBins;
+      const bins = Array.from({length:nBins},()=>0);
+      data.candles.forEach(c=>{
+        const startBin = Math.max(0, Math.floor((c.l-minP)/binSize));
+        const endBin = Math.min(nBins-1, Math.floor((c.h-minP)/binSize));
+        const span = Math.max(1, endBin-startBin+1);
+        for(let b=startBin;b<=endBin;b++) bins[b] += c.v/span; // volumen distribuido en el rango que tocó la vela
+      });
+      const maxBin = Math.max(...bins) || 1;
+
+      for(let b=0;b<nBins;b++){
+        const binPriceLow = minP + b*binSize, binPriceHigh = binPriceLow+binSize;
+        const yTop = candleSeries.priceToCoordinate(binPriceHigh);
+        const yBot = candleSeries.priceToCoordinate(binPriceLow);
+        if(yTop==null || yBot==null) continue;
+        const barLen = (bins[b]/maxBin) * cssW;
+        const binMid = (binPriceLow+binPriceHigh)/2;
+        const color = binMid > price ? 'rgba(239,68,68,0.55)' : 'rgba(16,185,129,0.55)';
+        ctx.fillStyle = color;
+        ctx.fillRect(cssW-barLen, Math.min(yTop,yBot), barLen, Math.max(1,Math.abs(yBot-yTop)-1));
+      }
+    });
     window.addEventListener('resize', ()=>{ if(liqChart) liqChart.applyOptions({ width: container.clientWidth }); });
   }catch(e){ status.textContent = 'No se pudo analizar: ' + e.message; }
 });
