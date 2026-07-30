@@ -23,7 +23,7 @@ import fs from 'fs';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
-  confluenceScore15m, fetchFearGreedIndex,
+  confluenceScore15m, fetchFearGreedIndex, rsi,
   computeScore, buildSetup, buildAnalystMode
 } from '../thehaton-engine.js';
 
@@ -194,11 +194,13 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
       if(acc.tradesToday.count >= MAX_TRADES_PER_DAY) continue;
 
       // Crear la TESIS (todavía no es una operación real)
+      const theoSetup = buildSetup(data, result, 'balanced'); // setup teórico, para el Modo Aprendizaje Pasivo si expira sin confirmar
       const thesis = {
         id: Date.now()+'_'+symbol, symbol, dir: result.recommendation, tag,
         status: 'WATCHING', conviction: best*10,
         detectedAt: Date.now(), expiresAt: Date.now()+THESIS_EXPIRY_HOURS*3600*1000,
-        breakEvenMoved: false, journal: []
+        breakEvenMoved: false, journal: [],
+        theoEntry: result.metrics.price, theoStop: theoSetup.stop, theoTp1: theoSetup.t1,
       };
       journal(thesis, `Tesis detectada en 4h: ${result.recommendation} (score ${best.toFixed(1)}/10, confianza ${result.confidence}%). ${analystSummary(result)} Bajando a 15m a buscar confirmación de entrada.`);
       acc.theses.push(thesis);
@@ -220,7 +222,28 @@ async function confirmTheses(state, capitalFlow){
     if(thesis.status !== 'WATCHING'){ stillWatching.push(thesis); continue; }
 
     if(Date.now() > thesis.expiresAt){
-      journal(thesis, `Expiró sin confirmación después de ${THESIS_EXPIRY_HOURS}h. Se archiva (el historial nunca se borra).`);
+      // Modo Aprendizaje Pasivo: simula qué hubiera pasado si igual hubiésemos entrado con el setup
+      // teórico de la detección original. Sirve para medir si el filtro de confirmación realmente
+      // ayuda (compara win rate de confirmadas vs. win rate simulado de las que el filtro descartó).
+      let wouldHaveWon = null, simNote = 'No se pudo simular (sin datos históricos suficientes).';
+      try{
+        if(thesis.theoStop!=null && thesis.theoTp1!=null){
+          const dataSince = await fetchTokenData(thesis.symbol, '4h');
+          const relevant = (dataSince?.candles||[]).filter(c=>c.t >= thesis.detectedAt);
+          for(const c of relevant){
+            if(thesis.dir==='LONG'){
+              if(c.l<=thesis.theoStop){ wouldHaveWon=false; break; }
+              if(c.h>=thesis.theoTp1){ wouldHaveWon=true; break; }
+            } else {
+              if(c.h>=thesis.theoStop){ wouldHaveWon=false; break; }
+              if(c.l<=thesis.theoTp1){ wouldHaveWon=true; break; }
+            }
+          }
+          simNote = wouldHaveWon==null ? 'Todavía indefinido (nunca tocó ni el TP1 ni el Stop teórico en ese lapso).' : (wouldHaveWon?'✅ HUBIERA GANADO':'❌ HUBIERA PERDIDO');
+        }
+      }catch(e){ /* si falla la simulación, no rompe el archivado */ }
+      thesis.wouldHaveWon = wouldHaveWon;
+      journal(thesis, `Expiró sin confirmación después de ${THESIS_EXPIRY_HOURS}h. Simulación pasiva (si hubiéramos entrado igual): ${simNote}. Se archiva (el historial nunca se borra).`);
       state.account.expiredTheses.push(thesis);
       continue;
     }
@@ -266,6 +289,25 @@ async function confirmTheses(state, capitalFlow){
         : (priceNow<mt.lastE20 && mt.lastE20<mt.lastE50);
       const pullbackConfirmacion = trendFuerte && (nearEMA20 || nearEMA50 || nearOB) && alineado && !sweepEnContra;
 
+      // "Imán de liquidez" multi-timeframe: si el marco MAYOR (1D) todavía tiene espacio (no está agotado
+      // en la misma dirección) y el marco de confirmación está en un extremo local (pullback, no agotamiento
+      // real), y además hay un cluster de liquidez (Equal Highs/Lows) esperando en la dirección de la tesis,
+      // el precio tiene buenas chances de seguir para "barrer" esa liquidez antes de girar.
+      let liquidityMagnetConfirmacion = false, htfNote = '';
+      try{
+        const data1d = await fetchTokenData(thesis.symbol, '1d');
+        if(data1d?.candles?.length>=30){
+          const rsi1d = rsi(data1d.candles.map(c=>c.c), 14).filter(v=>v!=null).at(-1);
+          const rsiLTF = result15.metrics.lastRSI;
+          const htfConEspacio = rsi1d!=null && rsi1d>35 && rsi1d<65; // 1D neutral, ni sobrecomprado ni sobrevendido: hay recorrido
+          const ltfExtremo = thesis.dir==='LONG' ? (rsiLTF!=null && rsiLTF<=35) : (rsiLTF!=null && rsiLTF>=65); // pullback local, no tendencia agotada
+          const liqTarget = thesis.dir==='LONG' ? st15?.eqHighs : st15?.eqLows;
+          const liqEnDireccion = liqTarget!=null && (thesis.dir==='LONG' ? liqTarget>priceNow : liqTarget<priceNow);
+          liquidityMagnetConfirmacion = htfConEspacio && ltfExtremo && liqEnDireccion && alineado && !sweepEnContra;
+          htfNote = `1D RSI ${rsi1d?.toFixed(0)??'—'} (${htfConEspacio?'con espacio':'sin espacio'}), LTF RSI ${rsiLTF?.toFixed(0)??'—'} (${ltfExtremo?'pullback local':'sin extremo'}), liquidez objetivo ${liqEnDireccion?`detectada a favor (~$${liqTarget.toFixed(6)})`:'no detectada a favor'}.`;
+        }
+      }catch(e){ /* si falla, simplemente no aporta este camino, no rompe el resto */ }
+
       // Filtro macro suave (Fear & Greed): F&G<30 (no solo <25) ya se considera zona de miedo relevante para exigir más evidencia.
       const fng = await fetchFearGreedIndex().catch(()=>null);
       const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<30) || (thesis.dir==='SHORT' && fng>75));
@@ -275,10 +317,10 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion)){
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
-        const patternQuality = (bosAFavor || bearTrapConfirmacion) ? 'high' : 'normal';
+        const patternQuality = (bosAFavor || bearTrapConfirmacion || liquidityMagnetConfirmacion) ? 'high' : 'normal';
         const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence, patternQuality);
         const riskAmount = acc.capital * riskPct;
         const distance = Math.abs(entryPrice - setup.stop);
@@ -295,7 +337,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
-        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : `la confianza del motor subió a ${result15.confidence}%`;
+        const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
