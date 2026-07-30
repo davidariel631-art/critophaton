@@ -1673,9 +1673,32 @@ function formatVol(v){
   if(v>=1e3) return '$'+(v/1e3).toFixed(2)+'K';
   return '$'+v.toFixed(0);
 }
+// Cache genérico en localStorage (24hs) — para no volver a pedir lo mismo cada vez que abrís la
+// pestaña. Si ya se pidió hoy, se muestra al instante; si pasaron 24hs, se refresca solo.
+function getCached(key, maxAgeHours=24){
+  try{
+    const raw = localStorage.getItem('krax_cache_'+key);
+    if(!raw) return null;
+    const {data, ts} = JSON.parse(raw);
+    if((Date.now()-ts) > maxAgeHours*3600*1000) return null;
+    return data;
+  }catch(e){ return null; }
+}
+function setCached(key, data){
+  try{ localStorage.setItem('krax_cache_'+key, JSON.stringify({data, ts:Date.now()})); }catch(e){}
+}
+
 async function loadTopMovers(){
   const statusEl3 = document.getElementById('topMoversStatus');
   const box = document.getElementById('topMoversBox');
+
+  const cached = getCached('topMovers');
+  if(cached){
+    renderTopMovers(cached);
+    statusEl3.textContent = '✅ Datos de hoy (se actualizan solos 1 vez cada 24hs).';
+    return;
+  }
+
   statusEl3.textContent = 'Buscando entre ~1000 monedas...';
   try{
     // Traemos las páginas UNA POR VEZ, con una pequeña pausa entre cada una — pedirlas todas
@@ -1692,12 +1715,18 @@ async function loadTopMovers(){
     }
     const all = pages.flat().filter(c=>c && c.price_change_percentage_24h!=null && c.total_volume!=null);
     statusEl3.textContent = '';
+    setCached('topMovers', all);
+    renderTopMovers(all);
+  }catch(e){ statusEl3.textContent = 'No se pudo cargar (CoinGecko puede estar limitando pedidos, probá de nuevo en un minuto).'; }
+}
 
+function renderTopMovers(all){
+    const statusEl3 = document.getElementById('topMoversStatus');
+    const box = document.getElementById('topMoversBox');
     const sorted = [...all].sort((a,b)=>(b.price_change_percentage_24h||0)-(a.price_change_percentage_24h||0));
     const gainers = sorted.slice(0,5);
     const losers = sorted.slice(-5).reverse();
     const medals = ['🥇','🥈','🥉','4.','5.'];
-
     function rowHtml(c, i){
       return `<div class="setup-row" style="cursor:pointer;" data-sym="${c.symbol.toUpperCase()}">
         <div class="k">${medals[i]} ${c.symbol.toUpperCase()} ${c.price_change_percentage_24h>=0?'+':''}${c.price_change_percentage_24h.toFixed(2)}%</div>
@@ -1728,17 +1757,30 @@ async function loadTopMovers(){
         analyze(el.dataset.sym);
       });
     });
-  }catch(e){ statusEl3.textContent = 'No se pudo cargar (CoinGecko puede estar limitando pedidos, probá de nuevo en un minuto).'; }
 }
 
 async function loadHeatmap(){
   const statusEl2 = document.getElementById('heatmapStatus');
+
+  const cachedHeatmap = getCached('heatmap50');
+  if(cachedHeatmap){
+    heatmapLoaded = true;
+    statusEl2.textContent = '✅ Datos de hoy (se actualizan solos 1 vez cada 24hs).';
+    renderHeatmapGrid(cachedHeatmap);
+    return;
+  }
+
   statusEl2.textContent = 'Cargando top 50 por market cap...';
   try{
     const list = await fetchJSON('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=50&page=1&price_change_percentage=24h');
     heatmapLoaded = true;
     statusEl2.textContent = '';
+    setCached('heatmap50', list);
+    renderHeatmapGrid(list);
+  }catch(e){ statusEl2.textContent = 'No se pudo cargar el heatmap (CoinGecko puede estar limitando pedidos, probá de nuevo en un minuto).'; }
+}
 
+function renderHeatmapGrid(list){
     const grid = document.getElementById('heatGrid');
     const containerW = grid.clientWidth || 900;
     const containerH = 520;
@@ -1760,7 +1802,6 @@ async function loadHeatmap(){
         analyze(t.dataset.sym);
       });
     });
-  }catch(e){ statusEl2.textContent = 'No se pudo cargar el heatmap (CoinGecko puede estar limitando pedidos, probá de nuevo en un minuto).'; }
 }
 
 // ================= MULTI-TIMEFRAME =================
