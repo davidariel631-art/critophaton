@@ -25,3 +25,28 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request).catch(() => caches.match(event.request))
   );
 });
+
+// ---- Notificaciones push de verdad (llegan aunque la app esté cerrada) ----
+self.addEventListener('push', (event) => {
+  let data = { title: 'KRAX Capital', body: 'Tenés una novedad.' };
+  try{ if(event.data) data = event.data.json(); }catch(e){}
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'KRAX Capital', {
+      body: data.body || '',
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+      data: { url: data.url || './index.html' },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || './index.html';
+  event.waitUntil(
+    self.clients.matchAll({type:'window'}).then(clientList=>{
+      for(const client of clientList){ if('focus' in client) return client.focus(); }
+      if(self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })
+  );
+});
