@@ -20,6 +20,7 @@
 // GitHub) para el "Dios Memoria" del comité y el panel TheHaton.
 
 import fs from 'fs';
+import webpush from 'web-push';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
@@ -111,6 +112,37 @@ async function sendTelegram(text){
     body: JSON.stringify({chat_id: CHAT_ID, text, parse_mode:'HTML'})
   });
   if(!res.ok){ console.error('Error enviando a Telegram:', await res.text()); }
+}
+
+// ---- Notificaciones push de verdad (llegan aunque el celular tenga la app cerrada) ----
+const FIRESTORE_PROJECT = 'critophaton';
+const VAPID_PUBLIC_KEY = 'BPXgVxHRjeFdsHoHmlRSMx8LlpSu2fWy-Pm6y32m8PYbjpvtg0691ctw46NCnoXyqndoitb98ljppeh26faP9Gk';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+if(VAPID_PRIVATE_KEY){
+  webpush.setVapidDetails('mailto:soporte@kraxcapital.app', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
+
+async function fetchPushSubscribers(){
+  try{
+    const res = await fetch(`https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents/push_subscriptions`);
+    if(!res.ok) return [];
+    const data = await res.json();
+    return (data.documents||[]).map(d=>{
+      try{ return JSON.parse(d.fields.sub.stringValue); }catch(e){ return null; }
+    }).filter(Boolean);
+  }catch(e){ console.error('Error trayendo suscripciones push:', e.message); return []; }
+}
+
+async function sendPushToAll(title, body, url){
+  if(!VAPID_PRIVATE_KEY) return; // sin la clave privada (secret de GitHub) no se puede firmar el push, se omite en silencio
+  const subs = await fetchPushSubscribers();
+  const payload = JSON.stringify({title, body, url: url||'./index.html'});
+  await Promise.all(subs.map(sub =>
+    webpush.sendNotification(sub, payload).catch(e=>{
+      // Un error 410/404 significa que esa suscripción ya no existe (usuario desinstaló, etc.) — normal, se ignora.
+      if(e.statusCode!==410 && e.statusCode!==404) console.error('Error mandando push:', e.message);
+    })
+  ));
 }
 
 // ---------- Estado / memoria compartida (única para toda la plataforma) ----------
@@ -428,6 +460,10 @@ async function confirmTheses(state, capitalFlow){
           `Capital de la cuenta: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})\n\n` +
           `⚠️ Solo con fines educativos. No es asesoría financiera.`
         ));
+        sendPromises.push(sendPushToAll(
+          `${thesis.dir==='LONG'?'🟢':'🔴'} Señal: ${thesis.symbol} ${thesis.dir}`,
+          `Entrada $${entryPrice.toFixed(6)} · Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`
+        ));
       } else {
         journal(thesis, `Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando.`);
         stillWatching.push(thesis);
@@ -547,6 +583,7 @@ async function manageActiveTheses(state){
           `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el 50% restante ya no puede terminar en pérdida.\n` +
           `El resto sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}).\nCapital: ${acc.capital.toFixed(2)} USDT`
         ));
+        sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`));
         stillOpen.push(thesis);
       } else if(hitSL){
         const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
@@ -558,6 +595,7 @@ async function manageActiveTheses(state){
           `🛑 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
           `PERDIÓ (${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
         ));
+        sendPromises.push(sendPushToAll(`🛑 Stop tocado: ${thesis.symbol}`, `${pnl.toFixed(2)} USDT`));
       } else {
         stillOpen.push(thesis);
       }
@@ -582,6 +620,7 @@ async function manageActiveTheses(state){
         `${hitTP2?'TP2 alcanzado ✅':'Volvió al punto de entrada (breakeven en el 50% restante)'}\n` +
         `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
       ));
+      sendPromises.push(sendPushToAll(`${hitTP2?'🚀 TP2':'⚖️ Cierre'}: ${thesis.symbol}`, `Resultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
     } else {
       stillOpen.push(thesis);
     }
