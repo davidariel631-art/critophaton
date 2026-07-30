@@ -1368,6 +1368,7 @@ function buildSetup(data, result, riskProfile){
   const risk = lastATR*2;
   let entryLow, entryHigh, stop, t1,t2,t3, dir;
   const dirSource = result.recommendation || result.bias; // usa el score dual (Long/Short) como fuente de verdad
+  const liqProfileForStop = data?.candles?.length>=30 ? computeLiquidityProfile(data.candles, price) : null;
   if(dirSource==='LONG'){
     dir='LONG'; entryLow=price*0.995; entryHigh=price*1.005;
     const atrStop = price - risk;
@@ -1377,6 +1378,12 @@ function buildSetup(data, result, riskProfile){
     // "Razonable" = ni pegado al precio (ruido lo saca fácil) ni tan lejos que el R:R deje de tener sentido.
     const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*4;
     stop = esRazonable ? nearestStructural*0.997 : atrStop; // pequeño colchón debajo del nivel real
+    // No dejar el stop justo pegado a una concentración grande de liquidez: ahí también tienen el
+    // stop otros traders, así que es un imán para que lo barran primero — si el stop calculado cae
+    // cerca de un POC, lo empujamos un poco más allá para no ser la primera víctima de esa barrida.
+    if(liqProfileForStop?.pocBelow && Math.abs(liqProfileForStop.pocBelow.price-stop)/price < 0.01){
+      stop = Math.min(stop, liqProfileForStop.pocBelow.price*0.995);
+    }
     const R = price-stop;
     t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5);
   } else if(dirSource==='SHORT'){
@@ -1387,6 +1394,9 @@ function buildSetup(data, result, riskProfile){
     const distToStructural = nearestStructural!=null ? nearestStructural-price : null;
     const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*4;
     stop = esRazonable ? nearestStructural*1.003 : atrStop;
+    if(liqProfileForStop?.pocAbove && Math.abs(liqProfileForStop.pocAbove.price-stop)/price < 0.01){
+      stop = Math.max(stop, liqProfileForStop.pocAbove.price*1.005);
+    }
     const R = stop-price;
     t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5);
   } else {
