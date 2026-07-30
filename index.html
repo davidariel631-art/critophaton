@@ -194,6 +194,11 @@
   .bg-needle{position:absolute;top:-5px;left:50%;width:3px;height:24px;background:#fff;border-radius:3px;box-shadow:0 0 8px rgba(255,255,255,0.6);transition:left .5s ease;transform:translateX(-50%);}
   .bg-labels{display:flex;justify-content:space-between;margin-top:8px;font-family:var(--display);font-weight:700;font-size:11px;color:var(--sub);}
   .poi-badge{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border-radius:12px;font-family:var(--display);font-size:11.5px;border:1px solid;}
+  .liq-zone{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-radius:12px;background:var(--panel2);border:1px solid var(--border);margin-bottom:8px;}
+  .liq-zone .lz-price{font-family:var(--mono);font-weight:700;font-size:14px;}
+  .liq-zone .lz-tag{font-family:var(--display);font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:3px 8px;border-radius:100px;}
+  .liq-zone.above .lz-price{color:var(--rose);}
+  .liq-zone.below .lz-price{color:var(--teal);}
   .poi-badge.bull{background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.35);color:#10b981;}
   .poi-badge.bear{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.35);color:#ef4444;}
   .poi-badge .poi-title{font-weight:700;}
@@ -320,6 +325,7 @@
   <div class="tabnav" id="tabNav">
     <button class="tab-btn active" data-tab="analizar">Analizar</button>
     <button class="tab-btn" data-tab="heatmap">Heatmap</button>
+    <button class="tab-btn" data-tab="liquidez">💧 Liquidez</button>
     <button class="tab-btn" data-tab="dexnuevos">DEX Nuevos</button>
     <button class="tab-btn" data-tab="comparar">Comparar</button>
     <button class="tab-btn" data-tab="historial">Historial</button>
@@ -337,6 +343,7 @@
 
   <div class="more-sheet" id="moreSheet">
     <div class="more-sheet-inner">
+      <button class="more-item" data-tab="liquidez">💧 Zonas de Liquidez</button>
       <button class="more-item" data-tab="dexnuevos">🆕 DEX Nuevos</button>
       <button class="more-item" data-tab="comparar">⚖️ Comparar</button>
       <button class="more-item" data-tab="historial">🕓 Historial</button>
@@ -563,6 +570,24 @@
       <div class="hint" style="margin-top:0;margin-bottom:12px;">Verde = sube 24h, rojo = baja 24h. Tocá una moneda para analizarla.</div>
       <div id="heatmapStatus" class="subrow">Cargando…</div>
       <div class="heat-grid" id="heatGrid"></div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="panel-liquidez">
+    <div class="card">
+      <h2>💧 Zonas de Liquidez (aproximación gratis)</h2>
+      <div class="hint" style="margin-top:0;">
+        ⚠️ <b>Esto NO es un heatmap de liquidaciones real</b> (ese dato es de CoinGlass y es pago, desde $29/mes).
+        Es una aproximación con datos 100% gratis: clusters de Equal Highs/Lows (donde el precio tocó
+        varias veces el mismo nivel), Order Blocks sin mitigar, y niveles psicológicos redondos —
+        zonas donde razonablemente puede haber liquidez esperando, sin ser el dato exacto de posiciones reales.
+      </div>
+      <div class="auth-row" style="margin-top:14px;">
+        <input id="liqInput" type="text" placeholder="Símbolo (ej: BTC, SOL)" class="auth-input" style="flex:1;">
+        <button class="backtest-btn" id="liqGoBtn">Buscar zonas</button>
+      </div>
+      <div id="liqStatus" class="subrow" style="margin-top:10px;"></div>
+      <div id="liqResults" style="margin-top:14px;"></div>
     </div>
   </div>
 
@@ -1687,6 +1712,49 @@ function getCached(key, maxAgeHours=24){
 function setCached(key, data){
   try{ localStorage.setItem('krax_cache_'+key, JSON.stringify({data, ts:Date.now()})); }catch(e){}
 }
+
+// ================= ZONAS DE LIQUIDEZ (aproximación gratis) =================
+function findRoundLevels(price){
+  // Niveles psicológicos redondos cerca del precio actual, escalados según su magnitud.
+  const magnitude = Math.pow(10, Math.floor(Math.log10(price)));
+  const steps = [1, 2, 5].map(s=>s*magnitude/2).filter(s=>s>0);
+  const step = steps.reduce((best,s)=> Math.abs(price/s - Math.round(price/s)) < Math.abs(price/best - Math.round(price/best)) ? s : best, steps[0]) || magnitude/10;
+  const levels = [];
+  for(let i=-2;i<=2;i++){
+    const lvl = Math.round(price/step + i) * step;
+    if(lvl>0) levels.push(lvl);
+  }
+  return [...new Set(levels)].sort((a,b)=>a-b);
+}
+document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
+  const q = document.getElementById('liqInput').value.trim().toUpperCase();
+  const status = document.getElementById('liqStatus');
+  const results = document.getElementById('liqResults');
+  if(!q){ status.textContent = 'Escribí un símbolo primero.'; return; }
+  status.textContent = 'Buscando...'; results.innerHTML = '';
+  try{
+    const data = await fetchTokenData(q, '4h');
+    const macro = await fetchMacroTrend(q).catch(()=>null);
+    const result = computeScore(data, macro, [], {}, {}, null);
+    const st = result.structure;
+    const price = data.price;
+
+    const zones = [];
+    if(st.eqHighs) zones.push({price:st.eqHighs, label:`Equal Highs (${st.eqHighsCount}x toques)`, dir:'above'});
+    if(st.eqLows) zones.push({price:st.eqLows, label:`Equal Lows (${st.eqLowsCount}x toques)`, dir:'below'});
+    if(st.bullishOB) zones.push({price:(st.bullishOB.top+st.bullishOB.bottom)/2, label:'Order Block alcista sin mitigar', dir: st.bullishOB.top>price?'above':'below'});
+    if(st.bearishOB) zones.push({price:(st.bearishOB.top+st.bearishOB.bottom)/2, label:'Order Block bajista sin mitigar', dir: st.bearishOB.top>price?'above':'below'});
+    findRoundLevels(price).forEach(lvl=>{
+      if(Math.abs(lvl-price)/price > 0.001) zones.push({price:lvl, label:'Nivel psicológico redondo', dir: lvl>price?'above':'below'});
+    });
+    zones.sort((a,b)=>b.price-a.price);
+
+    status.textContent = `$${q} — precio actual $${fmt(price)}`;
+    results.innerHTML = zones.length ? zones.map(z=>
+      `<div class="liq-zone ${z.dir}"><div><div class="lz-price">$${fmt(z.price)}</div><div class="subrow" style="margin:0;">${z.label}</div></div><div class="lz-tag" style="background:${z.dir==='above'?'rgba(239,68,68,0.15)':'rgba(16,185,129,0.15)'};color:${z.dir==='above'?'var(--rose)':'var(--teal)'};">${z.dir==='above'?'ARRIBA':'ABAJO'}</div></div>`
+    ).join('') : '<div class="subrow">No se detectaron zonas relevantes para esta moneda ahora mismo.</div>';
+  }catch(e){ status.textContent = 'No se pudo analizar: ' + e.message; }
+});
 
 async function loadTopMovers(){
   const statusEl3 = document.getElementById('topMoversStatus');
