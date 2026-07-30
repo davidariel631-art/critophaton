@@ -138,7 +138,9 @@
   .chart-legend{display:flex;gap:14px;font-size:11px;color:var(--sub);margin-bottom:8px;flex-wrap:wrap;}
   .chart-legend span{display:flex;align-items:center;gap:5px;}
   .dot{width:9px;height:9px;border-radius:2px;display:inline-block;}
-  #candleCanvas{width:100%;display:block;background:var(--panel2);border-radius:10px;border:1px solid var(--border);}
+  #candleChartContainer{width:100%;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;}
+  .legend-chip{background:var(--panel2);border:1px solid var(--border);border-radius:100px;padding:5px 11px;font-family:var(--mono);font-size:10.5px;cursor:pointer;color:var(--sub);}
+  .legend-chip:hover{border-color:var(--amber);color:var(--text);}
   .links{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:8px;}
   .linkbtn{display:flex;align-items:center;justify-content:space-between;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);text-decoration:none;font-size:12.5px;}
   .linkbtn:hover{border-color:var(--amber);}
@@ -464,8 +466,9 @@
           <span><span class="dot" style="background:#9a7bd9"></span>Fibonacci</span>
           <span><span class="dot" style="background:#00d9ff"></span>Entrada / TP / SL</span>
         </div>
-        <canvas id="candleCanvas" height="360"></canvas>
-        <div class="hint" style="margin-top:6px;margin-bottom:0;">💡 Tocá cualquier línea o zona del gráfico (soporte, resistencia, Order Block, FVG, Fibonacci, entrada/stop/TP) para ver por qué la IA la marcó.</div>
+        <div id="candleChartContainer" style="width:100%;height:400px;"></div>
+        <div class="hint" style="margin-top:6px;margin-bottom:0;">💡 Tocá cualquiera de las zonas de abajo para ver por qué la IA la marcó. El gráfico es interactivo: podés hacer zoom y desplazarte.</div>
+        <div id="chartLegendList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;"></div>
         <div id="chartClickExplain" class="signal-text" style="display:none;margin-top:10px;background:var(--panel2);"></div>
         <div class="indi-grid" id="indiGrid"></div>
       </div>
@@ -710,6 +713,7 @@
   };
 </script>
 
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <script>
 const BINANCE = 'https://api.binance.com';
 const FUTURES = 'https://fapi.binance.com';
@@ -779,174 +783,106 @@ document.getElementById('riskProfileSelect').addEventListener('change', e=>{
 
 // ---------- Candlestick chart (vanilla canvas) ----------
 let chartHotzones = [];
+let candleChart = null; // instancia de Lightweight Charts, se reusa entre análisis
 
-document.getElementById('candleCanvas').addEventListener('click', e=>{
-  const canvas = document.getElementById('candleCanvas');
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  const scaleX = (canvas.width/dpr) / rect.width;
-  const scaleY = (canvas.height/dpr) / rect.height;
-  const clickX = (e.clientX - rect.left) * scaleX;
-  const clickY = (e.clientY - rect.top) * scaleY;
-  const hit = chartHotzones.slice().reverse().find(z => clickX>=z.x1 && clickX<=z.x2 && clickY>=z.y1 && clickY<=z.y2);
+function showChartExplain(label, explain){
   const box = document.getElementById('chartClickExplain');
-  if(hit){
-    box.style.display = 'block';
-    box.innerHTML = `<b>${hit.label}</b><br>${hit.explain}`;
-  } else {
-    box.style.display = 'none';
-  }
-});
+  box.style.display = 'block';
+  box.innerHTML = `<b>${label}</b><br>${explain}`;
+}
 function drawCandles(candles, series, support, resistance, structure, setup){
   chartHotzones = [];
-  const canvas = document.getElementById('candleCanvas');
-  const dpr = window.devicePixelRatio || 1;
-  const cssW = canvas.parentElement.clientWidth - 40;
-  const cssH = 340;
-  canvas.style.height = cssH+'px';
-  canvas.width = cssW*dpr; canvas.height = cssH*dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-  ctx.clearRect(0,0,cssW,cssH);
+  const container = document.getElementById('candleChartContainer');
+  container.innerHTML = ''; // limpiamos la instancia anterior (Lightweight Charts no se reusa entre monedas distintas fácil)
 
-  const volH = 60, mainH = cssH - volH - 10;
-  const n = candles.length;
-  const padL = 50, padR = 10;
-  const plotW = cssW - padL - padR;
-  const slot = plotW/n;
-  const candleW = Math.max(2, slot*0.6);
+  const isUp = 'rgba(16,185,129,'; // se completa con la opacidad al usar
+  candleChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth, height: 400,
+    layout: { background:{ color:'transparent' }, textColor:'#8b98a8', fontFamily:"'Manrope',sans-serif" },
+    grid: { vertLines:{ color:'#1a2029' }, horzLines:{ color:'#1a2029' } },
+    rightPriceScale: { borderColor:'#242c38' },
+    timeScale: { borderColor:'#242c38', timeVisible:true },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+  });
+
+  const candleSeries = candleChart.addCandlestickSeries({
+    upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444',
+  });
+  const candleData = candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c }));
+  candleSeries.setData(candleData);
+
+  const volSeries = candleChart.addHistogramSeries({ priceFormat:{type:'volume'}, priceScaleId:'', color:'#8b98a8' });
+  volSeries.priceScale().applyOptions({ scaleMargins:{ top:0.82, bottom:0 } });
+  volSeries.setData(candles.map((c,i)=>({ time: Math.floor(c.t/1000), value:c.v, color: c.c>=c.o?'rgba(16,185,129,0.5)':'rgba(239,68,68,0.5)' })));
+  candleSeries.priceScale().applyOptions({ scaleMargins:{ top:0.05, bottom:0.25 } });
+
+  // EMAs
+  function addEma(arr, color){
+    const line = candleChart.addLineSeries({ color, lineWidth:1.3, priceLineVisible:false, lastValueVisible:false });
+    line.setData(candles.map((c,i)=> arr[i]!=null ? { time: Math.floor(c.t/1000), value: arr[i] } : null).filter(Boolean));
+  }
+  addEma(series.e20, '#00d9ff'); addEma(series.e50, '#6ea8ff'); addEma(series.e200, '#9a7bd9');
+
+  // Legend de zonas/niveles (reemplaza el click sobre el canvas: más simple y funciona igual de bien en mobile)
+  const legend = [];
+  function addLevel(price, color, dashed, label, explain){
+    if(price==null || !isFinite(price)) return;
+    candleSeries.createPriceLine({ price, color, lineWidth:1.3, lineStyle: dashed?LightweightCharts.LineStyle.Dashed:LightweightCharts.LineStyle.Solid, axisLabelVisible:true, title:label });
+    legend.push({label, explain});
+  }
+  addLevel(support, 'rgba(16,185,129,0.7)', true, 'Soporte', `Soporte en $${fmt(support)}. Zona donde el precio reaccionó al alza históricamente.`);
+  addLevel(resistance, 'rgba(239,68,68,0.7)', true, 'Resistencia', `Resistencia en $${fmt(resistance)}. Zona donde el precio reaccionó a la baja históricamente.`);
 
   const fib = structure && structure.fib;
-  const extraVals = setup ? [setup.stop, setup.t1, setup.t2] : [];
-  const allVals = candles.flatMap(c=>[c.h,c.l]).concat([support,resistance]).concat(extraVals).filter(v=>v!=null && isFinite(v));
-  const maxV = Math.max(...allVals), minV = Math.min(...allVals);
-  const range = (maxV-minV) || 1;
-  const yOf = v => 10 + mainH - ((v-minV)/range)*mainH;
-
-  // grid + price labels
-  ctx.strokeStyle = '#1c2530'; ctx.fillStyle = '#7d8ea3'; ctx.font = '10px IBM Plex Mono'; ctx.lineWidth=1;
-  for(let i=0;i<=4;i++){
-    const v = minV + (range*i/4);
-    const y = yOf(v);
-    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(cssW-padR,y); ctx.stroke();
-    ctx.fillText(fmt(v), 2, y+3);
-  }
-
-  // support / resistance lines
-  if(support!=null){
-    ctx.strokeStyle = 'rgba(0,230,118,0.6)'; ctx.setLineDash([5,4]);
-    const y = yOf(support); ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(cssW-padR,y); ctx.stroke();
-    ctx.setLineDash([]);
-    chartHotzones.push({y1:y-6,y2:y+6,x1:padL,x2:cssW-padR,label:'Soporte',explain:`Soporte en $${fmt(support)}. Zona donde el precio reaccionó al alza históricamente.`});
-  }
-  if(resistance!=null){
-    ctx.strokeStyle = 'rgba(255,82,82,0.6)'; ctx.setLineDash([5,4]);
-    const y = yOf(resistance); ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(cssW-padR,y); ctx.stroke();
-    ctx.setLineDash([]);
-    chartHotzones.push({y1:y-6,y2:y+6,x1:padL,x2:cssW-padR,label:'Resistencia',explain:`Resistencia en $${fmt(resistance)}. Zona donde el precio reaccionó a la baja históricamente.`});
-  }
-
-  // Fibonacci (0.382 / 0.5 / 0.618, del último swing relevante)
   if(fib){
     [['l382','38.2%'],['l500','50%'],['l618','61.8%']].forEach(([key,label])=>{
       const v = fib[key]; if(v==null) return;
-      const y = yOf(v);
-      ctx.strokeStyle = 'rgba(154,123,217,0.55)'; ctx.setLineDash([2,3]);
-      ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(cssW-padR,y); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle='#9a7bd9'; ctx.font='9px IBM Plex Mono'; ctx.fillText(`Fib ${label}`, cssW-padR-55, y-2);
-      chartHotzones.push({y1:y-6,y2:y+6,x1:padL,x2:cssW-padR,label:`Fibonacci ${label}`,explain:`Nivel Fibonacci ${label} en $${fmt(v)}, calculado desde el último swing ${fib.dir==='bull'?'alcista':'bajista'}. Zona de retroceso probable antes de continuar la tendencia.`});
+      addLevel(v, '#9a7bd9', true, `Fib ${label}`, `Nivel Fibonacci ${label} en $${fmt(v)}, calculado desde el último swing ${fib.dir==='bull'?'alcista':'bajista'}. Zona de retroceso probable antes de continuar la tendencia.`);
     });
   }
-
-  // Entrada / Stop / Take Profits (si hay un setup activo)
   if(setup){
-    const lines = [
-      {v:setup.stop, color:'#ff5252', label:'Stop Loss', explain:`Stop Loss en $${fmt(setup.stop)} (2x ATR real). Si el precio cierra una vela más allá, el setup queda invalidado.`},
-      {v:(setup.entryLow+setup.entryHigh)/2, color:'#00d9ff', label:'Entrada', explain:`Zona de entrada ideal alrededor de $${fmt((setup.entryLow+setup.entryHigh)/2)}.`},
-      {v:setup.t1, color:'#00e6a8', label:'TP1', explain:`Take Profit 1 en $${fmt(setup.t1)} (1.5x el riesgo tomado).`},
-      {v:setup.t2, color:'#00e6a8', label:'TP2', explain:`Take Profit 2 en $${fmt(setup.t2)} (3x el riesgo tomado).`},
-    ];
-    lines.forEach(l=>{
-      if(l.v==null || !isFinite(l.v)) return;
-      const y = yOf(l.v);
-      if(y<0 || y>mainH+10) return;
-      ctx.strokeStyle = l.color; ctx.lineWidth=1.2; ctx.setLineDash(l.label==='Entrada'?[]:[6,3]);
-      ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(cssW-padR,y); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle = l.color; ctx.font='9px IBM Plex Mono'; ctx.fillText(l.label, padL+4, y-3);
-      chartHotzones.push({y1:y-7,y2:y+7,x1:padL,x2:cssW-padR,label:l.label,explain:l.explain});
-    });
+    addLevel((setup.entryLow+setup.entryHigh)/2, '#00d9ff', false, 'Entrada', `Zona de entrada ideal alrededor de $${fmt((setup.entryLow+setup.entryHigh)/2)}.`);
+    addLevel(setup.stop, '#ef4444', true, 'Stop Loss', `Stop Loss en $${fmt(setup.stop)} (2x ATR real). Si el precio cierra una vela más allá, el setup queda invalidado.`);
+    addLevel(setup.t1, '#10b981', true, 'TP1', `Take Profit 1 en $${fmt(setup.t1)} (1.5x el riesgo tomado).`);
+    addLevel(setup.t2, '#10b981', true, 'TP2', `Take Profit 2 en $${fmt(setup.t2)} (3x el riesgo tomado).`);
   }
-
-  // EMA lines
-  function drawLine(arr, color){
-    ctx.strokeStyle = color; ctx.lineWidth = 1.3; ctx.beginPath();
-    arr.forEach((v,i)=>{ if(v==null) return; const x = padL + i*slot + slot/2; const y = yOf(v);
-      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); });
-    ctx.stroke();
-  }
-  drawLine(series.e20, '#00d9ff');
-  drawLine(series.e50, '#6ea8ff');
-  drawLine(series.e200, '#9a7bd9');
-
-  // SMC overlays: order blocks + FVG zones (drawn under candles)
   if(structure){
-    const xOf = idx => padL + idx*slot;
-    if(structure.bullishOB && structure.bullishOB.bottom>=minV){
-      ctx.fillStyle = 'rgba(0,230,118,0.14)';
-      const y1=yOf(structure.bullishOB.top), y2=yOf(structure.bullishOB.bottom);
-      ctx.fillRect(xOf(structure.bullishOB.idx), y1, cssW-padR-xOf(structure.bullishOB.idx), y2-y1);
-      chartHotzones.push({y1:Math.min(y1,y2),y2:Math.max(y1,y2),x1:xOf(structure.bullishOB.idx),x2:cssW-padR,label:'Order Block alcista',explain:`Order Block alcista entre $${fmt(structure.bullishOB.bottom)} y $${fmt(structure.bullishOB.top)}: última vela bajista antes de un impulso alcista fuerte. Zona donde "smart money" habría acumulado.`});
+    if(structure.bullishOB){
+      addLevel(structure.bullishOB.top, 'rgba(16,185,129,0.5)', true, 'OB alcista (techo)', `Order Block alcista entre $${fmt(structure.bullishOB.bottom)} y $${fmt(structure.bullishOB.top)}: última vela bajista antes de un impulso alcista fuerte. Zona donde "smart money" habría acumulado.`);
+      addLevel(structure.bullishOB.bottom, 'rgba(16,185,129,0.5)', true, 'OB alcista (piso)', `Order Block alcista entre $${fmt(structure.bullishOB.bottom)} y $${fmt(structure.bullishOB.top)}.`);
     }
-    if(structure.bearishOB && structure.bearishOB.top<=maxV){
-      ctx.fillStyle = 'rgba(255,82,82,0.14)';
-      const y1=yOf(structure.bearishOB.top), y2=yOf(structure.bearishOB.bottom);
-      ctx.fillRect(xOf(structure.bearishOB.idx), y1, cssW-padR-xOf(structure.bearishOB.idx), y2-y1);
-      chartHotzones.push({y1:Math.min(y1,y2),y2:Math.max(y1,y2),x1:xOf(structure.bearishOB.idx),x2:cssW-padR,label:'Order Block bajista',explain:`Order Block bajista entre $${fmt(structure.bearishOB.bottom)} y $${fmt(structure.bearishOB.top)}: última vela alcista antes de un impulso bajista fuerte.`});
+    if(structure.bearishOB){
+      addLevel(structure.bearishOB.top, 'rgba(239,68,68,0.5)', true, 'OB bajista (techo)', `Order Block bajista entre $${fmt(structure.bearishOB.bottom)} y $${fmt(structure.bearishOB.top)}: última vela alcista antes de un impulso bajista fuerte.`);
+      addLevel(structure.bearishOB.bottom, 'rgba(239,68,68,0.5)', true, 'OB bajista (piso)', `Order Block bajista entre $${fmt(structure.bearishOB.bottom)} y $${fmt(structure.bearishOB.top)}.`);
     }
-    (structure.fvgs||[]).forEach(g=>{
-      ctx.fillStyle = g.type==='bull' ? 'rgba(0,230,118,0.10)' : 'rgba(255,82,82,0.10)';
-      const y1=yOf(g.top), y2=yOf(g.bottom);
-      ctx.fillRect(xOf(g.idx), y1, cssW-padR-xOf(g.idx), y2-y1);
-      chartHotzones.push({y1:Math.min(y1,y2),y2:Math.max(y1,y2),x1:xOf(g.idx),x2:cssW-padR,label:`FVG ${g.type==='bull'?'alcista':'bajista'}`,explain:`Fair Value Gap ${g.type==='bull'?'alcista':'bajista'} entre $${fmt(g.bottom)} y $${fmt(g.top)}: desequilibrio de órdenes sin llenar. El precio suele volver a visitar esta zona antes de continuar.`});
+    (structure.fvgs||[]).slice(0,2).forEach(g=>{
+      const color = g.type==='bull' ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)';
+      addLevel(g.top, color, true, `FVG ${g.type==='bull'?'alcista':'bajista'} (techo)`, `Fair Value Gap ${g.type==='bull'?'alcista':'bajista'} entre $${fmt(g.bottom)} y $${fmt(g.top)}: desequilibrio de órdenes sin llenar. El precio suele volver a visitar esta zona antes de continuar.`);
+      addLevel(g.bottom, color, true, `FVG ${g.type==='bull'?'alcista':'bajista'} (piso)`, `Fair Value Gap entre $${fmt(g.bottom)} y $${fmt(g.top)}.`);
     });
+
+    // swing labels (HH/HL/LH/LL) como marcadores sobre las velas
+    if(structure.pivots){
+      const markers = structure.pivots.slice(-14).map(p=>({
+        time: Math.floor(candles[p.i]?.t/1000),
+        position: p.type==='high' ? 'aboveBar' : 'belowBar',
+        color: (p.label==='HH'||p.label==='HL') ? '#10b981' : (p.label==='LH'||p.label==='LL') ? '#ef4444' : '#8b98a8',
+        shape: p.type==='high' ? 'arrowDown' : 'arrowUp',
+        text: p.label,
+      })).filter(m=>m.time);
+      candleSeries.setMarkers(markers);
+    }
   }
 
-  // candles
-  candles.forEach((c,i)=>{
-    const x = padL + i*slot + slot/2;
-    const up = c.c >= c.o;
-    ctx.strokeStyle = up ? '#00e6a8' : '#ff5252';
-    ctx.fillStyle = up ? '#00e6a8' : '#ff5252';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, yOf(c.h)); ctx.lineTo(x, yOf(c.l)); ctx.stroke();
-    const yO = yOf(c.o), yC = yOf(c.c);
-    const top = Math.min(yO,yC), h = Math.max(1, Math.abs(yC-yO));
-    ctx.fillRect(x-candleW/2, top, candleW, h);
-  });
+  candleChart.timeScale().fitContent();
 
-  // swing structure labels
-  if(structure && structure.pivots){
-    ctx.font = '10px IBM Plex Mono'; ctx.textAlign='center';
-    structure.pivots.slice(-14).forEach(p=>{
-      const x = padL + p.i*slot + slot/2;
-      const y = p.type==='high' ? yOf(p.price)-8 : yOf(p.price)+14;
-      ctx.fillStyle = p.label.includes('H')&&!p.label.includes('L') ? '#00e6a8' : (p.label==='LH'||p.label==='LL') ? '#ff5252' : '#7d8ea3';
-      if(p.label==='HL') ctx.fillStyle='#00e6a8';
-      if(p.label==='LH') ctx.fillStyle='#ff5252';
-      ctx.fillText(p.label, x, y);
-    });
-    ctx.textAlign='left';
-  }
-
-  // volume
-  const maxVol = Math.max(...candles.map(c=>c.v));
-  candles.forEach((c,i)=>{
-    const x = padL + i*slot + slot/2;
-    const up = c.c >= c.o;
-    const h = maxVol? (c.v/maxVol)*volH : 0;
-    ctx.fillStyle = up ? 'rgba(63,193,176,0.5)' : 'rgba(232,83,107,0.5)';
-    ctx.fillRect(x-candleW/2, cssH - h, candleW, h);
+  document.getElementById('chartLegendList').innerHTML = legend.map((l,i)=>
+    `<button class="legend-chip" data-idx="${i}">${l.label}</button>`
+  ).join('');
+  document.querySelectorAll('#chartLegendList .legend-chip').forEach((btn,i)=>{
+    btn.addEventListener('click', ()=> showChartExplain(legend[i].label, legend[i].explain));
   });
+  window.addEventListener('resize', ()=>{ if(candleChart) candleChart.applyOptions({ width: container.clientWidth }); });
 }
 
 function renderResults(data, result, setup){
