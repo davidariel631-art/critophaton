@@ -38,6 +38,63 @@ const KILL_SWITCH_DRAWDOWN = 0.30; // si el drawdown supera esto, se pausa la ap
 const WORK_HOUR_START = 4;
 const WORK_HOUR_END = 15;
 const RISK_PCT = 0.01;
+
+// ---- Análisis de Wall Street (apertura/cierre) — solo informativo, NUNCA abre operaciones ----
+function isUSDST(date){
+  const year = date.getUTCFullYear();
+  const marchFirst = new Date(Date.UTC(year,2,1));
+  const secondSunday = 1 + ((7 - marchFirst.getUTCDay()) % 7) + 7;
+  const dstStart = new Date(Date.UTC(year,2,secondSunday,7));
+  const novFirst = new Date(Date.UTC(year,10,1));
+  const firstSunday = 1 + ((7 - novFirst.getUTCDay()) % 7);
+  const dstEnd = new Date(Date.UTC(year,10,firstSunday,6));
+  return date>=dstStart && date<dstEnd;
+}
+function getWallStreetPulseType(now){
+  const dst = isUSDST(now);
+  const hourUTC = now.getUTCHours();
+  const openHour = dst ? 14 : 15;  // ~9:30am ET (primer hora completa después de la apertura real)
+  const closeHour = dst ? 20 : 21; // 4:00pm ET exacto
+  if(hourUTC===openHour) return 'open';
+  if(hourUTC===closeHour) return 'close';
+  return null;
+}
+async function runMarketPulse(state, capitalFlow){
+  const now = new Date();
+  const type = getWallStreetPulseType(now);
+  if(!type) return;
+  const todayKey2 = todayKey();
+  const already = state.lastMarketPulse && state.lastMarketPulse.date===todayKey2 && state.lastMarketPulse.type===type;
+  if(already) return;
+
+  try{
+    const results = {};
+    for(const tf of ['1h','4h','1d']){
+      const data = await fetchTokenData('BTC', tf);
+      const macro = tf==='1d' ? null : await fetchMacroTrend('BTC').catch(()=>null);
+      const oiTrendData = await fetchOpenInterestTrend('BTC', tf).catch(()=>null);
+      const fundingTrendData = await fetchFundingTrend('BTC').catch(()=>null);
+      const mc = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
+      results[tf] = computeScore(data, macro, [], state.memory, mc, null);
+    }
+    const votes = Object.values(results).map(r=>r.recommendation);
+    const longCount = votes.filter(v=>v==='LONG').length, shortCount = votes.filter(v=>v==='SHORT').length;
+    const lean = longCount>shortCount ? '🟢 Sesgo alcista' : shortCount>longCount ? '🔴 Sesgo bajista' : '⚪ Sin sesgo claro (mixto)';
+
+    const label = type==='open' ? '🔔 Apertura de Wall Street' : '🔕 Cierre de Wall Street';
+    const contexto = type==='open' ? 'Así arranca BTC con Wall Street recién abierta:' : 'Así queda BTC de cara al día de mañana, con Wall Street ya cerrada:';
+    sendPromises.push(sendTelegram(
+      `${label} — Análisis de BTC (solo informativo, no abre operaciones)\n\n${contexto}\n\n` +
+      `1h: ${results['1h'].recommendation} (${Math.max(results['1h'].longScore,results['1h'].shortScore).toFixed(1)}/10)\n` +
+      `4h: ${results['4h'].recommendation} (${Math.max(results['4h'].longScore,results['4h'].shortScore).toFixed(1)}/10)\n` +
+      `1D: ${results['1d'].recommendation} (${Math.max(results['1d'].longScore,results['1d'].shortScore).toFixed(1)}/10)\n\n` +
+      `${lean}\n\n` +
+      `⚠️ Esto es solo un pulso informativo del mercado, no una señal de entrada.`
+    ));
+    state.lastMarketPulse = { date: todayKey2, type };
+  }catch(e){ console.error('Error en el análisis de Wall Street:', e.message); }
+}
+
 const THESIS_EXPIRY_HOURS = 18; // si no confirma entrada en este tiempo, se archiva como expirada
 // (el breakeven ahora se maneja al tomar el 50% en TP1, ver manageActiveTheses)
 const MAX_DAYS_OPEN_LIMIT = 30; // cierre forzado si una tesis queda abierta más de este tiempo sin resolver
@@ -590,6 +647,9 @@ async function main(){
   const capitalFlow = await fetchCapitalFlowContext();
   const btcReference4h = await fetchBTCReference('4h').catch(()=>null);
   console.log('Capital flow:', capitalFlow, '| BTC 4h:', btcReference4h);
+
+  console.log('--- Fase 0.5: chequeando si es apertura/cierre de Wall Street (análisis informativo de BTC) ---');
+  await runMarketPulse(state, capitalFlow);
 
   console.log('--- Fase 1: gestionando tesis ACTIVAS (TP/SL/breakeven) ---');
   await manageActiveTheses(state);
