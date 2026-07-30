@@ -106,6 +106,18 @@ async function fetchFundingTrend(symbolRaw){
   }catch(e){ return null; }
 }
 
+// Ratio Long/Short de los "top traders" (posiciones grandes) — dato real de Binance Futures, gratis, sin key.
+async function fetchTopTraderRatio(symbolRaw, period='1h'){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+  try{
+    const rows = await fetchJSON(`${FUTURES}/futures/data/topLongShortPositionRatio?symbol=${pair}&period=${period}&limit=1`);
+    if(!Array.isArray(rows) || !rows.length) return null;
+    const r = rows[0];
+    return { ratio: parseFloat(r.longShortRatio), longPct: parseFloat(r.longAccount)*100, shortPct: parseFloat(r.shortAccount)*100 };
+  }catch(e){ return null; }
+}
+
 // Las 27 combinaciones (OI x Precio x Funding), fieles a la matriz que compartiste.
 // signal: -1..1 (dirección y fuerza). flag: true = "algo grande puede venir" (alta incertidumbre, no es ni claramente alcista ni bajista).
 const MARKET_CONTEXT_TABLE = {
@@ -1318,7 +1330,7 @@ export {
   computeGodPerformance, computeFilterEffectiveness,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
-  fetchOpenInterestTrend, fetchFundingTrend, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
+  fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
