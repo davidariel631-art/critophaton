@@ -2,26 +2,41 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FORTRESS // Terminal de Señales</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>KRAX CAPITAL</title>
+<meta name="description" content="KRAX Capital — análisis técnico, Smart Money y trading automatizado">
+
+<!-- PWA: hace que la app sea instalable de verdad en el celular -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#05070a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="KRAX">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#101214; --panel:#171b20; --panel2:#1e2227; --border:#2a3038;
-    --text:#f2f5f7; --sub:#9aa5b1; --amber:#f2a93c; --rose:#ff5252; --teal:#00e676;
-    --mono:'IBM Plex Mono', monospace; --display:'Space Grotesk', sans-serif;
+    --bg:#05070a; --panel:#0e1218; --panel2:#141a22; --border:#212a35;
+    --text:#eef3f8; --sub:#8b98a8; --amber:#00d9ff; --rose:#ff4d6d; --teal:#00e6a8;
+    --accent2:#7c5cff;
+    --mono:'JetBrains Mono', monospace; --display:'Sora', sans-serif;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);}
-  .wrap{max-width:1220px;margin:0 auto;padding:28px 20px 80px;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+  .wrap{max-width:1220px;margin:0 auto;padding:28px 20px 90px;}
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:14px;}
   .auth-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
   .auth-row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
   .auth-input{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-family:var(--mono);font-size:12px;width:140px;}
   .auth-error{color:var(--rose);font-size:11px;min-height:14px;}
   .brand{display:flex;align-items:center;gap:12px;}
-  .brand .mark{width:38px;height:38px;border-radius:8px;background:linear-gradient(135deg,var(--amber),#c9791f);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;color:#0d1117;font-size:18px;}
+  .brand .mark{width:44px;height:44px;border-radius:11px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 1px var(--border), 0 4px 16px rgba(0,217,255,0.15);}
+  .brand .mark img{width:100%;height:100%;object-fit:cover;}
   .brand h1{font-family:var(--display);font-size:19px;margin:0;letter-spacing:0.3px;}
   .brand small{color:var(--sub);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;}
   .searchrow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
@@ -57,7 +72,7 @@
     .watch-table td[data-label]::before{content:attr(data-label);color:var(--sub);font-size:10.5px;text-transform:uppercase;}
     .tf-btn{padding:10px 14px;font-size:13px;}
   }
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,0.28);animation:fadeIn .35s ease;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:20px;box-shadow:0 8px 24px rgba(0,0,0,0.28);animation:fadeIn .35s ease;}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
   .card h2{font-family:var(--display);font-size:14px;text-transform:uppercase;letter-spacing:1.2px;color:var(--sub);margin:0 0 14px;}
   .score-hero{display:flex;align-items:center;gap:20px;}
@@ -124,9 +139,9 @@
   .ticker .t-v{font-weight:700;font-size:13px;}
 
   /* ---- tabs ---- */
-  .tabnav{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--border);}
-  .tabnav button{background:transparent;border:none;color:var(--sub);padding:10px 16px;font-family:var(--display);font-weight:600;font-size:13px;cursor:pointer;border-bottom:2px solid transparent;}
-  .tabnav button.active{color:var(--amber);border-bottom-color:var(--amber);}
+  .tabnav{display:flex;gap:6px;margin-bottom:18px;padding:6px;background:var(--panel);border:1px solid var(--border);border-radius:16px;position:sticky;top:8px;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .tabnav button{background:transparent;border:none;color:var(--sub);padding:10px 16px;font-family:var(--display);font-weight:600;font-size:13px;cursor:pointer;border-radius:11px;white-space:nowrap;transition:background .15s,color .15s;}
+  .tabnav button.active{color:#00131a;background:linear-gradient(135deg,var(--amber),var(--accent2));}
   .tabpanel{display:none;}
   .tabpanel.active{display:block;}
 
@@ -185,8 +200,8 @@
 <div class="wrap">
   <header>
     <div class="brand">
-      <div class="mark">F</div>
-      <div><h1>Fortress Terminal</h1><small>Análisis técnico + derivados · automatizado</small></div>
+      <div class="mark"><img src="icons/icon-192.png" alt="KRAX Capital"></div>
+      <div><h1>KRAX CAPITAL</h1><small>Análisis técnico + Smart Money · automatizado</small></div>
     </div>
     <div id="authBox" class="auth-box">
       <div id="authLoggedOut">
@@ -285,7 +300,7 @@
           <div class="mini-ring">
             <svg viewBox="0 0 100 100">
               <circle cx="50" cy="50" r="42" fill="none" stroke="#1c2530" stroke-width="10"/>
-              <circle id="ringLongFg" cx="50" cy="50" r="42" fill="none" stroke="#00e676" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
+              <circle id="ringLongFg" cx="50" cy="50" r="42" fill="none" stroke="#00e6a8" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"/>
             </svg>
             <div class="mr-num"><b id="longScoreNum">-</b><span>/10</span></div>
           </div>
@@ -362,17 +377,17 @@
       <div class="card">
         <h2>Gráfico de velas — soporte / resistencia</h2>
         <div class="chart-legend">
-          <span><span class="dot" style="background:#00e676"></span>Vela alcista</span>
+          <span><span class="dot" style="background:#00e6a8"></span>Vela alcista</span>
           <span><span class="dot" style="background:#ff5252"></span>Vela bajista</span>
-          <span><span class="dot" style="background:#f2a93c"></span>EMA20</span>
+          <span><span class="dot" style="background:#00d9ff"></span>EMA20</span>
           <span><span class="dot" style="background:#6ea8ff"></span>EMA50</span>
           <span><span class="dot" style="background:#9a7bd9"></span>EMA200</span>
-          <span><span class="dot" style="background:#00e676;opacity:.5"></span>Soporte</span>
+          <span><span class="dot" style="background:#00e6a8;opacity:.5"></span>Soporte</span>
           <span><span class="dot" style="background:#ff5252;opacity:.5"></span>Resistencia</span>
-          <span><span class="dot" style="background:#00e676;opacity:.25"></span>Order Block / FVG alcista</span>
+          <span><span class="dot" style="background:#00e6a8;opacity:.25"></span>Order Block / FVG alcista</span>
           <span><span class="dot" style="background:#ff5252;opacity:.25"></span>Order Block / FVG bajista</span>
           <span><span class="dot" style="background:#9a7bd9"></span>Fibonacci</span>
-          <span><span class="dot" style="background:#f2a93c"></span>Entrada / TP / SL</span>
+          <span><span class="dot" style="background:#00d9ff"></span>Entrada / TP / SL</span>
         </div>
         <canvas id="candleCanvas" height="360"></canvas>
         <div class="hint" style="margin-top:6px;margin-bottom:0;">💡 Tocá cualquier línea o zona del gráfico (soporte, resistencia, Order Block, FVG, Fibonacci, entrada/stop/TP) para ver por qué la IA la marcó.</div>
@@ -765,9 +780,9 @@ function drawCandles(candles, series, support, resistance, structure, setup){
   if(setup){
     const lines = [
       {v:setup.stop, color:'#ff5252', label:'Stop Loss', explain:`Stop Loss en $${fmt(setup.stop)} (2x ATR real). Si el precio cierra una vela más allá, el setup queda invalidado.`},
-      {v:(setup.entryLow+setup.entryHigh)/2, color:'#f2a93c', label:'Entrada', explain:`Zona de entrada ideal alrededor de $${fmt((setup.entryLow+setup.entryHigh)/2)}.`},
-      {v:setup.t1, color:'#00e676', label:'TP1', explain:`Take Profit 1 en $${fmt(setup.t1)} (1.5x el riesgo tomado).`},
-      {v:setup.t2, color:'#00e676', label:'TP2', explain:`Take Profit 2 en $${fmt(setup.t2)} (3x el riesgo tomado).`},
+      {v:(setup.entryLow+setup.entryHigh)/2, color:'#00d9ff', label:'Entrada', explain:`Zona de entrada ideal alrededor de $${fmt((setup.entryLow+setup.entryHigh)/2)}.`},
+      {v:setup.t1, color:'#00e6a8', label:'TP1', explain:`Take Profit 1 en $${fmt(setup.t1)} (1.5x el riesgo tomado).`},
+      {v:setup.t2, color:'#00e6a8', label:'TP2', explain:`Take Profit 2 en $${fmt(setup.t2)} (3x el riesgo tomado).`},
     ];
     lines.forEach(l=>{
       if(l.v==null || !isFinite(l.v)) return;
@@ -787,7 +802,7 @@ function drawCandles(candles, series, support, resistance, structure, setup){
       i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); });
     ctx.stroke();
   }
-  drawLine(series.e20, '#f2a93c');
+  drawLine(series.e20, '#00d9ff');
   drawLine(series.e50, '#6ea8ff');
   drawLine(series.e200, '#9a7bd9');
 
@@ -818,8 +833,8 @@ function drawCandles(candles, series, support, resistance, structure, setup){
   candles.forEach((c,i)=>{
     const x = padL + i*slot + slot/2;
     const up = c.c >= c.o;
-    ctx.strokeStyle = up ? '#00e676' : '#ff5252';
-    ctx.fillStyle = up ? '#00e676' : '#ff5252';
+    ctx.strokeStyle = up ? '#00e6a8' : '#ff5252';
+    ctx.fillStyle = up ? '#00e6a8' : '#ff5252';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x, yOf(c.h)); ctx.lineTo(x, yOf(c.l)); ctx.stroke();
     const yO = yOf(c.o), yC = yOf(c.c);
@@ -833,8 +848,8 @@ function drawCandles(candles, series, support, resistance, structure, setup){
     structure.pivots.slice(-14).forEach(p=>{
       const x = padL + p.i*slot + slot/2;
       const y = p.type==='high' ? yOf(p.price)-8 : yOf(p.price)+14;
-      ctx.fillStyle = p.label.includes('H')&&!p.label.includes('L') ? '#00e676' : (p.label==='LH'||p.label==='LL') ? '#ff5252' : '#7d8ea3';
-      if(p.label==='HL') ctx.fillStyle='#00e676';
+      ctx.fillStyle = p.label.includes('H')&&!p.label.includes('L') ? '#00e6a8' : (p.label==='LH'||p.label==='LL') ? '#ff5252' : '#7d8ea3';
+      if(p.label==='HL') ctx.fillStyle='#00e6a8';
       if(p.label==='LH') ctx.fillStyle='#ff5252';
       ctx.fillText(p.label, x, y);
     });
@@ -1105,7 +1120,7 @@ function renderWatchlist(){
     return `<tr class="wrow" data-q="${w.query}">
       <td data-label="Token">${w.data.displayName}</td>
       <td data-label="Precio">$${fmt(w.data.price)}</td>
-      <td data-label="24h" style="color:${w.data.change24h>=0?'#00e676':'#ff5252'}">${fmtPct(w.data.change24h||0)}</td>
+      <td data-label="24h" style="color:${w.data.change24h>=0?'#00e6a8':'#ff5252'}">${fmtPct(w.data.change24h||0)}</td>
       <td data-label="Score">${w.result.score10.toFixed(1)}/10</td>
       <td data-label="Sesgo"><span class="badge ${badgeClass}">${b}</span></td>
       <td><span class="rm" data-q="${w.query}" data-rm="1">✕</span></td>
@@ -1174,9 +1189,9 @@ document.getElementById('shareImageBtn').addEventListener('click', async ()=>{
   bgGrad.addColorStop(0,'#101214'); bgGrad.addColorStop(1,'#0a0c0e');
   ctx.fillStyle = bgGrad; ctx.fillRect(0,0,W,H);
 
-  const recColor = result.recommendation==='LONG' ? '#00e676' : result.recommendation==='SHORT' ? '#ff5252' : '#f2a93c';
+  const recColor = result.recommendation==='LONG' ? '#00e6a8' : result.recommendation==='SHORT' ? '#ff5252' : '#00d9ff';
 
-  ctx.fillStyle='#f2a93c'; ctx.font='bold 26px Arial'; ctx.fillText('🏛️ FORTRESS TERMINAL', 40, 60);
+  ctx.fillStyle='#00d9ff'; ctx.font='bold 26px Arial'; ctx.fillText('⚡ KRAX CAPITAL', 40, 60);
   ctx.fillStyle='#7d8ea3'; ctx.font='14px Arial'; ctx.fillText('Análisis técnico + Smart Money · automatizado', 40, 85);
 
   ctx.fillStyle='#fff'; ctx.font='bold 48px Arial'; ctx.fillText(`$${data.displayName}`, 40, 160);
@@ -1185,19 +1200,19 @@ document.getElementById('shareImageBtn').addEventListener('click', async ()=>{
   ctx.fillStyle='#7d8ea3'; ctx.font='16px Arial'; ctx.fillText(`Precio: $${fmt(data.price)} · Temporalidad: ${currentTF}`, 40, 235);
 
   ctx.strokeStyle='#232a33'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(40,265); ctx.lineTo(W-40,265); ctx.stroke();
-  ctx.fillStyle='#00e676'; ctx.font='bold 20px Arial'; ctx.fillText('LONG SCORE', 40, 305);
+  ctx.fillStyle='#00e6a8'; ctx.font='bold 20px Arial'; ctx.fillText('LONG SCORE', 40, 305);
   ctx.font='bold 44px Arial'; ctx.fillText(`${result.longScore.toFixed(1)}`, 40, 350);
   ctx.fillStyle='#ff5252'; ctx.font='bold 20px Arial'; ctx.fillText('SHORT SCORE', 420, 305);
   ctx.font='bold 44px Arial'; ctx.fillText(`${result.shortScore.toFixed(1)}`, 420, 350);
-  ctx.fillStyle='#f2a93c'; ctx.font='16px Arial'; ctx.fillText(`Confianza: ${result.confidence}%  ·  Calidad: ${'★'.repeat(result.stars)}${'☆'.repeat(5-result.stars)}`, 40, 390);
+  ctx.fillStyle='#00d9ff'; ctx.font='16px Arial'; ctx.fillText(`Confianza: ${result.confidence}%  ·  Calidad: ${'★'.repeat(result.stars)}${'☆'.repeat(5-result.stars)}`, 40, 390);
 
   ctx.strokeStyle='#232a33'; ctx.beginPath(); ctx.moveTo(40,420); ctx.lineTo(W-40,420); ctx.stroke();
   ctx.fillStyle='#9aa5b1'; ctx.font='bold 18px Arial'; ctx.fillText('SETUP SUGERIDO', 40, 455);
   const rows = [
     ['Entrada', `$${fmt(Math.min(setup.entryLow,setup.entryHigh))} – $${fmt(Math.max(setup.entryLow,setup.entryHigh))}`, '#fff'],
     ['Stop Loss', `$${fmt(setup.stop)}`, '#ff5252'],
-    ['Target 1', `$${fmt(setup.t1)}`, '#00e676'],
-    ['Target 2', `$${fmt(setup.t2)}`, '#00e676'],
+    ['Target 1', `$${fmt(setup.t1)}`, '#00e6a8'],
+    ['Target 2', `$${fmt(setup.t2)}`, '#00e6a8'],
     ['Apalancamiento sugerido', setup.leverage, '#fff'],
   ];
   let y=495;
@@ -1214,7 +1229,7 @@ document.getElementById('shareImageBtn').addEventListener('click', async ()=>{
   const razones = result.committee.filter(c=>c.vote===result.recommendation).slice(0,5);
   ctx.font='15px Arial';
   razones.forEach(r=>{
-    ctx.fillStyle='#00e676'; ctx.fillText('✓', 40, y);
+    ctx.fillStyle='#00e6a8'; ctx.fillText('✓', 40, y);
     ctx.fillStyle='#dbe4ec'; ctx.fillText(r.name.replace(/^[^\s]+\s/,''), 65, y);
     y+=28;
   });
@@ -1226,7 +1241,7 @@ document.getElementById('shareImageBtn').addEventListener('click', async ()=>{
   canvas.toBlob(async (blob)=>{
     const file = new File([blob], `${data.displayName}_${result.recommendation}.png`, {type:'image/png'});
     if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
-      try{ await navigator.share({files:[file], title:`${data.displayName} ${result.recommendation}`, text:'Análisis de Fortress Terminal'}); return; }catch(e){ /* si cancela el share, cae a descarga */ }
+      try{ await navigator.share({files:[file], title:`${data.displayName} ${result.recommendation}`, text:'Análisis de KRAX Capital'}); return; }catch(e){ /* si cancela el share, cae a descarga */ }
     }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1546,7 +1561,7 @@ async function pollAlerts(){
       if(triggered){
         a.fired = true;
         if('Notification' in window && Notification.permission==='granted'){
-          new Notification(`Fortress Alert — ${a.token}`, {body:`${a.type} ${a.value} · valor actual: ${fmt(current)}`});
+          new Notification(`KRAX Alert — ${a.token}`, {body:`${a.type} ${a.value} · valor actual: ${fmt(current)}`});
         } else {
           setStatus(`⚠️ Alerta disparada: ${a.token} ${a.type} ${a.value}`);
         }
@@ -1915,6 +1930,15 @@ document.getElementById('cmpBtn').addEventListener('click', async ()=>{
   resultBox.innerHTML = cardA + cardB;
   status2.textContent = 'Listo.';
 });
+</script>
+
+<script>
+  // Registro del service worker: sin esto, la mayoría de los navegadores no ofrecen "Instalar app".
+  if('serviceWorker' in navigator){
+    window.addEventListener('load', ()=>{
+      navigator.serviceWorker.register('sw.js').catch(()=>{ /* si falla, la app sigue funcionando normal, solo sin instalación */ });
+    });
+  }
 </script>
 </body>
 </html>
