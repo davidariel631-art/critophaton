@@ -1909,7 +1909,7 @@ async function loadTheHaton(){
   const worst = trades.length ? trades.reduce((a,b)=>b.pnl<a.pnl?b:a) : null;
   document.getElementById('thStreak').innerHTML = trades.length ? `
     <div class="indi-line"><div class="il-k">Racha actual</div><div class="il-v ${streakType==='win'?'up':'down'}">${streak} ${streakType==='win'?'ganadoras':'perdedoras'}</div></div>
-    <div class="indi-line"><div class="il-k">Mejor</div><div class="il-v up">${best.symbol} +${best.pnl.toFixed(2)}</div></div>
+    <div class="indi-line"><div class="il-k">Mejor</div><div class="il-v ${best.pnl>=0?'up':'down'}">${best.symbol} ${best.pnl>=0?'+':''}${best.pnl.toFixed(2)}</div></div>
     <div class="indi-line"><div class="il-k">Peor</div><div class="il-v down">${worst.symbol} ${worst.pnl.toFixed(2)}</div></div>
   ` : '<div class="subrow">Sin operaciones cerradas todavía.</div>';
 
