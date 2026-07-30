@@ -43,16 +43,19 @@
     .indi-line, .setup-row, .hist-row{padding:10px 0 !important;}
     button, .tf-btn, .backtest-btn{min-height:42px;}
   }
-  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:14px;}
-  .avatar-wrap{position:relative;}
-  .avatar-btn{width:42px;height:42px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:nowrap;gap:10px;}
+  .brand{display:flex;align-items:center;gap:12px;min-width:0;flex:1;overflow:hidden;}
+  .brand h1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .brand small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%;}
+  .avatar-wrap{position:relative;flex-shrink:0;}
+  .avatar-btn{width:42px;height:42px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background-size:cover;background-position:center;overflow:hidden;}
+  .avatar-btn.has-photo{font-size:0;}
   .avatar-btn.logged-in{background:linear-gradient(135deg,var(--amber),var(--accent2));}
-  .avatar-dropdown{display:none;position:absolute;top:52px;right:0;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;min-width:260px;box-shadow:0 12px 32px rgba(0,0,0,0.45);z-index:40;}
+  .avatar-dropdown{display:none;position:fixed;top:64px;right:14px;left:auto;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;width:min(260px, calc(100vw - 28px));box-shadow:0 12px 32px rgba(0,0,0,0.45);z-index:60;}
   .avatar-dropdown.open{display:block;}
   .auth-row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
   .auth-input{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-family:var(--mono);font-size:12px;width:140px;}
   .auth-error{color:var(--rose);font-size:11px;min-height:14px;}
-  .brand{display:flex;align-items:center;gap:12px;}
   .brand .mark{width:46px;height:46px;border-radius:13px;overflow:hidden;background:#000;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:2px;background:linear-gradient(135deg,var(--amber),var(--accent2));box-shadow:0 4px 20px rgba(0,217,255,0.35);}
   .brand .mark img{width:100%;height:100%;object-fit:cover;border-radius:10px;background:#000;}
   .brand h1{font-family:var(--display);font-size:19px;margin:0;letter-spacing:0.3px;}
@@ -251,7 +254,7 @@
   <header>
     <div class="brand">
       <div class="mark"><img src="icons/icon-192.png" alt="KRAX Capital"></div>
-      <div><h1>KRAX CAPITAL</h1><small>Análisis técnico + Smart Money</small> <span class="pill live" style="margin-left:6px;">En vivo</span></div>
+      <div style="min-width:0;overflow:hidden;"><h1>KRAX CAPITAL</h1><small>Análisis técnico + Smart Money</small> <span class="pill live" style="margin-left:6px;">En vivo</span></div>
     </div>
     <div class="avatar-wrap" id="avatarWrap">
       <button class="avatar-btn" id="avatarBtn">👤</button>
@@ -269,7 +272,14 @@
           <div id="authError" class="auth-error"></div>
         </div>
         <div id="authLoggedIn" style="display:none;">
-          <div class="subrow" id="authUserEmail" style="margin-bottom:10px;"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <button class="avatar-btn" id="avatarPreviewBtn" style="width:48px;height:48px;font-size:20px;cursor:pointer;" title="Tocá para cambiar tu foto">👤</button>
+            <div>
+              <div class="subrow" id="authUserEmail" style="margin:0;"></div>
+              <button class="legend-chip" id="changePhotoBtn" style="margin-top:4px;">📷 Cambiar foto</button>
+            </div>
+          </div>
+          <input type="file" id="photoFileInput" accept="image/*" style="display:none;">
           <button class="backtest-btn" id="authSignOut" style="width:100%;">Cerrar sesión</button>
         </div>
       </div>
@@ -277,15 +287,15 @@
   </header>
 
   <div class="ticker" id="tickerBar">
-    <div class="t-item"><div class="t-k">Fear & Greed</div><div class="t-v" id="tFearGreed">cargando…</div></div>
-    <div class="t-item"><div class="t-k">BTC Dominance</div><div class="t-v" id="tBtcDom">—</div></div>
-    <div class="t-item"><div class="t-k">ETH Dominance</div><div class="t-v" id="tEthDom">—</div></div>
-    <div class="t-item"><div class="t-k">USDT Dominance</div><div class="t-v" id="tUsdtDom">—</div></div>
-    <div class="t-item"><div class="t-k">TOTAL</div><div class="t-v" id="tTotal">—</div></div>
-    <div class="t-item"><div class="t-k">TOTAL2 (sin BTC)</div><div class="t-v" id="tTotal2">—</div></div>
-    <div class="t-item"><div class="t-k">TOTAL3 (sin BTC/ETH)</div><div class="t-v" id="tTotal3">—</div></div>
-    <div class="t-item"><div class="t-k">Volumen 24h</div><div class="t-v" id="tVol">—</div></div>
-    <div class="t-item"><div class="t-k">USD Strength (proxy)*</div><div class="t-v" id="tUsdStrength">—</div></div>
+    <div class="t-item"><div class="t-k">😨 Fear & Greed</div><div class="t-v" id="tFearGreed">cargando…</div></div>
+    <div class="t-item"><div class="t-k">₿ BTC Dominance</div><div class="t-v" id="tBtcDom">—</div></div>
+    <div class="t-item"><div class="t-k">Ξ ETH Dominance</div><div class="t-v" id="tEthDom">—</div></div>
+    <div class="t-item"><div class="t-k">💵 USDT Dominance</div><div class="t-v" id="tUsdtDom">—</div></div>
+    <div class="t-item"><div class="t-k">🌐 TOTAL</div><div class="t-v" id="tTotal">—</div></div>
+    <div class="t-item"><div class="t-k">🌐 TOTAL2 (sin BTC)</div><div class="t-v" id="tTotal2">—</div></div>
+    <div class="t-item"><div class="t-k">🌐 TOTAL3 (sin BTC/ETH)</div><div class="t-v" id="tTotal3">—</div></div>
+    <div class="t-item"><div class="t-k">📊 Volumen 24h</div><div class="t-v" id="tVol">—</div></div>
+    <div class="t-item"><div class="t-k">💱 USD Strength (proxy)*</div><div class="t-v" id="tUsdStrength">—</div></div>
     <div class="t-item"><div class="t-k">S&P 500 (SPY)</div><div class="t-v" id="tSp500">—</div></div>
     <div class="t-item"><div class="t-k">Nasdaq (QQQ)</div><div class="t-v" id="tNasdaq">—</div></div>
     <div class="t-item"><div class="t-k">Dow (DIA)</div><div class="t-v" id="tDow">—</div></div>
@@ -647,7 +657,7 @@
     signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, signOut
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
   import {
-    getFirestore, collection, addDoc, query, orderBy, limit, getDocs
+    getFirestore, collection, addDoc, query, orderBy, limit, getDocs, doc, setDoc, getDoc
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -685,6 +695,16 @@
       if(!auth.currentUser) return false;
       await addDoc(collection(db, 'users', auth.currentUser.uid, 'watchlist_snapshots'), {list, ts:Date.now()});
       return true;
+    },
+    async savePhoto(dataUrl){
+      if(!auth.currentUser) return false;
+      await setDoc(doc(db, 'users', auth.currentUser.uid), {photoDataUrl: dataUrl}, {merge:true});
+      return true;
+    },
+    async loadPhoto(){
+      if(!auth.currentUser) return null;
+      const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      return snap.exists() ? (snap.data().photoDataUrl || null) : null;
     }
   };
 
@@ -1343,6 +1363,54 @@ document.addEventListener('click', (e)=>{
   if(!wrap.contains(e.target)) document.getElementById('avatarDropdown').classList.remove('open');
 });
 
+// ================= FOTO DE PERFIL (como en Google Play/YouTube) =================
+function applyProfilePhoto(dataUrl){
+  [document.getElementById('avatarBtn'), document.getElementById('avatarPreviewBtn')].forEach(btn=>{
+    if(!btn) return;
+    if(dataUrl){ btn.style.backgroundImage = `url(${dataUrl})`; btn.classList.add('has-photo'); }
+    else { btn.style.backgroundImage = ''; btn.classList.remove('has-photo'); }
+  });
+}
+function compressImageToDataUrl(file, size=128){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = ()=>{ img.src = reader.result; };
+    reader.onerror = reject;
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // recorte cuadrado centrado, para que no se deforme la foto
+      const side = Math.min(img.width, img.height);
+      const sx = (img.width-side)/2, sy = (img.height-side)/2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+document.getElementById('changePhotoBtn').addEventListener('click', ()=> document.getElementById('photoFileInput').click());
+document.getElementById('avatarPreviewBtn').addEventListener('click', ()=> document.getElementById('photoFileInput').click());
+document.getElementById('photoFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    const dataUrl = await compressImageToDataUrl(file);
+    localStorage.setItem('krax_profile_photo', dataUrl); // instantáneo, funciona incluso sin sesión
+    applyProfilePhoto(dataUrl);
+    if(window.fb && window.fb.auth.currentUser){
+      window.fb.savePhoto(dataUrl).catch(()=>{}); // se sincroniza a otros dispositivos si iniciás sesión ahí también
+    }
+  }catch(err){ console.error('No se pudo procesar la foto:', err); }
+});
+// Al cargar la página, mostrar la foto guardada localmente de una (sin esperar a Firebase)
+(function(){
+  const saved = localStorage.getItem('krax_profile_photo');
+  if(saved) applyProfilePhoto(saved);
+})();
+
 // ================= TABS =================
 function switchTab(tabName){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
@@ -1754,9 +1822,19 @@ function wireAuthUI(){
     document.getElementById('authLoggedOut').style.display = user ? 'none' : 'block';
     document.getElementById('authLoggedIn').style.display = user ? 'block' : 'none';
     if(user) document.getElementById('authUserEmail').textContent = '👤 ' + user.email;
+    const initial = user ? (user.email?.[0]?.toUpperCase() || '👤') : '👤';
     const avatarBtn = document.getElementById('avatarBtn');
-    avatarBtn.textContent = user ? (user.email?.[0]?.toUpperCase() || '👤') : '👤';
+    const avatarPreviewBtn = document.getElementById('avatarPreviewBtn');
+    avatarBtn.textContent = initial;
+    if(avatarPreviewBtn) avatarPreviewBtn.textContent = initial;
     avatarBtn.classList.toggle('logged-in', !!user);
+    // Si ya hay una foto guardada en este navegador la dejamos; si no, buscamos si el usuario
+    // subió una foto desde otro dispositivo (guardada en Firestore) para sincronizarla acá.
+    if(user && !localStorage.getItem('krax_profile_photo')){
+      window.fb.loadPhoto().then(photo=>{
+        if(photo){ localStorage.setItem('krax_profile_photo', photo); applyProfilePhoto(photo); }
+      }).catch(()=>{});
+    }
     if(document.getElementById('panel-historial').classList.contains('active')) renderHistory();
   });
 }
