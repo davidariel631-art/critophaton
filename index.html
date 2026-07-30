@@ -21,12 +21,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#05070a; --panel:#0e1218; --panel2:#141a22; --border:#212a35;
-    --text:#eef3f8; --sub:#8b98a8; --amber:#00d9ff; --rose:#ff4d6d; --teal:#00e6a8;
-    --accent2:#7c5cff;
+    --bg:#0b0e14; --panel:#12161f; --panel2:#1a2029; --border:#242c38;
+    --text:#eef3f8; --sub:#8b98a8; --amber:#00d9ff; --rose:#ef4444; --teal:#10b981;
+    --accent2:#7c3aed; --pill-bg:rgba(0,217,255,0.12); --pill-text:#00d9ff;
     --mono:'Manrope', sans-serif; --display:'Plus Jakarta Sans', sans-serif;
   }
   *{box-sizing:border-box;}
+  .pill{display:inline-flex;align-items:center;gap:4px;background:var(--pill-bg);color:var(--pill-text);font-family:var(--display);font-weight:700;font-size:10px;letter-spacing:.5px;text-transform:uppercase;padding:4px 10px;border-radius:100px;}
+  .pill.live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--teal);box-shadow:0 0 6px var(--teal);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
   body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
   .wrap{max-width:1220px;margin:0 auto;padding:28px 20px 90px;}
   @media(max-width:640px){
@@ -41,7 +44,11 @@
     button, .tf-btn, .backtest-btn{min-height:42px;}
   }
   header{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;flex-wrap:wrap;gap:14px;}
-  .auth-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .avatar-wrap{position:relative;}
+  .avatar-btn{width:42px;height:42px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+  .avatar-btn.logged-in{background:linear-gradient(135deg,var(--amber),var(--accent2));}
+  .avatar-dropdown{display:none;position:absolute;top:52px;right:0;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;min-width:260px;box-shadow:0 12px 32px rgba(0,0,0,0.45);z-index:40;}
+  .avatar-dropdown.open{display:block;}
   .auth-row{display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
   .auth-input{background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:7px 9px;color:var(--text);font-family:var(--mono);font-size:12px;width:140px;}
   .auth-error{color:var(--rose);font-size:11px;min-height:14px;}
@@ -176,6 +183,16 @@
 
   /* ---- dual score hero ---- */
   .dual-hero{display:flex;gap:22px;flex-wrap:wrap;align-items:center;}
+  .bipolar-gauge{width:100%;}
+  .bg-track{position:relative;height:14px;border-radius:100px;background:linear-gradient(90deg,var(--rose),var(--panel2) 48%,var(--panel2) 52%,var(--teal));overflow:visible;}
+  .bg-fill{position:absolute;top:0;bottom:0;left:50%;width:0;background:rgba(255,255,255,0.12);border-radius:100px;transition:width .5s ease, left .5s ease;}
+  .bg-needle{position:absolute;top:-5px;left:50%;width:3px;height:24px;background:#fff;border-radius:3px;box-shadow:0 0 8px rgba(255,255,255,0.6);transition:left .5s ease;transform:translateX(-50%);}
+  .bg-labels{display:flex;justify-content:space-between;margin-top:8px;font-family:var(--display);font-weight:700;font-size:11px;color:var(--sub);}
+  .poi-badge{display:flex;flex-direction:column;gap:2px;padding:8px 12px;border-radius:12px;font-family:var(--display);font-size:11.5px;border:1px solid;}
+  .poi-badge.bull{background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.35);color:#10b981;}
+  .poi-badge.bear{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.35);color:#ef4444;}
+  .poi-badge .poi-title{font-weight:700;}
+  .poi-badge .poi-range{font-family:var(--mono);font-weight:600;opacity:.9;}
   .mini-ring{position:relative;width:96px;height:96px;flex-shrink:0;}
   .mini-ring svg{width:100%;height:100%;transform:rotate(-90deg);}
   .mini-ring .mr-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
@@ -230,24 +247,27 @@
   <header>
     <div class="brand">
       <div class="mark"><img src="icons/icon-192.png" alt="KRAX Capital"></div>
-      <div><h1>KRAX CAPITAL</h1><small>Análisis técnico + Smart Money · automatizado</small></div>
+      <div><h1>KRAX CAPITAL</h1><small>Análisis técnico + Smart Money</small> <span class="pill live" style="margin-left:6px;">En vivo</span></div>
     </div>
-    <div id="authBox" class="auth-box">
-      <div id="authLoggedOut">
-        <div class="auth-row">
-          <input id="authEmail" type="email" placeholder="email" class="auth-input">
-          <input id="authPass" type="password" placeholder="contraseña" class="auth-input">
+    <div class="avatar-wrap" id="avatarWrap">
+      <button class="avatar-btn" id="avatarBtn">👤</button>
+      <div class="avatar-dropdown" id="avatarDropdown">
+        <div id="authLoggedOut">
+          <div class="auth-row">
+            <input id="authEmail" type="email" placeholder="email" class="auth-input">
+            <input id="authPass" type="password" placeholder="contraseña" class="auth-input">
+          </div>
+          <div class="auth-row">
+            <button class="backtest-btn" id="authSignIn">Entrar</button>
+            <button class="backtest-btn" id="authSignUp">Crear cuenta</button>
+            <button class="backtest-btn" id="authGoogle">🔵 Google</button>
+          </div>
+          <div id="authError" class="auth-error"></div>
         </div>
-        <div class="auth-row">
-          <button class="backtest-btn" id="authSignIn">Entrar</button>
-          <button class="backtest-btn" id="authSignUp">Crear cuenta</button>
-          <button class="backtest-btn" id="authGoogle">🔵 Google</button>
+        <div id="authLoggedIn" style="display:none;">
+          <div class="subrow" id="authUserEmail" style="margin-bottom:10px;"></div>
+          <button class="backtest-btn" id="authSignOut" style="width:100%;">Cerrar sesión</button>
         </div>
-        <div id="authError" class="auth-error"></div>
-      </div>
-      <div id="authLoggedIn" style="display:none;">
-        <span class="subrow" id="authUserEmail"></span>
-        <button class="backtest-btn" id="authSignOut" style="margin-left:8px;">Salir</button>
       </div>
     </div>
   </header>
@@ -371,6 +391,13 @@
           <div class="subrow" style="margin-top:6px;">Calidad: <span class="stars" id="starsVal">☆☆☆☆☆</span></div>
         </div>
       </div>
+      <div class="bipolar-gauge" style="margin-top:18px;">
+        <div class="bg-track">
+          <div class="bg-fill" id="bipolarFill"></div>
+          <div class="bg-needle" id="bipolarNeedle"></div>
+        </div>
+        <div class="bg-labels"><span>🔴 SHORT</span><span id="bipolarPct" class="subrow" style="margin:0;">—</span><span>🟢 LONG</span></div>
+      </div>
       <div class="breakdown" id="breakdown" style="margin-top:18px;"></div>
     </div>
 
@@ -444,6 +471,7 @@
         <h2>🎯 Probabilidades & Smart Money — estado</h2>
         <div id="probBars"></div>
         <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:16px 0 10px;">Smart Money — activo ahora</h3>
+        <div id="poiBadges" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
         <div class="checklist" id="smcStatus"></div>
       </div>
     </div>
@@ -932,6 +960,15 @@ function renderResults(data, result, setup){
   document.getElementById('shortScoreNum').textContent = result.shortScore.toFixed(1);
   document.getElementById('ringShortFg').setAttribute('stroke-dashoffset', circumference - (result.shortScore/10)*circumference);
 
+  // Barra bipolar: 50% = neutral, hacia la derecha = LONG, hacia la izquierda = SHORT
+  const diff = result.longScore - result.shortScore; // -10..+10
+  const bipolarPctRaw = 50 + (diff/20)*100; // mapea a 0-100%, con 50% en el centro
+  const pctClamped = Math.max(4, Math.min(96, bipolarPctRaw));
+  document.getElementById('bipolarNeedle').style.left = pctClamped+'%';
+  document.getElementById('bipolarFill').style.left = (pctClamped<50?pctClamped:50)+'%';
+  document.getElementById('bipolarFill').style.width = Math.abs(pctClamped-50)+'%';
+  document.getElementById('bipolarPct').textContent = `${result.longScore.toFixed(1)} vs ${result.shortScore.toFixed(1)}`;
+
   const recTag = document.getElementById('recTag');
   recTag.textContent = result.recommendation==='LONG' ? '🟢 LONG' : result.recommendation==='SHORT' ? '🔴 SHORT' : '⚪ NO OPERAR';
   recTag.className = 'rec-tag ' + (result.recommendation==='LONG'?'rec-long':result.recommendation==='SHORT'?'rec-short':'rec-none');
@@ -1046,6 +1083,17 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
 
   // ---- Smart Money: qué está activo ahora mismo ----
   const st2 = result.structure;
+  const poiBadgesHtml = [];
+  if(st2.bullishOB) poiBadgesHtml.push(`<div class="poi-badge bull"><span class="poi-title">🟢 Order Block Bullish</span><span class="poi-range">$${fmt(st2.bullishOB.bottom)} – $${fmt(st2.bullishOB.top)}</span></div>`);
+  if(st2.bearishOB) poiBadgesHtml.push(`<div class="poi-badge bear"><span class="poi-title">🔴 Order Block Bearish</span><span class="poi-range">$${fmt(st2.bearishOB.bottom)} – $${fmt(st2.bearishOB.top)}</span></div>`);
+  const bullFvg = (st2.fvgs||[]).find(g=>g.type==='bull');
+  const bearFvg = (st2.fvgs||[]).find(g=>g.type==='bear');
+  if(bullFvg) poiBadgesHtml.push(`<div class="poi-badge bull"><span class="poi-title">🟢 Fair Value Gap</span><span class="poi-range">$${fmt(bullFvg.bottom)} – $${fmt(bullFvg.top)}</span></div>`);
+  if(bearFvg) poiBadgesHtml.push(`<div class="poi-badge bear"><span class="poi-title">🔴 Fair Value Gap</span><span class="poi-range">$${fmt(bearFvg.bottom)} – $${fmt(bearFvg.top)}</span></div>`);
+  if(st2.eqHighs) poiBadgesHtml.push(`<div class="poi-badge bear"><span class="poi-title">🎯 Equal Highs (${st2.eqHighsCount}x)</span><span class="poi-range">~$${fmt(st2.eqHighs)}</span></div>`);
+  if(st2.eqLows) poiBadgesHtml.push(`<div class="poi-badge bull"><span class="poi-title">🎯 Equal Lows (${st2.eqLowsCount}x)</span><span class="poi-range">~$${fmt(st2.eqLows)}</span></div>`);
+  document.getElementById('poiBadges').innerHTML = poiBadgesHtml.length ? poiBadgesHtml.join('') : '<div class="subrow">Sin zonas de interés (POIs) activas ahora mismo.</div>';
+
   const smcItems = [
     {label:`BOS ${st2.events.bos ? '('+(st2.events.bos==='bullish'?'alcista':'bajista')+')' : ''}`, active: !!st2.events.bos},
     {label:`CHoCH ${st2.events.choch ? '('+(st2.events.choch==='bullish'?'alcista':'bajista')+')' : ''}`, active: !!st2.events.choch},
@@ -1346,6 +1394,16 @@ async function loadNewPools(){
     });
   });
 }
+
+// ================= AVATAR DROPDOWN =================
+document.getElementById('avatarBtn').addEventListener('click', (e)=>{
+  e.stopPropagation();
+  document.getElementById('avatarDropdown').classList.toggle('open');
+});
+document.addEventListener('click', (e)=>{
+  const wrap = document.getElementById('avatarWrap');
+  if(!wrap.contains(e.target)) document.getElementById('avatarDropdown').classList.remove('open');
+});
 
 // ================= TABS =================
 function switchTab(tabName){
@@ -1707,6 +1765,9 @@ function wireAuthUI(){
     document.getElementById('authLoggedOut').style.display = user ? 'none' : 'block';
     document.getElementById('authLoggedIn').style.display = user ? 'block' : 'none';
     if(user) document.getElementById('authUserEmail').textContent = '👤 ' + user.email;
+    const avatarBtn = document.getElementById('avatarBtn');
+    avatarBtn.textContent = user ? (user.email?.[0]?.toUpperCase() || '👤') : '👤';
+    avatarBtn.classList.toggle('logged-in', !!user);
     if(document.getElementById('panel-historial').classList.contains('active')) renderHistory();
   });
 }
