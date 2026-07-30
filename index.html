@@ -603,9 +603,14 @@
           <div class="indi-line"><div class="il-k">Nivel cercano ↓</div><div class="il-v" id="liqNearDown">—</div></div>
         </div>
         <div id="liqChartContainer" style="width:100%;height:420px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
-          <div id="liqChartInner" style="width:100%;height:100%;"></div>
+          <canvas id="liqBgCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
+          <div id="liqChartInner" style="width:100%;height:100%;position:relative;z-index:2;"></div>
           <canvas id="liqProfileCanvas" style="position:absolute;top:0;right:0;height:100%;pointer-events:none;z-index:5;"></canvas>
         </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <input type="checkbox" id="liqAutoRefresh" style="width:16px;height:16px;">
+        <label for="liqAutoRefresh" class="subrow" style="margin:0;cursor:pointer;">🔄 Auto-actualizar cada 60s (mientras esta pestaña esté abierta)</label>
       </div>
       <div id="liqResults" style="margin-top:14px;"></div>
     </div>
@@ -1755,6 +1760,15 @@ document.getElementById('liqTfRow').addEventListener('click', (e)=>{
   liqCurrentTf = btn.dataset.liqtf;
   if(document.getElementById('liqInput').value.trim()) document.getElementById('liqGoBtn').click();
 });
+let liqAutoRefreshInterval = null;
+document.getElementById('liqAutoRefresh').addEventListener('change', (e)=>{
+  if(liqAutoRefreshInterval){ clearInterval(liqAutoRefreshInterval); liqAutoRefreshInterval = null; }
+  if(e.target.checked){
+    liqAutoRefreshInterval = setInterval(()=>{
+      if(document.getElementById('liqInput').value.trim()) document.getElementById('liqGoBtn').click();
+    }, 60000);
+  }
+});
 document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   const q = document.getElementById('liqInput').value.trim().toUpperCase();
   const status = document.getElementById('liqStatus');
@@ -1909,8 +1923,42 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const baseColor = binMid > price ? [239,68,68] : [16,185,129];
         const alpha = isPOC ? 0.9 : (0.25 + (bins[b]/maxBin)*0.4);
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
-        ctx.fillRect(cssW-barLen, Math.min(yTop,yBot), barLen, Math.max(1,Math.abs(yBot-yTop)-1));
+        const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
+        ctx.fillRect(cssW-barLen, yC, barLen, hC);
+        // Etiqueta con el volumen exacto en el POC de cada lado (igual que el indicador original)
+        if(isPOC){
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'right';
+          ctx.fillText(formatVol(bins[b]), cssW-barLen-4, yC+hC/2+3);
+        }
       }
+
+      // Extensión de niveles hacia atrás: para los bins con más volumen, buscamos desde la vela más
+      // reciente hacia atrás hasta encontrar dónde el precio ya "cruzó" ese nivel — la caja se dibuja
+      // desde ese cruce hasta ahora. Si nunca se cruzó, se extiende hasta el inicio del lookback.
+      // Una caja LARGA = zona que hace rato no se toca (más significativa, "imán" de precio).
+      const bgCanvas = document.getElementById('liqBgCanvas');
+      const bgDpr = window.devicePixelRatio||1;
+      bgCanvas.width = container.clientWidth*bgDpr; bgCanvas.height = cssH*bgDpr;
+      const bgCtx = bgCanvas.getContext('2d'); bgCtx.scale(bgDpr,bgDpr); bgCtx.clearRect(0,0,container.clientWidth,cssH);
+
+      const topBinsIdx = bins.map((v,i)=>({v,i})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,12).map(x=>x.i);
+      const timeScale = liqChart.timeScale();
+      topBinsIdx.forEach(b=>{
+        const binLow = minP+b*priceStep, binHigh = binLow+priceStep;
+        let crossIdx = 0; // por defecto, se extiende hasta el principio (nunca se cruzó)
+        for(let i=recent.length-1;i>=0;i--){
+          if(recent[i].h>=binLow && recent[i].l<=binHigh){ crossIdx = i+1; break; }
+        }
+        const xRight = timeScale.timeToCoordinate(Math.floor(recent[recent.length-1].t/1000)+3600*24);
+        const xLeft = timeScale.timeToCoordinate(Math.floor(recent[Math.max(0,crossIdx)].t/1000));
+        if(xLeft==null || xRight==null) return;
+        const yTop = candleSeries.priceToCoordinate(binHigh), yBot = candleSeries.priceToCoordinate(binLow);
+        if(yTop==null || yBot==null) return;
+        const binMid = (binLow+binHigh)/2;
+        const color = binMid>price ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)';
+        bgCtx.fillStyle = color;
+        bgCtx.fillRect(Math.min(xLeft,xRight), Math.min(yTop,yBot), Math.abs(xRight-xLeft), Math.max(1,Math.abs(yBot-yTop)));
+      });
     });
     window.addEventListener('resize', ()=>{ if(liqChart) liqChart.applyOptions({ width: container.clientWidth }); });
   }catch(e){ status.textContent = 'No se pudo analizar: ' + e.message; }
