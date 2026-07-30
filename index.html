@@ -614,6 +614,22 @@
       </div>
       <div id="liqResults" style="margin-top:14px;"></div>
     </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h2>💥 Liquidaciones reales en vivo — de la misma moneda que buscaste arriba</h2>
+      <div class="hint" style="margin-top:0;">
+        Estas SÍ son liquidaciones reales que ya pasaron (dato público de Binance Futures), no una
+        proyección — filtradas automáticamente a la moneda que buscaste arriba. Solo capturamos lo que
+        ocurre mientras tenés esta pestaña abierta, no hay historial previo (eso sí requeriría un
+        servidor propio corriendo 24/7).
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+        <input type="checkbox" id="liqLiveToggle" style="width:16px;height:16px;">
+        <label for="liqLiveToggle" class="subrow" style="margin:0;cursor:pointer;">🔴 Conectar al feed en vivo de Binance</label>
+      </div>
+      <div id="liqLiveStatus" class="subrow" style="margin-top:8px;"></div>
+      <div id="liqLiveFeed" style="margin-top:10px;max-height:280px;overflow-y:auto;"></div>
+    </div>
   </div>
 
   <div class="tabpanel" id="panel-dexnuevos">
@@ -1761,6 +1777,48 @@ document.getElementById('liqTfRow').addEventListener('click', (e)=>{
   if(document.getElementById('liqInput').value.trim()) document.getElementById('liqGoBtn').click();
 });
 let liqAutoRefreshInterval = null;
+
+// ================= LIQUIDACIONES REALES EN VIVO (Binance, gratis, sin key) =================
+let liqSocket = null;
+let liqEvents = [];
+let liqLiveSymbol = null; // se completa solo con la última moneda buscada arriba — une las dos secciones en una sola
+document.getElementById('liqLiveToggle').addEventListener('change', (e)=>{
+  const status = document.getElementById('liqLiveStatus');
+  if(e.target.checked){
+    try{
+      liqSocket = new WebSocket('wss://fstream.binance.com/ws/!forceOrder@arr');
+      status.textContent = 'Conectando...';
+      liqSocket.onopen = ()=>{ status.textContent = liqLiveSymbol ? `🟢 Conectado — filtrando solo $${liqLiveSymbol}.` : '🟢 Conectado — buscá una moneda arriba para filtrar, por ahora muestra todo el mercado.'; };
+      liqSocket.onmessage = (ev)=>{
+        const msg = JSON.parse(ev.data);
+        const o = msg.o;
+        if(!o) return;
+        liqEvents.unshift({ symbol:o.s, side:o.S, qty:parseFloat(o.q), price:parseFloat(o.ap||o.p), value:parseFloat(o.q)*parseFloat(o.ap||o.p), time:o.T });
+        liqEvents = liqEvents.slice(0,200); // guardamos más de las que mostramos, por si cambiás de moneda y ya había algo filtrado afuera
+        renderLiqFeed();
+      };
+      liqSocket.onerror = ()=>{ status.textContent = '❌ Error de conexión. Probá de nuevo.'; };
+      liqSocket.onclose = ()=>{ if(document.getElementById('liqLiveToggle').checked) status.textContent = 'Se cerró la conexión.'; };
+    }catch(err){ status.textContent = 'Tu navegador no pudo abrir la conexión: ' + err.message; }
+  } else {
+    if(liqSocket){ liqSocket.close(); liqSocket = null; }
+    document.getElementById('liqLiveStatus').textContent = 'Desconectado.';
+  }
+});
+function renderLiqFeed(){
+  const feed = document.getElementById('liqLiveFeed');
+  const filtered = liqLiveSymbol ? liqEvents.filter(ev=>ev.symbol===liqLiveSymbol+'USDT') : liqEvents;
+  const shown = filtered.slice(0,50);
+  if(!shown.length){ feed.innerHTML = `<div class="subrow">Todavía no llegó ninguna liquidación real${liqLiveSymbol?` de $${liqLiveSymbol}`:''}. Puede tardar (son eventos reales, no todas las monedas se liquidan seguido).</div>`; return; }
+  feed.innerHTML = shown.map(ev=>{
+    // Una liquidación de venta forzada (SELL) significa que se liquidó una posición LONG, y viceversa.
+    const wasLong = ev.side==='SELL';
+    const color = wasLong ? 'var(--rose)' : 'var(--teal)';
+    const time = new Date(ev.time).toLocaleTimeString('es-AR');
+    return `<div class="liq-zone" style="border-color:${color};"><div><div class="lz-price" style="color:${color};">$${ev.symbol.replace('USDT','')} ${wasLong?'LONG liquidado':'SHORT liquidado'}</div><div class="subrow" style="margin:0;">$${ev.value.toFixed(0)} @ $${fmt(ev.price)} · ${time}</div></div></div>`;
+  }).join('');
+}
+
 document.getElementById('liqAutoRefresh').addEventListener('change', (e)=>{
   if(liqAutoRefreshInterval){ clearInterval(liqAutoRefreshInterval); liqAutoRefreshInterval = null; }
   if(e.target.checked){
@@ -1775,6 +1833,11 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   const results = document.getElementById('liqResults');
   const domBox = document.getElementById('liqDominanceBox');
   if(!q){ status.textContent = 'Escribí un símbolo primero.'; return; }
+  liqLiveSymbol = q; // une el perfil de arriba con el feed en vivo de abajo: misma moneda para las dos
+  renderLiqFeed();
+  if(document.getElementById('liqLiveToggle').checked){
+    document.getElementById('liqLiveStatus').textContent = `🟢 Conectado — filtrando solo $${liqLiveSymbol}.`;
+  }
   status.textContent = 'Buscando...'; results.innerHTML = ''; domBox.style.display = 'none';
   try{
     const data = await fetchTokenData(q, liqCurrentTf);
