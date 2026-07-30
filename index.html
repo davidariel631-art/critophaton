@@ -586,6 +586,12 @@
         <input id="liqInput" type="text" placeholder="Símbolo (ej: BTC, SOL)" class="auth-input" style="flex:1;">
         <button class="backtest-btn" id="liqGoBtn">Buscar zonas</button>
       </div>
+      <div style="display:flex;gap:6px;margin-top:8px;" id="liqTfRow">
+        <button class="tf-btn" data-liqtf="15m">15m</button>
+        <button class="tf-btn" data-liqtf="1h">1h</button>
+        <button class="tf-btn active" data-liqtf="4h">4h</button>
+        <button class="tf-btn" data-liqtf="1d">1D</button>
+      </div>
       <div id="liqStatus" class="subrow" style="margin-top:10px;"></div>
       <div id="liqDominanceBox" style="display:none;margin-top:12px;">
         <div style="display:flex;border-radius:10px;overflow:hidden;height:34px;font-family:var(--display);font-weight:700;font-size:13px;">
@@ -1738,6 +1744,14 @@ function findRoundLevels(price){
   return [...new Set(levels)].sort((a,b)=>a-b);
 }
 let liqChart = null;
+let liqCurrentTf = '4h';
+document.getElementById('liqTfRow').addEventListener('click', (e)=>{
+  const btn = e.target.closest('.tf-btn'); if(!btn) return;
+  document.querySelectorAll('#liqTfRow .tf-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  liqCurrentTf = btn.dataset.liqtf;
+  if(document.getElementById('liqInput').value.trim()) document.getElementById('liqGoBtn').click();
+});
 document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   const q = document.getElementById('liqInput').value.trim().toUpperCase();
   const status = document.getElementById('liqStatus');
@@ -1746,7 +1760,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   if(!q){ status.textContent = 'Escribí un símbolo primero.'; return; }
   status.textContent = 'Buscando...'; results.innerHTML = ''; domBox.style.display = 'none';
   try{
-    const data = await fetchTokenData(q, '4h');
+    const data = await fetchTokenData(q, liqCurrentTf);
     const macro = await fetchMacroTrend(q).catch(()=>null);
     const result = computeScore(data, macro, [], {}, {}, null);
     const st = result.structure;
@@ -1763,7 +1777,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     });
     zones.sort((a,b)=>b.price-a.price);
 
-    status.textContent = `$${q} — precio actual $${fmt(price)}`;
+    status.textContent = `$${q} (${liqCurrentTf}) — precio actual $${fmt(price)}`;
     results.innerHTML = zones.length ? zones.map(z=>
       `<div class="liq-zone ${z.dir}"><div><div class="lz-price">$${fmt(z.price)}</div><div class="subrow" style="margin:0;">${z.label}</div></div><div class="lz-tag" style="background:${z.dir==='above'?'rgba(239,68,68,0.15)':'rgba(16,185,129,0.15)'};color:${z.dir==='above'?'var(--rose)':'var(--teal)'};">${z.dir==='above'?'ARRIBA':'ABAJO'}</div></div>`
     ).join('') : '<div class="subrow">No se detectaron zonas relevantes para esta moneda ahora mismo.</div>';
