@@ -587,6 +587,17 @@
         <button class="backtest-btn" id="liqGoBtn">Buscar zonas</button>
       </div>
       <div id="liqStatus" class="subrow" style="margin-top:10px;"></div>
+      <div id="liqDominanceBox" style="display:none;margin-top:12px;">
+        <div style="display:flex;border-radius:10px;overflow:hidden;height:34px;font-family:var(--display);font-weight:700;font-size:13px;">
+          <div id="liqDomUp" style="background:rgba(239,68,68,0.35);color:var(--rose);display:flex;align-items:center;justify-content:center;">— %</div>
+          <div id="liqDomDown" style="background:rgba(16,185,129,0.35);color:var(--teal);display:flex;align-items:center;justify-content:center;">— %</div>
+        </div>
+        <div class="indi-grid" style="margin-top:10px;">
+          <div class="indi-line"><div class="il-k">Nivel cercano ↑</div><div class="il-v" id="liqNearUp">—</div></div>
+          <div class="indi-line"><div class="il-k">Nivel cercano ↓</div><div class="il-v" id="liqNearDown">—</div></div>
+        </div>
+        <div id="liqChartContainer" style="width:100%;height:420px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;"></div>
+      </div>
       <div id="liqResults" style="margin-top:14px;"></div>
     </div>
   </div>
@@ -1726,12 +1737,14 @@ function findRoundLevels(price){
   }
   return [...new Set(levels)].sort((a,b)=>a-b);
 }
+let liqChart = null;
 document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   const q = document.getElementById('liqInput').value.trim().toUpperCase();
   const status = document.getElementById('liqStatus');
   const results = document.getElementById('liqResults');
+  const domBox = document.getElementById('liqDominanceBox');
   if(!q){ status.textContent = 'Escribí un símbolo primero.'; return; }
-  status.textContent = 'Buscando...'; results.innerHTML = '';
+  status.textContent = 'Buscando...'; results.innerHTML = ''; domBox.style.display = 'none';
   try{
     const data = await fetchTokenData(q, '4h');
     const macro = await fetchMacroTrend(q).catch(()=>null);
@@ -1739,13 +1752,14 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const st = result.structure;
     const price = data.price;
 
+    // Cada zona tiene un "peso" (cuántos toques la respaldan) — más peso = banda más ancha/marcada.
     const zones = [];
-    if(st.eqHighs) zones.push({price:st.eqHighs, label:`Equal Highs (${st.eqHighsCount}x toques)`, dir:'above'});
-    if(st.eqLows) zones.push({price:st.eqLows, label:`Equal Lows (${st.eqLowsCount}x toques)`, dir:'below'});
-    if(st.bullishOB) zones.push({price:(st.bullishOB.top+st.bullishOB.bottom)/2, label:'Order Block alcista sin mitigar', dir: st.bullishOB.top>price?'above':'below'});
-    if(st.bearishOB) zones.push({price:(st.bearishOB.top+st.bearishOB.bottom)/2, label:'Order Block bajista sin mitigar', dir: st.bearishOB.top>price?'above':'below'});
+    if(st.eqHighs) zones.push({price:st.eqHighs, label:`Equal Highs (${st.eqHighsCount}x toques)`, dir:'above', weight:st.eqHighsCount||2});
+    if(st.eqLows) zones.push({price:st.eqLows, label:`Equal Lows (${st.eqLowsCount}x toques)`, dir:'below', weight:st.eqLowsCount||2});
+    if(st.bullishOB){ const mid=(st.bullishOB.top+st.bullishOB.bottom)/2; zones.push({price:mid, label:'Order Block alcista sin mitigar', dir: mid>price?'above':'below', weight:2.5}); }
+    if(st.bearishOB){ const mid=(st.bearishOB.top+st.bearishOB.bottom)/2; zones.push({price:mid, label:'Order Block bajista sin mitigar', dir: mid>price?'above':'below', weight:2.5}); }
     findRoundLevels(price).forEach(lvl=>{
-      if(Math.abs(lvl-price)/price > 0.001) zones.push({price:lvl, label:'Nivel psicológico redondo', dir: lvl>price?'above':'below'});
+      if(Math.abs(lvl-price)/price > 0.001) zones.push({price:lvl, label:'Nivel psicológico redondo', dir: lvl>price?'above':'below', weight:1});
     });
     zones.sort((a,b)=>b.price-a.price);
 
@@ -1753,6 +1767,44 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     results.innerHTML = zones.length ? zones.map(z=>
       `<div class="liq-zone ${z.dir}"><div><div class="lz-price">$${fmt(z.price)}</div><div class="subrow" style="margin:0;">${z.label}</div></div><div class="lz-tag" style="background:${z.dir==='above'?'rgba(239,68,68,0.15)':'rgba(16,185,129,0.15)'};color:${z.dir==='above'?'var(--rose)':'var(--teal)'};">${z.dir==='above'?'ARRIBA':'ABAJO'}</div></div>`
     ).join('') : '<div class="subrow">No se detectaron zonas relevantes para esta moneda ahora mismo.</div>';
+
+    if(!zones.length) return;
+
+    // Dominancia arriba/abajo, y nivel más cercano en cada dirección
+    const weightUp = zones.filter(z=>z.dir==='above').reduce((s,z)=>s+z.weight,0);
+    const weightDown = zones.filter(z=>z.dir==='below').reduce((s,z)=>s+z.weight,0);
+    const totalW = weightUp+weightDown || 1;
+    const pctUp = (weightUp/totalW*100).toFixed(1), pctDown = (weightDown/totalW*100).toFixed(1);
+    document.getElementById('liqDomUp').textContent = `Dom. Arriba ${pctUp}%`;
+    document.getElementById('liqDomUp').style.flex = pctUp;
+    document.getElementById('liqDomDown').textContent = `Dom. Abajo ${pctDown}%`;
+    document.getElementById('liqDomDown').style.flex = pctDown;
+    const nearUp = zones.filter(z=>z.dir==='above').sort((a,b)=>a.price-b.price)[0];
+    const nearDown = zones.filter(z=>z.dir==='below').sort((a,b)=>b.price-a.price)[0];
+    document.getElementById('liqNearUp').textContent = nearUp ? `$${fmt(nearUp.price)}` : '—';
+    document.getElementById('liqNearDown').textContent = nearDown ? `$${fmt(nearDown.price)}` : '—';
+    domBox.style.display = 'block';
+
+    // Mapa visual: velas + bandas horizontales de liquidez (más ancha = más peso/toques)
+    const container = document.getElementById('liqChartContainer');
+    container.innerHTML = '';
+    liqChart = LightweightCharts.createChart(container, {
+      width: container.clientWidth, height: 420,
+      layout: { background:{color:'transparent'}, textColor:'#8b98a8', fontFamily:"'Manrope',sans-serif" },
+      grid: { vertLines:{color:'#1a2029'}, horzLines:{color:'#1a2029'} },
+      rightPriceScale: { borderColor:'#242c38' },
+      timeScale: { borderColor:'#242c38', timeVisible:true },
+    });
+    const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
+    candleSeries.setData(data.candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c })));
+    const maxWeight = Math.max(...zones.map(z=>z.weight));
+    zones.forEach(z=>{
+      const intensity = 0.15 + (z.weight/maxWeight)*0.45;
+      const color = z.dir==='above' ? `rgba(239,68,68,${intensity})` : `rgba(16,185,129,${intensity})`;
+      candleSeries.createPriceLine({ price:z.price, color, lineWidth: Math.max(1, Math.round(z.weight)), lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible:true, title: z.label.split(' ')[0] });
+    });
+    liqChart.timeScale().fitContent();
+    window.addEventListener('resize', ()=>{ if(liqChart) liqChart.applyOptions({ width: container.clientWidth }); });
   }catch(e){ status.textContent = 'No se pudo analizar: ' + e.message; }
 });
 
