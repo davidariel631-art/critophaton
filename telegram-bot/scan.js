@@ -24,7 +24,7 @@ import webpush from 'web-push';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
-  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, fetchTopTraderRatio, rsi,
+  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, rsi,
   computeScore, buildSetup, buildAnalystMode
 } from '../thehaton-engine.js';
 
@@ -529,24 +529,50 @@ async function confirmTheses(state, capitalFlow){
         const analyst = buildAnalystMode(data15, result15, setup, '15m');
         const rrTp1 = (Math.abs(setup.t1-entryPrice)/distance).toFixed(1);
         const rrTp2 = (Math.abs(setup.t2-entryPrice)/distance).toFixed(1);
-        const razones = result15.committee.filter(c=>c.vote===thesis.dir).slice(0,4).map(c=>`✅ ${c.name.replace(/^[^\s]+\s/,'')}: ${c.note||'a favor'}`).join('\n');
+        const rrTp3 = (Math.abs(setup.t3-entryPrice)/distance).toFixed(1);
         const invalidacion = (analyst.invalidation||[])[0] || `Cierre de vela más allá del stop ($${setup.stop.toFixed(6)}).`;
+
+        // Datos reales adicionales para el relato numerado — solo lo que realmente se puede conseguir
+        // gratis (estructura, OI, funding, flujo spot/futuros, ratio Long/Short de traders grandes).
+        // NO se inventan wallets, vesting, flujo OTC ni liquidaciones: esos datos no están disponibles
+        // sin una API paga, y no se van a simular como si lo estuvieran.
+        const spotFutFlow = await fetchSpotFuturesFlow(thesis.symbol, '15m').catch(()=>null);
+        const ratio = await fetchTopTraderRatio(thesis.symbol, '15m').catch(()=>null);
+        const st = result15.structure;
+        const mt = result15.metrics;
+
+        const puntos = [];
+        puntos.push(`1️⃣ <b>Estructura y gráfico:</b> ${analystSummary(result15)}`);
+        if(st.eqHighs || st.eqLows){
+          const liqTxt = thesis.dir==='LONG'
+            ? (st.eqHighs ? `liquidez compradora esperando arriba (~$${st.eqHighs.toFixed(6)}, ${st.eqHighsCount}x toques)` : null)
+            : (st.eqLows ? `liquidez vendedora esperando abajo (~$${st.eqLows.toFixed(6)}, ${st.eqLowsCount}x toques)` : null);
+          if(liqTxt) puntos.push(`2️⃣ <b>Liquidez cercana:</b> ${liqTxt}.`);
+        }
+        if(oiTrendData?.trend) puntos.push(`3️⃣ <b>Open Interest:</b> tendencia ${oiTrendData.trend} — ${oiTrendData.trend==='rising'?'entra capital nuevo apalancado':'se está desarmando apalancamiento'}.`);
+        if(ratio) puntos.push(`4️⃣ <b>Posicionamiento (top traders):</b> ${ratio.ratio.toFixed(2)}:1 (${ratio.longPct.toFixed(0)}% long / ${ratio.shortPct.toFixed(0)}% short) — ${(ratio.ratio>1.3 && thesis.dir==='SHORT')?'mercado muy cargado de largos, vulnerable a una purga':(ratio.ratio<0.77 && thesis.dir==='LONG')?'mercado muy cargado de cortos, vulnerable a un short squeeze':'posicionamiento sin sesgo extremo'}.`);
+        if(spotFutFlow){
+          const flowTxt = spotFutFlow.leverageDriven
+            ? `futuros +${spotFutFlow.futChangePct.toFixed(0)}% vs spot ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% — el movimiento viene de apalancamiento, no de demanda/oferta real.`
+            : `spot ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% y futuros ${spotFutFlow.futChangePct>=0?'+':''}${spotFutFlow.futChangePct.toFixed(0)}% acompañando parejo — no hay señal clara de apalancamiento excesivo.`;
+          puntos.push(`5️⃣ <b>Flujo spot vs futuros:</b> ${flowTxt}`);
+        }
+        const fomcCheck = getFOMCWindow(24);
+        if(fomcCheck.isNear) puntos.push(`6️⃣ <b>Contexto macro:</b> ${fomcCheck.hoursUntil>0?`anuncio de la Fed en ${fomcCheck.hoursUntil.toFixed(0)}hs`:`la Fed anunció hace ${Math.abs(fomcCheck.hoursUntil).toFixed(0)}hs`} — puede agregar volatilidad extra fuera de lo técnico.`);
 
         sendPromises.push(sendTelegram(
           `📈 <b>SEÑAL: $${thesis.symbol}${thesis.tag||''} ${thesis.dir==='LONG'?'COMPRA 🟢':'VENTA 🔴'}</b>\n\n` +
-          `<b>¿Por qué ${thesis.dir==='LONG'?'COMPRA':'VENTA'}?</b>\n${razones || 'Confluencia general del comité de 12 dioses.'}\n\n` +
-          `📊 <b>Configuración</b>\n` +
+          puntos.join('\n\n') + '\n\n' +
+          `🎯 <b>Conclusión: ${thesis.dir==='LONG'?'COMPRA':'VENTA'} — Confianza ${result15.confidence}/100</b>\n\n` +
           `📌 Entrada: $${entryPrice.toFixed(6)}\n` +
           `🛑 Stop Loss: $${setup.stop.toFixed(6)}\n` +
           `🎯 TP1: $${setup.t1.toFixed(6)} (R:R ≈ ${rrTp1}:1)\n` +
-          `🚀 TP2: $${setup.t2.toFixed(6)} (R:R ≈ ${rrTp2}:1)\n\n` +
-          `🛠️ <b>Riesgo</b>\n` +
-          `Riesgo: ${(riskPct*100).toFixed(1)}% del capital (${reason})\n` +
-          `Ejecución: TheHaton toma 50% en TP1 y mueve el Stop a Break Even automáticamente. El resto corre hasta TP2 o breakeven.\n` +
+          `🎯 TP2: $${setup.t2.toFixed(6)} (R:R ≈ ${rrTp2}:1)\n` +
+          `🚀 TP Final: $${setup.t3.toFixed(6)} (R:R ≈ ${rrTp3}:1)\n\n` +
+          `🛠️ <b>Gestión del riesgo:</b> Apalancamiento máx. ${setup.leverage} (aislado, no cruzado), riesgo ${(riskPct*100).toFixed(1)}% del capital (${reason}), TheHaton toma 50% en TP1 y mueve el Stop a Break Even, resto corre a TP2/TP3.\n` +
           `❌ Se invalida si: ${invalidacion}\n\n` +
-          `⚡ Score IA: ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10 · Confianza ${result15.confidence}%\n` +
           `Capital de la cuenta: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})\n\n` +
-          `⚠️ Solo con fines educativos. No es asesoría financiera.`
+          `⚠️ Solo con fines educativos. DYOR y gestioná tu riesgo. 🛡️`
         ));
         sendPromises.push(sendPushToAll(
           `${thesis.dir==='LONG'?'🟢':'🔴'} Señal: ${thesis.symbol} ${thesis.dir}`,
