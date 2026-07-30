@@ -290,6 +290,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.status = 'ACTIVE';
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
+        thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
         const motivoConfirmacion = bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/3: MACD/Stochastic/velas fuertes)` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
