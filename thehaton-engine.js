@@ -118,6 +118,45 @@ async function fetchTopTraderRatio(symbolRaw, period='1h'){
   }catch(e){ return null; }
 }
 
+// Ratio Open Interest / Market Cap: un OI muy alto respecto al tamaño real de la moneda es señal
+// de apalancamiento excesivo (más riesgo de liquidaciones en cadena). Es "best effort": si no se
+// puede mapear el símbolo a un ID de CoinGecko, devuelve null sin romper el resto del análisis.
+async function fetchOIToMarketCapRatio(symbolRaw, currentPrice){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+  try{
+    const oiRes = await fetchJSON(`${FUTURES}/fapi/v1/openInterest?symbol=${pair}`);
+    const oiUsd = parseFloat(oiRes.openInterest) * currentPrice;
+    const searchRes = await fetchJSON(`https://api.coingecko.com/api/v3/search?query=${sym}`);
+    const match = (searchRes.coins||[])[0];
+    if(!match) return null;
+    const mcRes = await fetchJSON(`https://api.coingecko.com/api/v3/simple/price?ids=${match.id}&vs_currencies=usd&include_market_cap=true`);
+    const marketCap = mcRes?.[match.id]?.usd_market_cap;
+    if(!marketCap) return null;
+    return { oiUsd, marketCap, ratio: oiUsd/marketCap };
+  }catch(e){ return null; } // sin dato disponible, no rompe nada — el resto del análisis sigue igual
+}
+
+// Flujo spot vs futuros: si el volumen de futuros crece fuerte mientras el spot queda plano, el
+// movimiento viene de apalancamiento (posiciones), no de demanda/oferta real — información valiosa
+// que un solo "volumen total" no distingue.
+async function fetchSpotFuturesFlow(symbolRaw, tf='15m'){
+  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+  try{
+    const [spotRows, futRows] = await Promise.all([
+      fetchJSON(`${BINANCE}/api/v3/klines?symbol=${pair}&interval=${tf}&limit=10`),
+      fetchJSON(`${FUTURES}/fapi/v1/klines?symbol=${pair}&interval=${tf}&limit=10`),
+    ]);
+    if(!Array.isArray(spotRows) || !Array.isArray(futRows) || spotRows.length<4 || futRows.length<4) return null;
+    const half = Math.floor(spotRows.length/2);
+    const spotChangePct = (spotRows.slice(half).reduce((s,r)=>s+ +r[5],0) / (spotRows.slice(0,half).reduce((s,r)=>s+ +r[5],0)||1) - 1) * 100;
+    const futChangePct = (futRows.slice(half).reduce((s,r)=>s+ +r[5],0) / (futRows.slice(0,half).reduce((s,r)=>s+ +r[5],0)||1) - 1) * 100;
+    const leverageDriven = futChangePct > 30 && futChangePct > spotChangePct*2; // futuros creciendo mucho más que el spot
+    return { spotChangePct, futChangePct, leverageDriven };
+  }catch(e){ return null; }
+}
+
 // Las 27 combinaciones (OI x Precio x Funding), fieles a la matriz que compartiste.
 // signal: -1..1 (dirección y fuerza). flag: true = "algo grande puede venir" (alta incertidumbre, no es ni claramente alcista ni bajista).
 const MARKET_CONTEXT_TABLE = {
@@ -531,6 +570,18 @@ function findSupportResistance(candles, lookback=40){
   const recent = candles.slice(-lookback);
   return { support: Math.min(...recent.map(c=>c.l)), resistance: Math.max(...recent.map(c=>c.h)) };
 }
+
+// Complementa a findSupportResistance: esa función agarra el máximo/mínimo de TODA la ventana,
+// lo que puede saltarse una zona de oferta/demanda más chica pero más CERCANA al precio actual
+// (como una resistencia reciente de rango, no el techo histórico de 40 velas). Acá buscamos el
+// pivot más cercano al precio actual, dando prioridad a "cerca" por sobre "el extremo absoluto".
+function findNearbyLevel(pivots, price, type, recentPivotsCount=8){
+  const candidates = (pivots||[]).filter(p=>p.type===type).slice(-recentPivotsCount);
+  if(!candidates.length) return null;
+  const relevant = type==='high' ? candidates.filter(p=>p.price>=price) : candidates.filter(p=>p.price<=price);
+  const pool = relevant.length ? relevant : candidates; // si no hay ninguno del lado correcto, usamos el más reciente igual
+  return pool.reduce((closest, p) => Math.abs(p.price-price) < Math.abs(closest.price-price) ? p : closest);
+}
 // Cuenta cuántas veces el precio "tocó" un nivel (dentro de una tolerancia) en el historial reciente -> fuerza del nivel
 function levelStrength(candles, level, lookback=80, tolPct=0.006){
   const recent = candles.slice(-lookback);
@@ -848,7 +899,7 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const lastVol = vols.at(-1);
   const atrArr = atr(data.candles,14);
   const lastATR = atrArr.at(-1);
-  const {support, resistance} = findSupportResistance(data.candles);
+  let {support, resistance} = findSupportResistance(data.candles);
 
   let trend=15, trendBias='neutral';
   if(price>lastE20 && lastE20>lastE50 && lastE50>lastE200){ trend=30; trendBias='bull'; }
@@ -884,6 +935,19 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const trendR = trend*(25/30), momentumR = momentum*(20/25), volumeR = volume*(12/15), volatR = volat*(8/10), derivR = deriv*(15/20);
 
   const structure = computeStructure(data.candles, atrArr);
+
+  // Si hay una zona de oferta/demanda reciente MÁS CERCA del precio que el máximo/mínimo de toda
+  // la ventana, la preferimos — el techo/piso "histórico" de 40 velas puede estar tan lejos que en
+  // la práctica no es la zona que realmente frena al precio ahora mismo (esto lo confirmamos
+  // comparando contra un gráfico real: la resistencia relevante estaba mucho más cerca).
+  const nearbyRes = findNearbyLevel(structure.pivots, price, 'high');
+  const nearbySup = findNearbyLevel(structure.pivots, price, 'low');
+  if(nearbyRes && nearbyRes.price < resistance && nearbyRes.price > price){
+    resistance = nearbyRes.price;
+  }
+  if(nearbySup && nearbySup.price > support && nearbySup.price < price){
+    support = nearbySup.price;
+  }
 
   const total = trendR+momentumR+volumeR+volatR+derivR+structure.score;
   const score10 = Math.max(1, Math.min(10, total/10));
@@ -1330,11 +1394,11 @@ export {
   computeGodPerformance, computeFilterEffectiveness,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
-  fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
+  fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
-  findSupportResistance, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
+  findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
   fmt, fmtPct

@@ -490,6 +490,11 @@
         <div id="poiBadges" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
         <div class="checklist" id="smcStatus"></div>
       </div>
+      <div class="card">
+        <h2>⚖️ Apalancamiento y flujo real (solo Binance)</h2>
+        <div class="hint" style="margin-top:0;">Un OI muy alto respecto al tamaño de la moneda, o volumen de futuros disparado mientras el spot queda plano, es señal de que el movimiento viene de apalancamiento, no de demanda/oferta real.</div>
+        <div id="leverageFlowBox" class="subrow" style="margin-top:10px;">No disponible para esta moneda (no es un par de Binance, o falló el dato puntual).</div>
+      </div>
     </div>
 
     <div class="card" style="margin-top:18px;">
@@ -538,7 +543,7 @@
   <div class="tabpanel" id="panel-heatmap">
     <div class="card">
       <h2>📊 Los valores con mayor variación hoy 💪🏻</h2>
-      <div class="hint" style="margin-top:0;">Se busca entre ~2000 monedas (no solo las 50 más grandes), para que aparezcan también las chicas que se están moviendo fuerte.</div>
+      <div class="hint" style="margin-top:0;">Se busca entre ~1000 monedas (no solo las 50 más grandes), para que aparezcan también las chicas que se están moviendo fuerte.</div>
       <div id="topMoversStatus" class="subrow">Cargando…</div>
       <div id="topMoversBox" style="display:none;margin-top:10px;">
         <h3 style="font-family:var(--display);font-size:13px;color:var(--teal);margin:14px 0 8px;">🟢 Mayores ganancias</h3>
@@ -1132,12 +1137,14 @@ async function analyze(qOverride){
   catch(e){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
   if(!data.candles || data.candles.length < 30){ setStatus('Datos insuficientes para un análisis confiable.'); goBtn.disabled=false; return; }
   setStatus('Chequeando tendencia macro (4h), Open Interest, funding, flujo de capital, fuerza relativa y memoria compartida...');
-  const [macro, sharedMemory, oiTrendData, fundingTrendData, capitalFlow, btcReference] = await Promise.all([
+  const [macro, sharedMemory, oiTrendData, fundingTrendData, capitalFlow, btcReference, oiMcRatio, spotFutFlow] = await Promise.all([
     fetchMacroTrend(q), fetchSharedMemory(),
     data.source==='Binance' ? fetchOpenInterestTrend(q, currentTF) : Promise.resolve(null),
     data.source==='Binance' ? fetchFundingTrend(q) : Promise.resolve(null),
     fetchCapitalFlowContext(),
     data.displayName!=='BTC' ? fetchBTCReference(currentTF) : Promise.resolve(null),
+    data.source==='Binance' ? fetchOIToMarketCapRatio(q, data.price) : Promise.resolve(null),
+    data.source==='Binance' ? fetchSpotFuturesFlow(q, currentTF==='1d'?'4h':currentTF) : Promise.resolve(null),
   ]);
   const marketContext = { oiTrend: oiTrendData?.trend || null, fundingTrend: fundingTrendData?.trend || null, capitalFlow };
   const result = computeScore(data, macro, [], sharedMemory, marketContext, btcReference);
@@ -1147,6 +1154,21 @@ async function analyze(qOverride){
   renderResults(data, result, setup);
   prefillCapitalMgmt(setup);
   pushHistory(data, result, setup);
+
+  // Apalancamiento y flujo real (informativo, no afecta el score)
+  const lfBox = document.getElementById('leverageFlowBox');
+  const lfLines = [];
+  if(oiMcRatio){
+    const pct = (oiMcRatio.ratio*100).toFixed(2);
+    const flag = oiMcRatio.ratio > 0.15 ? ' ⚠️ alto — riesgo de liquidaciones en cadena' : '';
+    lfLines.push(`Open Interest / Market Cap: ${pct}%${flag}`);
+  }
+  if(spotFutFlow){
+    lfLines.push(`Volumen reciente — Spot: ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% · Futuros: ${spotFutFlow.futChangePct>=0?'+':''}${spotFutFlow.futChangePct.toFixed(0)}%`);
+    if(spotFutFlow.leverageDriven) lfLines.push('⚠️ El repunte de volumen parece venir de apalancamiento (futuros), no de demanda/oferta real en spot.');
+  }
+  lfBox.innerHTML = lfLines.length ? lfLines.join('<br>') : 'No disponible para esta moneda (no es un par de Binance, o falló el dato puntual).';
+
   setStatus(`Listo · ${data.candles.length} velas (${currentTF}) · fuente: ${data.source}`);
   goBtn.disabled = false;
   analyzeMultiTF(q); // fire and forget, updates its own box
@@ -1637,13 +1659,20 @@ function formatVol(v){
 async function loadTopMovers(){
   const statusEl3 = document.getElementById('topMoversStatus');
   const box = document.getElementById('topMoversBox');
-  statusEl3.textContent = 'Buscando entre ~2000 monedas...';
+  statusEl3.textContent = 'Buscando entre ~1000 monedas...';
   try{
-    // Traemos 8 páginas (250 cada una = ~2000 monedas) para no quedarnos solo con el top 50 de
-    // siempre — así aparecen también monedas chicas que se están moviendo fuerte hoy.
-    const pages = await Promise.all(Array.from({length:8},(_,i)=>
-      fetchJSON(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${i+1}&price_change_percentage=24h`).catch(()=>[])
-    ));
+    // Traemos las páginas UNA POR VEZ, con una pequeña pausa entre cada una — pedirlas todas
+    // juntas (como hacía antes) saturaba los proxies gratis y hacía fallar en cascada hasta
+    // el análisis normal de monedas. Mejor un poco más lento pero confiable.
+    const pages = [];
+    for(let i=1; i<=4; i++){
+      statusEl3.textContent = `Buscando entre ~1000 monedas... (página ${i}/4)`;
+      try{
+        const page = await fetchJSON(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${i}&price_change_percentage=24h`);
+        pages.push(page);
+      }catch(e){ /* si falla una página puntual, seguimos con las demás en vez de cortar todo */ }
+      if(i<4) await new Promise(res=>setTimeout(res, 600));
+    }
     const all = pages.flat().filter(c=>c && c.price_change_percentage_24h!=null && c.total_volume!=null);
     statusEl3.textContent = '';
 
