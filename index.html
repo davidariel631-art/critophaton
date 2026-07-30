@@ -244,6 +244,7 @@
     <button class="tab-btn" data-tab="dexnuevos">DEX Nuevos</button>
     <button class="tab-btn" data-tab="comparar">Comparar</button>
     <button class="tab-btn" data-tab="historial">Historial</button>
+    <button class="tab-btn" data-tab="wallet">👛 Wallet</button>
     <button class="tab-btn" data-tab="thehaton">🏛️ TheHaton</button>
   </div>
 
@@ -349,6 +350,7 @@
       <h2>Señal (formato copiable)</h2>
       <div class="signal-text" id="signalText"></div>
       <button class="copy-btn" id="copySignalBtn" style="position:static;margin-top:10px;">📋 Copiar señal</button>
+      <button class="copy-btn" id="shareImageBtn" style="position:static;margin-top:10px;margin-left:8px;">📤 Compartir como imagen</button>
     </div>
 
     <div class="card" style="margin-top:18px;">
@@ -471,6 +473,33 @@
     <div class="card">
       <h2>Historial de análisis (guardado en este navegador)</h2>
       <div id="historyList" class="subrow">Todavía no analizaste ninguna moneda.</div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="panel-wallet">
+    <div class="card">
+      <h2>👛 Wallet Tracker</h2>
+      <div class="hint" style="margin-top:0;">Pegá una dirección pública y mirá su balance y últimas transacciones. Datos gratis (Blockscout para Ethereum/Base, RPC público para Solana) — sin registrarte y sin conectar tu wallet.</div>
+      <div class="cap-inputs" style="margin-top:10px;">
+        <div><label for="walletChain">Red</label>
+          <select id="walletChain" style="width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-family:var(--mono);font-size:13px;">
+            <option value="eth">Ethereum</option>
+            <option value="base">Base</option>
+            <option value="solana">Solana</option>
+          </select>
+        </div>
+        <div><label for="walletAddress">Dirección</label><input type="text" id="walletAddress" placeholder="0x... o dirección de Solana"></div>
+      </div>
+      <button class="backtest-btn" id="walletSearchBtn">🔍 Buscar</button>
+      <div id="walletStatus" class="subrow" style="margin-top:10px;"></div>
+      <div id="walletResult" style="display:none;margin-top:14px;">
+        <div class="dual-hero">
+          <div><div class="mini-ring-label">Balance nativo</div><div style="font-family:var(--display);font-size:26px;font-weight:700;" id="walletBalance">—</div></div>
+          <div><div class="mini-ring-label">Transacciones (total)</div><div style="font-family:var(--display);font-size:26px;font-weight:700;" id="walletTxCount">—</div></div>
+        </div>
+        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">Últimas transacciones</h3>
+        <div id="walletTxList"></div>
+      </div>
     </div>
   </div>
 
@@ -602,6 +631,7 @@ let riskProfile = 'balanced';
 let watchlist = []; // {query, data, result, setup}
 let lastQuery = null;
 let lastAnalysisData = null;
+let lastResult = null;
 
 const statusEl = document.getElementById('status');
 const goBtn = document.getElementById('goBtn');
@@ -1022,6 +1052,7 @@ async function analyze(qOverride){
   const result = computeScore(data, macro, [], sharedMemory, marketContext, btcReference);
   const setup = buildSetup(data, result, riskProfile);
   lastAnalysisData = data;
+  lastResult = result;
   renderResults(data, result, setup);
   prefillCapitalMgmt(setup);
   pushHistory(data, result, setup);
@@ -1122,6 +1153,83 @@ document.getElementById('copySignalBtn').addEventListener('click', async ()=>{
     btn.textContent = '✅ Copiado'; btn.classList.add('copied');
     setTimeout(()=>{ btn.textContent='📋 Copiar señal'; btn.classList.remove('copied'); }, 1800);
   }catch(e){ btn.textContent = 'No se pudo copiar'; }
+});
+
+// ================= COMPARTIR COMO IMAGEN =================
+document.getElementById('shareImageBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('shareImageBtn');
+  if(!lastAnalysisData || !lastResult || !lastSetup){ btn.textContent='Analizá una moneda primero'; setTimeout(()=>btn.textContent='📤 Compartir como imagen',1800); return; }
+  const data = lastAnalysisData, result = lastResult, setup = lastSetup;
+
+  const W=800, H=1000;
+  const canvas = document.createElement('canvas');
+  canvas.width=W; canvas.height=H;
+  const ctx = canvas.getContext('2d');
+
+  const bgGrad = ctx.createLinearGradient(0,0,0,H);
+  bgGrad.addColorStop(0,'#101214'); bgGrad.addColorStop(1,'#0a0c0e');
+  ctx.fillStyle = bgGrad; ctx.fillRect(0,0,W,H);
+
+  const recColor = result.recommendation==='LONG' ? '#00e676' : result.recommendation==='SHORT' ? '#ff5252' : '#f2a93c';
+
+  ctx.fillStyle='#f2a93c'; ctx.font='bold 26px Arial'; ctx.fillText('🏛️ FORTRESS TERMINAL', 40, 60);
+  ctx.fillStyle='#7d8ea3'; ctx.font='14px Arial'; ctx.fillText('Análisis técnico + Smart Money · automatizado', 40, 85);
+
+  ctx.fillStyle='#fff'; ctx.font='bold 48px Arial'; ctx.fillText(`$${data.displayName}`, 40, 160);
+  ctx.fillStyle=recColor; ctx.font='bold 32px Arial';
+  ctx.fillText(result.recommendation==='LONG'?'🟢 COMPRA (LONG)':result.recommendation==='SHORT'?'🔴 VENTA (SHORT)':'⚪ NO OPERAR', 40, 205);
+  ctx.fillStyle='#7d8ea3'; ctx.font='16px Arial'; ctx.fillText(`Precio: $${fmt(data.price)} · Temporalidad: ${currentTF}`, 40, 235);
+
+  ctx.strokeStyle='#232a33'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(40,265); ctx.lineTo(W-40,265); ctx.stroke();
+  ctx.fillStyle='#00e676'; ctx.font='bold 20px Arial'; ctx.fillText('LONG SCORE', 40, 305);
+  ctx.font='bold 44px Arial'; ctx.fillText(`${result.longScore.toFixed(1)}`, 40, 350);
+  ctx.fillStyle='#ff5252'; ctx.font='bold 20px Arial'; ctx.fillText('SHORT SCORE', 420, 305);
+  ctx.font='bold 44px Arial'; ctx.fillText(`${result.shortScore.toFixed(1)}`, 420, 350);
+  ctx.fillStyle='#f2a93c'; ctx.font='16px Arial'; ctx.fillText(`Confianza: ${result.confidence}%  ·  Calidad: ${'★'.repeat(result.stars)}${'☆'.repeat(5-result.stars)}`, 40, 390);
+
+  ctx.strokeStyle='#232a33'; ctx.beginPath(); ctx.moveTo(40,420); ctx.lineTo(W-40,420); ctx.stroke();
+  ctx.fillStyle='#9aa5b1'; ctx.font='bold 18px Arial'; ctx.fillText('SETUP SUGERIDO', 40, 455);
+  const rows = [
+    ['Entrada', `$${fmt(Math.min(setup.entryLow,setup.entryHigh))} – $${fmt(Math.max(setup.entryLow,setup.entryHigh))}`, '#fff'],
+    ['Stop Loss', `$${fmt(setup.stop)}`, '#ff5252'],
+    ['Target 1', `$${fmt(setup.t1)}`, '#00e676'],
+    ['Target 2', `$${fmt(setup.t2)}`, '#00e676'],
+    ['Apalancamiento sugerido', setup.leverage, '#fff'],
+  ];
+  let y=495;
+  rows.forEach(([label,val,color])=>{
+    ctx.fillStyle='#7d8ea3'; ctx.font='16px Arial'; ctx.fillText(label, 40, y);
+    ctx.fillStyle=color; ctx.font='bold 18px Arial'; ctx.textAlign='right'; ctx.fillText(String(val), W-40, y); ctx.textAlign='left';
+    y+=42;
+  });
+
+  ctx.strokeStyle='#232a33'; ctx.beginPath(); ctx.moveTo(40,y+10); ctx.lineTo(W-40,y+10); ctx.stroke();
+  y+=45;
+  ctx.fillStyle='#9aa5b1'; ctx.font='bold 18px Arial'; ctx.fillText('COMITÉ DE ESPECIALISTAS (a favor)', 40, y);
+  y+=32;
+  const razones = result.committee.filter(c=>c.vote===result.recommendation).slice(0,5);
+  ctx.font='15px Arial';
+  razones.forEach(r=>{
+    ctx.fillStyle='#00e676'; ctx.fillText('✓', 40, y);
+    ctx.fillStyle='#dbe4ec'; ctx.fillText(r.name.replace(/^[^\s]+\s/,''), 65, y);
+    y+=28;
+  });
+
+  ctx.fillStyle='#5a6572'; ctx.font='13px Arial';
+  ctx.fillText('Análisis automatizado, no es asesoría financiera. DYOR.', 40, H-40);
+  ctx.fillText(new Date().toLocaleString(), 40, H-20);
+
+  canvas.toBlob(async (blob)=>{
+    const file = new File([blob], `${data.displayName}_${result.recommendation}.png`, {type:'image/png'});
+    if(navigator.share && navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file], title:`${data.displayName} ${result.recommendation}`, text:'Análisis de Fortress Terminal'}); return; }catch(e){ /* si cancela el share, cae a descarga */ }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `${data.displayName}_${result.recommendation}.png`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 'image/png');
 });
 
 // ================= DEX NUEVOS (Escáner de pools recién creadas) =================
@@ -1714,6 +1822,58 @@ async function loadTheHaton(){
   statusEl4.textContent = '';
   body.style.display = 'block';
 }
+
+// ================= WALLET TRACKER =================
+document.getElementById('walletSearchBtn').addEventListener('click', async ()=>{
+  const chain = document.getElementById('walletChain').value;
+  const address = document.getElementById('walletAddress').value.trim();
+  const statusEl5 = document.getElementById('walletStatus');
+  const resultBox = document.getElementById('walletResult');
+  resultBox.style.display = 'none';
+  if(!address){ statusEl5.textContent = 'Pegá una dirección primero.'; return; }
+  statusEl5.textContent = 'Buscando...';
+  try{
+    if(chain==='eth' || chain==='base'){
+      const base = chain==='eth' ? 'https://eth.blockscout.com' : 'https://base.blockscout.com';
+      const info = await fetchJSON(`${base}/api/v2/addresses/${address}`);
+      const txs = await fetchJSON(`${base}/api/v2/addresses/${address}/transactions`);
+      const nativeBalance = info.coin_balance ? (parseFloat(info.coin_balance)/1e18) : 0;
+      document.getElementById('walletBalance').textContent = `${nativeBalance.toFixed(4)} ${chain==='eth'?'ETH':'ETH (Base)'}`;
+      document.getElementById('walletTxCount').textContent = info.transactions_count ?? (txs.items?.length ?? '—');
+      const items = (txs.items||[]).slice(0,10);
+      document.getElementById('walletTxList').innerHTML = items.length ? items.map(tx=>{
+        const val = tx.value ? (parseFloat(tx.value)/1e18).toFixed(5) : '0';
+        const isOut = tx.from?.hash?.toLowerCase()===address.toLowerCase();
+        return `<div class="hist-row"><div>${new Date(tx.timestamp).toLocaleString()} · ${(tx.method||tx.tx_types?.[0]||'tx')}</div><div class="${isOut?'v red':'v green'}">${isOut?'-':'+'}${val} ETH</div></div>`;
+      }).join('') : '<div class="subrow">Sin transacciones recientes.</div>';
+      resultBox.style.display='block';
+      statusEl5.textContent = `Listo · fuente: Blockscout (${chain==='eth'?'Ethereum':'Base'})`;
+    } else if(chain==='solana'){
+      const rpc = async (method, params) => {
+        const res = await fetch('https://api.mainnet-beta.solana.com', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({jsonrpc:'2.0', id:1, method, params})
+        });
+        return res.json();
+      };
+      const balRes = await rpc('getBalance', [address]);
+      if(balRes.error) throw new Error(balRes.error.message);
+      const sigRes = await rpc('getSignaturesForAddress', [address, {limit:10}]);
+      const balanceSOL = (balRes.result?.value||0)/1e9;
+      document.getElementById('walletBalance').textContent = `${balanceSOL.toFixed(4)} SOL`;
+      document.getElementById('walletTxCount').textContent = sigRes.result?.length ? `${sigRes.result.length}+ (últimas)` : '—';
+      const sigs = sigRes.result||[];
+      document.getElementById('walletTxList').innerHTML = sigs.length ? sigs.map(s=>{
+        const date = s.blockTime ? new Date(s.blockTime*1000).toLocaleString() : '—';
+        return `<div class="hist-row"><div>${date}</div><div class="subrow" style="max-width:60%;overflow:hidden;text-overflow:ellipsis;">${s.signature.slice(0,20)}...</div></div>`;
+      }).join('') : '<div class="subrow">Sin transacciones recientes.</div>';
+      resultBox.style.display='block';
+      statusEl5.textContent = 'Listo · fuente: RPC público de Solana';
+    }
+  }catch(e){
+    statusEl5.textContent = `No se pudo consultar esa dirección (${e.message}). Revisá que sea válida para la red elegida.`;
+  }
+});
 
 document.getElementById('cmpBtn').addEventListener('click', async ()=>{
   const a = document.getElementById('cmpA').value.trim();
