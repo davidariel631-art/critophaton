@@ -1294,18 +1294,33 @@ ${errorComun}`;
 
 function buildSetup(data, result, riskProfile){
   const {price, support, resistance, lastATR} = result.metrics;
-  // Stop loss ahora basado en volatilidad real: 2x ATR (se agranda si el mercado está movido, se achica si está tranquilo)
+  const structure = result.structure || {};
+  // Stop loss: antes era SOLO 2x ATR (un número matemático, sin mirar si hay algo real ahí abajo).
+  // Ahora se prefiere un nivel estructural real (Order Block o soporte/resistencia) cuando existe a
+  // una distancia razonable — así el stop queda "detrás de algo" (como pondría un trader de verdad),
+  // no en el aire. El ATR sigue de piso mínimo y de resguardo si no hay ningún nivel cercano sensato.
   const risk = lastATR*2;
   let entryLow, entryHigh, stop, t1,t2,t3, dir;
   const dirSource = result.recommendation || result.bias; // usa el score dual (Long/Short) como fuente de verdad
   if(dirSource==='LONG'){
     dir='LONG'; entryLow=price*0.995; entryHigh=price*1.005;
-    stop = price - risk;
+    const atrStop = price - risk;
+    const structuralLevels = [structure.bullishOB?.bottom, support].filter(v=>v!=null && v<price);
+    const nearestStructural = structuralLevels.length ? Math.max(...structuralLevels) : null;
+    const distToStructural = nearestStructural!=null ? price-nearestStructural : null;
+    // "Razonable" = ni pegado al precio (ruido lo saca fácil) ni tan lejos que el R:R deje de tener sentido.
+    const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*4;
+    stop = esRazonable ? nearestStructural*0.997 : atrStop; // pequeño colchón debajo del nivel real
     const R = price-stop;
     t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5);
   } else if(dirSource==='SHORT'){
     dir='SHORT'; entryLow=price*0.995; entryHigh=price*1.005;
-    stop = price + risk;
+    const atrStop = price + risk;
+    const structuralLevels = [structure.bearishOB?.top, resistance].filter(v=>v!=null && v>price);
+    const nearestStructural = structuralLevels.length ? Math.min(...structuralLevels) : null;
+    const distToStructural = nearestStructural!=null ? nearestStructural-price : null;
+    const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*4;
+    stop = esRazonable ? nearestStructural*1.003 : atrStop;
     const R = stop-price;
     t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5);
   } else {
