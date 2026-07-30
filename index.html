@@ -494,6 +494,8 @@
         <h2>⚖️ Apalancamiento y flujo real (solo Binance)</h2>
         <div class="hint" style="margin-top:0;">Un OI muy alto respecto al tamaño de la moneda, o volumen de futuros disparado mientras el spot queda plano, es señal de que el movimiento viene de apalancamiento, no de demanda/oferta real.</div>
         <div id="leverageFlowBox" class="subrow" style="margin-top:10px;">No disponible para esta moneda (no es un par de Binance, o falló el dato puntual).</div>
+        <button class="legend-chip" id="oiMcBtn" style="display:none;margin-top:10px;">📡 Consultar Open Interest / Market Cap (usa CoinGecko)</button>
+        <div id="oiMcResult" class="subrow" style="margin-top:6px;"></div>
       </div>
     </div>
 
@@ -770,6 +772,22 @@ let watchlist = []; // {query, data, result, setup}
 let lastQuery = null;
 let lastAnalysisData = null;
 let lastResult = null;
+let currentAnalysisSymbol = null;
+let currentAnalysisPrice = null;
+document.getElementById('oiMcBtn').addEventListener('click', async ()=>{
+  const btn = document.getElementById('oiMcBtn');
+  const box = document.getElementById('oiMcResult');
+  btn.disabled = true; box.textContent = 'Consultando...';
+  try{
+    const oiMcRatio = await fetchOIToMarketCapRatio(currentAnalysisSymbol, currentAnalysisPrice);
+    if(oiMcRatio){
+      const pct = (oiMcRatio.ratio*100).toFixed(2);
+      const flag = oiMcRatio.ratio > 0.15 ? ' ⚠️ alto — riesgo de liquidaciones en cadena' : '';
+      box.textContent = `Open Interest / Market Cap: ${pct}%${flag}`;
+    } else { box.textContent = 'No se pudo obtener (CoinGecko puede estar limitando pedidos, probá en un minuto).'; }
+  }catch(e){ box.textContent = 'Error al consultar.'; }
+  btn.disabled = false;
+});
 
 const statusEl = document.getElementById('status');
 const goBtn = document.getElementById('goBtn');
@@ -1137,13 +1155,12 @@ async function analyze(qOverride){
   catch(e){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
   if(!data.candles || data.candles.length < 30){ setStatus('Datos insuficientes para un análisis confiable.'); goBtn.disabled=false; return; }
   setStatus('Chequeando tendencia macro (4h), Open Interest, funding, flujo de capital, fuerza relativa y memoria compartida...');
-  const [macro, sharedMemory, oiTrendData, fundingTrendData, capitalFlow, btcReference, oiMcRatio, spotFutFlow] = await Promise.all([
+  const [macro, sharedMemory, oiTrendData, fundingTrendData, capitalFlow, btcReference, spotFutFlow] = await Promise.all([
     fetchMacroTrend(q), fetchSharedMemory(),
     data.source==='Binance' ? fetchOpenInterestTrend(q, currentTF) : Promise.resolve(null),
     data.source==='Binance' ? fetchFundingTrend(q) : Promise.resolve(null),
     fetchCapitalFlowContext(),
     data.displayName!=='BTC' ? fetchBTCReference(currentTF) : Promise.resolve(null),
-    data.source==='Binance' ? fetchOIToMarketCapRatio(q, data.price) : Promise.resolve(null),
     data.source==='Binance' ? fetchSpotFuturesFlow(q, currentTF==='1d'?'4h':currentTF) : Promise.resolve(null),
   ]);
   const marketContext = { oiTrend: oiTrendData?.trend || null, fundingTrend: fundingTrendData?.trend || null, capitalFlow };
@@ -1155,19 +1172,19 @@ async function analyze(qOverride){
   prefillCapitalMgmt(setup);
   pushHistory(data, result, setup);
 
-  // Apalancamiento y flujo real (informativo, no afecta el score)
+  // Apalancamiento y flujo real (informativo, no afecta el score). El ratio OI/Market Cap NO se
+  // trae automático — usa CoinGecko (que ya está muy saturado con el ticker/heatmap) y sumarlo acá
+  // solo empeoraba el límite de pedidos. Queda como botón para pedirlo solo cuando lo necesites.
   const lfBox = document.getElementById('leverageFlowBox');
   const lfLines = [];
-  if(oiMcRatio){
-    const pct = (oiMcRatio.ratio*100).toFixed(2);
-    const flag = oiMcRatio.ratio > 0.15 ? ' ⚠️ alto — riesgo de liquidaciones en cadena' : '';
-    lfLines.push(`Open Interest / Market Cap: ${pct}%${flag}`);
-  }
   if(spotFutFlow){
     lfLines.push(`Volumen reciente — Spot: ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% · Futuros: ${spotFutFlow.futChangePct>=0?'+':''}${spotFutFlow.futChangePct.toFixed(0)}%`);
     if(spotFutFlow.leverageDriven) lfLines.push('⚠️ El repunte de volumen parece venir de apalancamiento (futuros), no de demanda/oferta real en spot.');
   }
   lfBox.innerHTML = lfLines.length ? lfLines.join('<br>') : 'No disponible para esta moneda (no es un par de Binance, o falló el dato puntual).';
+  document.getElementById('oiMcBtn').style.display = data.source==='Binance' ? 'inline-block' : 'none';
+  document.getElementById('oiMcResult').textContent = '';
+  currentAnalysisSymbol = q; currentAnalysisPrice = data.price;
 
   setStatus(`Listo · ${data.candles.length} velas (${currentTF}) · fuente: ${data.source}`);
   goBtn.disabled = false;

@@ -27,7 +27,8 @@ const TF_MAP = {
 const CORS_PROXIES = [
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
-  url => `https://corsfix.com/${url}`,
+  url => `https://proxy.corsfix.com/?${url}`, // formato correcto: subdominio "proxy.", antes lo tenía mal (por eso daba 404 siempre)
+  url => `https://api.cors.lol/url=${url}`,
 ];
 
 async function fetchJSON(url){
