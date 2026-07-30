@@ -29,7 +29,7 @@ import {
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const CHAT_ID = process.env.TELEGRAM_CHAT_ID;
-const THRESHOLD = 8.0;
+const THRESHOLD = 7.6;
 const TOP_N_BINANCE = 60;
 const DEX_NETWORKS = ['solana','base','eth'];
 const STATE_FILE = 'telegram-bot/state.json';
@@ -134,7 +134,7 @@ function journal(thesis, note){
 }
 
 // ---------- Fase 1: escanear 4h/1D en busca de nuevas tesis (usa el motor completo) ----------
-async function scanForTheses(state, candidates, capitalFlow){
+async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
   const acc = state.account;
   for(const {symbol, tag} of candidates){
     if(acc.theses.find(t=>t.symbol===symbol)) continue; // ya hay una tesis abierta para esa moneda
@@ -145,8 +145,9 @@ async function scanForTheses(state, candidates, capitalFlow){
       const news = await fetchRelevantNews(symbol).catch(()=>[]);
       const oiTrendData = data.source==='Binance' ? await fetchOpenInterestTrend(symbol, '4h').catch(()=>null) : null;
       const fundingTrendData = data.source==='Binance' ? await fetchFundingTrend(symbol).catch(()=>null) : null;
+      const btcReference = data.displayName!=='BTC' ? btcReference4h : null;
       const marketContext = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
-      const result = computeScore(data, macro, news, state.memory, marketContext);
+      const result = computeScore(data, macro, news, state.memory, marketContext, btcReference);
       const best = Math.max(result.longScore, result.shortScore);
       console.log(`${symbol}${tag}`, result.recommendation, best.toFixed(1));
 
@@ -487,9 +488,10 @@ async function main(){
   if(!BOT_TOKEN || !CHAT_ID){ console.error('Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID.'); process.exit(1); }
   const state = loadState();
 
-  console.log('--- Fase 0: chequeando flujo de capital global (DeFiLlama) ---');
+  console.log('--- Fase 0: chequeando flujo de capital global (DeFiLlama) y referencia de BTC (4h, una sola vez) ---');
   const capitalFlow = await fetchCapitalFlowContext();
-  console.log('Capital flow:', capitalFlow);
+  const btcReference4h = await fetchBTCReference('4h').catch(()=>null);
+  console.log('Capital flow:', capitalFlow, '| BTC 4h:', btcReference4h);
 
   console.log('--- Fase 1: gestionando tesis ACTIVAS (TP/SL/breakeven) ---');
   await manageActiveTheses(state);
@@ -503,12 +505,12 @@ async function main(){
   for(const symbol of CUSTOM_COINS){
     if(!pairs.includes(symbol)) candidates.push({symbol, tag:' (custom)'});
   }
-  await scanForTheses(state, candidates, capitalFlow);
+  await scanForTheses(state, candidates, capitalFlow, btcReference4h);
 
   console.log('--- Fase 4: pools nuevas en DEX ---');
   const dexPools = await getNewDexPools();
   const dexCandidates = dexPools.slice(0,20).map(p=>({symbol:(p.name||'?').split('/')[0].trim(), tag:` (DEX ${p.network})`}));
-  await scanForTheses(state, dexCandidates, capitalFlow);
+  await scanForTheses(state, dexCandidates, capitalFlow, btcReference4h);
 
   console.log('--- Fase 5: monedas de cap chico ($20M-$100M) para la Market Context Matrix ---');
   const midCaps = await getMidCapCandidates();
@@ -517,7 +519,7 @@ async function main(){
     .filter(s => !pairs.includes(s) && !CUSTOM_COINS.includes(s))
     .slice(0, 40) // límite para no disparar el tiempo de ejecución ni el rate limit de las 5 exchanges
     .map(symbol=>({symbol, tag:' (cap chico)'}));
-  await scanForTheses(state, midCapCandidates, capitalFlow);
+  await scanForTheses(state, midCapCandidates, capitalFlow, btcReference4h);
 
   await Promise.all(sendPromises);
   saveState(state);
