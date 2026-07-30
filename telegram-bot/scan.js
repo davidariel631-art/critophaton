@@ -752,7 +752,15 @@ async function fetchBitunixFuturesSymbols(){
   }catch(e){ console.error('Error trayendo símbolos de Bitunix Futures:', e.message); return null; }
 }
 
-async function getMidCapCandidates(){
+const MIDCAP_CACHE_HOURS = 24; // recalcular la lista de "qué se puede operar" solo 1 vez por día, no en cada corrida
+
+async function getMidCapCandidates(state){
+  const cache = state.midCapCache;
+  const cacheAgeHours = cache ? (Date.now()-cache.updatedAt)/(3600*1000) : Infinity;
+  if(cache && cacheAgeHours < MIDCAP_CACHE_HOURS){
+    console.log(`Usando lista de cap chico ya filtrada (calculada hace ${cacheAgeHours.toFixed(1)}hs de ${MIDCAP_CACHE_HOURS}hs) — ${cache.symbols.length} monedas, sin recalcular de nuevo.`);
+    return cache.symbols;
+  }
   try{
     const pages = await Promise.all([1,2,3,4].map(p=>
       fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=${p}`).then(r=>r.json())
@@ -767,12 +775,16 @@ async function getMidCapCandidates(){
     const [binanceSet, bitunixSet] = await Promise.all([fetchBinanceFuturesSymbols(), fetchBitunixFuturesSymbols()]);
     if(!binanceSet && !bitunixSet){
       console.error('⚠️ No se pudo traer ninguna lista de futuros (Binance ni Bitunix) — se sigue sin filtrar por esta vez, para no dejar de escanear del todo.');
-      return rawSymbols;
+      return cache ? cache.symbols : rawSymbols; // si había un cache previo, mejor eso que una lista sin filtrar
     }
     const tradeable = rawSymbols.filter(s => (binanceSet && binanceSet.has(s)) || (bitunixSet && bitunixSet.has(s)));
-    console.log(`Filtro de futuros: ${rawSymbols.length} candidatas por cap → ${tradeable.length} realmente operables (Binance/Bitunix).`);
+    console.log(`Filtro de futuros recalculado: ${rawSymbols.length} candidatas por cap → ${tradeable.length} realmente operables (Binance/Bitunix). Se guarda por ${MIDCAP_CACHE_HOURS}hs.`);
+    state.midCapCache = { symbols: tradeable, updatedAt: Date.now() };
     return tradeable;
-  }catch(e){ console.error('Error trayendo monedas de cap chico:', e.message); return []; }
+  }catch(e){
+    console.error('Error trayendo monedas de cap chico:', e.message);
+    return cache ? cache.symbols : []; // si falla el recálculo pero había un cache viejo, mejor usar ese que nada
+  }
 }
 
 async function main(){
@@ -802,7 +814,7 @@ async function main(){
   await scanForTheses(state, candidates, capitalFlow, btcReference4h);
 
   console.log('--- Fase 4: monedas de cap chico ($1M-$100M) para la Market Context Matrix ---');
-  const midCaps = await getMidCapCandidates();
+  const midCaps = await getMidCapCandidates(state);
   console.log(midCaps.length, 'monedas de cap chico encontradas.');
   const eligibleMidCaps = midCaps.filter(s => !pairs.includes(s) && !CUSTOM_COINS.includes(s));
   // Rotación: en vez de mirar siempre las primeras 60 (y nunca las demás), usamos la hora
