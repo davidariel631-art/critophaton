@@ -382,10 +382,20 @@ function confluenceScore15m(candles){
   const strongBullCandles = last3.filter(c=> (c.c-c.o)>0 && (c.c-c.o)/((c.h-c.l)||1e-9) > 0.5).length;
   const strongBearCandles = last3.filter(c=> (c.o-c.c)>0 && (c.o-c.c)/((c.h-c.l)||1e-9) > 0.5).length;
 
-  const bullConfluence = [macdBull, stochBull, strongBullCandles>=2].filter(Boolean).length;
-  const bearConfluence = [macdBear, stochBear, strongBearCandles>=2].filter(Boolean).length;
+  // Volumen: el impulso de las últimas velas tiene que venir acompañado de volumen real, no ser "hueco".
+  const vols = candles.map(c=>c.v);
+  const avgVol20 = vols.slice(-20).reduce((a,b)=>a+b,0)/Math.min(20,vols.length);
+  const lastVol = vols.at(-1);
+  const volumeConfirms = lastVol > avgVol20*1.15;
 
-  return { bullConfluence, bearConfluence, macdBull, macdBear, stochBull, stochBear, strongBullCandles, strongBearCandles, lastStoch };
+  // Fuerza de tendencia real (ADX): sin esto, un cruce de MACD en un mercado sin tendencia (ADX bajo) es ruido.
+  const adxVal = adx(candles,14);
+  const adxStrong = adxVal!=null && adxVal>=20;
+
+  const bullConfluence = [macdBull, stochBull, strongBullCandles>=2, volumeConfirms, adxStrong].filter(Boolean).length;
+  const bearConfluence = [macdBear, stochBear, strongBearCandles>=2, volumeConfirms, adxStrong].filter(Boolean).length;
+
+  return { bullConfluence, bearConfluence, macdBull, macdBear, stochBull, stochBear, strongBullCandles, strongBearCandles, volumeConfirms, adxStrong, adxVal, lastStoch };
 }
 
 // ---- Fear & Greed (para el filtro macro suave) ----
@@ -491,6 +501,29 @@ function levelStrength(candles, level, lookback=80, tolPct=0.006){
   return {touches, score: Math.min(100, touches*18)};
 }
 
+// Patrón de "fuerza en tests sucesivos": cuenta cada vez que el precio tocó un nivel (resistencia o
+// soporte) y mide qué tan fuerte fue el rechazo cada vez. Si el rechazo se va debilitando test tras
+// test, el nivel probablemente rompa pronto. Si se va fortaleciendo, el nivel está sólido.
+function analyzeLevelTests(candles, level, isResistance, lookback=80, tolPct=0.006){
+  const recent = candles.slice(-lookback);
+  const tol = level*tolPct;
+  const touches = [];
+  for(const c of recent){
+    const touched = isResistance ? Math.abs(c.h-level)<=tol : Math.abs(c.l-level)<=tol;
+    if(!touched) continue;
+    // Rechazo: qué tan lejos cerró la vela del nivel, en la dirección "defendida" por el nivel.
+    const rejection = isResistance ? Math.max(0, (level-c.c)/level) : Math.max(0, (c.c-level)/level);
+    touches.push(rejection);
+  }
+  if(touches.length<2) return {testCount:touches.length, weakening:false, strengthening:false};
+  let weakening=true, strengthening=true;
+  for(let i=1;i<touches.length;i++){
+    if(touches[i] >= touches[i-1]) weakening=false;
+    if(touches[i] <= touches[i-1]) strengthening=false;
+  }
+  return {testCount:touches.length, weakening, strengthening, lastRejection:touches.at(-1)};
+}
+
 // ---------- Market structure (SMC) engine ----------
 function findPivots(candles, k=3){
   const pivots = [];
@@ -568,17 +601,28 @@ function detectFVG(candles, lookback=60){
   return unfilled.slice(-2);
 }
 
+// Detección de CLUSTERS de liquidez (no solo pares): agrupa todos los pivots que caen dentro de la
+// tolerancia entre sí. Un cluster de 3+ toques es un pool de liquidez mucho más fuerte que uno de 2.
 function detectEqualLevels(labeledPivots, tolerancePct=0.0015){
-  const highs = labeledPivots.filter(p=>p.type==='high').slice(-6);
-  const lows = labeledPivots.filter(p=>p.type==='low').slice(-6);
-  let eqHighs=null, eqLows=null;
-  for(let i=0;i<highs.length;i++) for(let j=i+1;j<highs.length;j++){
-    if(Math.abs(highs[i].price-highs[j].price)/highs[i].price < tolerancePct){ eqHighs = (highs[i].price+highs[j].price)/2; }
+  function clusterOf(pivots){
+    const pts = pivots.map(p=>p.price);
+    let best = null;
+    for(let i=0;i<pts.length;i++){
+      const group = pts.filter(p => Math.abs(p-pts[i])/pts[i] < tolerancePct);
+      if(group.length>=2 && (!best || group.length>best.count)){
+        best = { level: group.reduce((a,b)=>a+b,0)/group.length, count: group.length };
+      }
+    }
+    return best;
   }
-  for(let i=0;i<lows.length;i++) for(let j=i+1;j<lows.length;j++){
-    if(Math.abs(lows[i].price-lows[j].price)/lows[i].price < tolerancePct){ eqLows = (lows[i].price+lows[j].price)/2; }
-  }
-  return {eqHighs, eqLows};
+  const highs = labeledPivots.filter(p=>p.type==='high').slice(-10);
+  const lows = labeledPivots.filter(p=>p.type==='low').slice(-10);
+  const highCluster = clusterOf(highs);
+  const lowCluster = clusterOf(lows);
+  return {
+    eqHighs: highCluster?.level ?? null, eqHighsCount: highCluster?.count ?? 0,
+    eqLows: lowCluster?.level ?? null, eqLowsCount: lowCluster?.count ?? 0,
+  };
 }
 
 // Barrida de liquidez RECIENTE: no es "dónde descansa la liquidez" (eso ya lo hace detectEqualLevels/EQH-EQL),
@@ -644,7 +688,7 @@ function computeStructure(candles, atrArr){
   const events = detectStructureEvents(candles, pivots);
   const {bullishOB, bearishOB} = detectOrderBlocks(candles, atrArr);
   const fvgs = detectFVG(candles);
-  const {eqHighs, eqLows} = detectEqualLevels(pivots);
+  const {eqHighs, eqHighsCount, eqLows, eqLowsCount} = detectEqualLevels(pivots);
   const fib = fibLevels(pivots);
   const candlePattern = detectCandlePattern(candles);
   const liquiditySweep = detectLiquiditySweep(candles);
@@ -661,17 +705,35 @@ function computeStructure(candles, atrArr){
   const bearFVG = fvgs.find(g=>g.type==='bear');
   if(bullFVG){ score+=1; notes.push(`FVG alcista sin mitigar ($${fmt(bullFVG.bottom)}-$${fmt(bullFVG.top)}) puede actuar de soporte.`); }
   if(bearFVG){ score-=1; notes.push(`FVG bajista sin mitigar ($${fmt(bearFVG.bottom)}-$${fmt(bearFVG.top)}) puede actuar de resistencia.`); }
-  if(eqHighs){ notes.push(`Equal Highs (EQH) detectados ~$${fmt(eqHighs)}: liquidez compradora (buy-side) reposando ahí, posible objetivo de un liquidity sweep.`); }
-  if(eqLows){ notes.push(`Equal Lows (EQL) detectados ~$${fmt(eqLows)}: liquidez vendedora (sell-side) reposando ahí.`); }
+  if(eqHighs){ const fuerte = eqHighsCount>=3; notes.push(`Equal Highs (EQH) — cluster de ${eqHighsCount} toques ~$${fmt(eqHighs)}${fuerte?' 🔥 cluster FUERTE':''}: liquidez compradora (buy-side) reposando ahí, ${fuerte?'objetivo muy probable':'posible objetivo'} de un liquidity sweep (el precio puede ser atraído hacia ahí antes de girar).`); }
+  if(eqLows){ const fuerte = eqLowsCount>=3; notes.push(`Equal Lows (EQL) — cluster de ${eqLowsCount} toques ~$${fmt(eqLows)}${fuerte?' 🔥 cluster FUERTE':''}: liquidez vendedora (sell-side) reposando ahí, ${fuerte?'objetivo muy probable':'posible objetivo'} de un liquidity sweep (el precio puede ser atraído hacia ahí antes de girar).`); }
   if(liquiditySweep.sweptUp){ const impact = Math.min(6, 2+liquiditySweep.strengthUp); score-=impact; notes.push(`🚨 Barrida de liquidez alcista reciente (mecha ${liquiditySweep.strengthUp.toFixed(1)}% por encima del máximo previo, cerró débil): posible trampa a compradores, cuidado entrando en LONG ahora mismo.`); }
   if(liquiditySweep.sweptDown){ const impact = Math.min(6, 2+liquiditySweep.strengthDown); score-=impact; notes.push(`🚨 Barrida de liquidez bajista reciente (mecha ${liquiditySweep.strengthDown.toFixed(1)}% por debajo del mínimo previo, cerró fuerte): posible trampa a vendedores, cuidado entrando en SHORT ahora mismo.`); }
   if(liquiditySweep.compressed){
-    if(eqHighs || eqLows){ score-=3; notes.push('Rango comprimido justo cerca de liquidez conocida (Equal High/Low): el riesgo de un movimiento brusco en cualquier dirección es mayor a lo normal.'); }
+    if(eqHighs || eqLows){
+      const clusterFuerte = eqHighsCount>=3 || eqLowsCount>=3;
+      score -= clusterFuerte ? 5 : 3;
+      notes.push(`Rango comprimido justo cerca de liquidez conocida${clusterFuerte?' (cluster FUERTE)':''}: el riesgo de un movimiento brusco en cualquier dirección es ${clusterFuerte?'mucho':''} mayor a lo normal.`);
+    }
     else { score-=1; notes.push('Rango comprimido (baja volatilidad reciente): posible antesala de una ruptura, dirección todavía sin definir.'); }
   }
   if(candlePattern){ notes.push(`Última vela: ${candlePattern}.`); }
+
+  // Fuerza en tests sucesivos: ¿el soporte/resistencia se está debilitando o fortaleciendo con cada toque?
+  const {support: srSupport, resistance: srResistance} = findSupportResistance(candles);
+  const resistanceTests = analyzeLevelTests(candles, srResistance, true);
+  const supportTests = analyzeLevelTests(candles, srSupport, false);
+  if(resistanceTests.testCount>=2){
+    if(resistanceTests.weakening){ score+=3; notes.push(`📉➡️📈 Resistencia ($${fmt(srResistance)}) se está DEBILITANDO: ${resistanceTests.testCount} tests, cada rechazo más chico que el anterior — posible ruptura alcista próxima.`); }
+    else if(resistanceTests.strengthening){ score-=2; notes.push(`🧱 Resistencia ($${fmt(srResistance)}) se está FORTALECIENDO: ${resistanceTests.testCount} tests, cada rechazo más fuerte — nivel sólido, romperlo va a costar.`); }
+  }
+  if(supportTests.testCount>=2){
+    if(supportTests.weakening){ score-=3; notes.push(`📈➡️📉 Soporte ($${fmt(srSupport)}) se está DEBILITANDO: ${supportTests.testCount} tests, cada rechazo más chico que el anterior — posible ruptura bajista próxima.`); }
+    else if(supportTests.strengthening){ score+=2; notes.push(`🧱 Soporte ($${fmt(srSupport)}) se está FORTALECIENDO: ${supportTests.testCount} tests, cada rechazo más fuerte — nivel sólido, buen piso.`); }
+  }
+
   score = Math.max(0, Math.min(20, score));
-  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqLows, fib, pivots, candlePattern, liquiditySweep};
+  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, resistanceTests, supportTests};
 }
 
 // ---------- Scoring ----------
@@ -1148,7 +1210,7 @@ export {
   fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, mfi, obvSeries, adx, cci, roc,
-  findSupportResistance, levelStrength, findPivots, labelSwings, detectStructureEvents,
+  findSupportResistance, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
   fmt, fmtPct
