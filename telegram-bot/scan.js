@@ -24,7 +24,7 @@ import webpush from 'web-push';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
-  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, rsi,
+  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
   computeScore, buildSetup, buildAnalystMode
 } from '../thehaton-engine.js';
 
@@ -464,8 +464,10 @@ async function confirmTheses(state, capitalFlow){
       // real), y además hay un cluster de liquidez (Equal Highs/Lows) esperando en la dirección de la tesis,
       // el precio tiene buenas chances de seguir para "barrer" esa liquidez antes de girar.
       let liquidityMagnetConfirmacion = false, htfNote = '';
+      let momentumHealthOk = true, momentumHealthNote = '';
       try{
         const data1d = await fetchTokenData(thesis.symbol, '1d');
+        const data4h = await fetchTokenData(thesis.symbol, '4h');
         if(data1d?.candles?.length>=30){
           const rsi1d = rsi(data1d.candles.map(c=>c.c), 14).filter(v=>v!=null).at(-1);
           const rsiLTF = result15.metrics.lastRSI;
@@ -475,8 +477,55 @@ async function confirmTheses(state, capitalFlow){
           const liqEnDireccion = liqTarget!=null && (thesis.dir==='LONG' ? liqTarget>priceNow : liqTarget<priceNow);
           liquidityMagnetConfirmacion = htfConEspacio && ltfExtremo && liqEnDireccion && alineado && !sweepEnContra;
           htfNote = `1D RSI ${rsi1d?.toFixed(0)??'—'} (${htfConEspacio?'con espacio':'sin espacio'}), LTF RSI ${rsiLTF?.toFixed(0)??'—'} (${ltfExtremo?'pullback local':'sin extremo'}), liquidez objetivo ${liqEnDireccion?`detectada a favor (~$${liqTarget.toFixed(6)})`:'no detectada a favor'}.`;
+
+          // "¿Tiene tiempo/espacio real de subir (o bajar)?" — no alcanza con que el marco de entrada
+          // (15m) se vea bien: si el Estocástico del marco MAYOR (4h/1D) ya está muy extendido, o el
+          // MACD/ADX muestran que la fuerza se está yendo, es más probable que no llegue ni a TP1
+          // antes de girar (exactamente lo que puede pasar si el precio primero va a buscar liquidez
+          // cercana, como un cluster de Equal Highs/Lows fuerte, y ahí revierte).
+          const problems = [];
+          if(data4h?.candles?.length>=20){
+            const stoch4h = stochasticOscillator(data4h.candles).k.filter(v=>v!=null).at(-1);
+            if(stoch4h!=null){
+              if(thesis.dir==='LONG' && stoch4h>=85) problems.push(`Estocástico 4h ya en ${stoch4h.toFixed(0)} (muy extendido, poco espacio para seguir subiendo)`);
+              if(thesis.dir==='SHORT' && stoch4h<=15) problems.push(`Estocástico 4h ya en ${stoch4h.toFixed(0)} (muy extendido, poco espacio para seguir bajando)`);
+            }
+            const macd4h = macd(data4h.candles.map(c=>c.c));
+            const hist4h = macd4h.hist.filter(v=>v!=null);
+            if(hist4h.length>=3){
+              const perdiendoFuerza = thesis.dir==='LONG' ? (hist4h.at(-1)<hist4h.at(-2) && hist4h.at(-2)<hist4h.at(-3)) : (hist4h.at(-1)>hist4h.at(-2) && hist4h.at(-2)>hist4h.at(-3));
+              if(perdiendoFuerza) problems.push('MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando)');
+            }
+            const adxNow = adx(data4h.candles);
+            const adxPrev = adx(data4h.candles.slice(0,-1));
+            if(adxNow!=null && adxPrev!=null && adxNow<adxPrev && adxNow<25) problems.push(`ADX 4h débil y bajando (${adxNow.toFixed(0)}) — la tendencia se está quedando sin fuerza`);
+          }
+          const stoch1d = stochasticOscillator(data1d.candles).k.filter(v=>v!=null).at(-1);
+          if(stoch1d!=null){
+            if(thesis.dir==='LONG' && stoch1d>=85) problems.push(`Estocástico 1D ya en ${stoch1d.toFixed(0)} (sin espacio en el marco mayor)`);
+            if(thesis.dir==='SHORT' && stoch1d<=15) problems.push(`Estocástico 1D ya en ${stoch1d.toFixed(0)} (sin espacio en el marco mayor)`);
+          }
+          if(problems.length>=2){ // exigimos al menos 2 señales de "sin espacio" antes de bloquear, para no ser demasiado estricto
+            momentumHealthOk = false;
+            momentumHealthNote = problems.join('; ') + '.';
+          }
         }
       }catch(e){ /* si falla, simplemente no aporta este camino, no rompe el resto */ }
+
+      if(!momentumHealthOk){
+        journal(thesis, `Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — ${momentumHealthNote} Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana).`);
+        stillWatching.push(thesis);
+        continue;
+      }
+
+      // Filtro de Estocástico: no abrir operaciones con el Estocástico en sobrecompra (≥80) o
+      // sobreventa (≤20) en 15m — entrar justo en un extremo es perseguir un movimiento ya agotado.
+      const stochK = result15.metrics.lastStochK;
+      if(stochK!=null && (stochK>=80 || stochK<=20)){
+        journal(thesis, `Todavía esperando confirmación (Estocástico en ${stochK.toFixed(0)}, zona de ${stochK>=80?'sobrecompra':'sobreventa'} — no se abren operaciones nuevas en un extremo del Estocástico).`);
+        stillWatching.push(thesis);
+        continue;
+      }
 
       // Filtro macro suave (Fear & Greed): F&G<30 (no solo <25) ya se considera zona de miedo relevante para exigir más evidencia.
       const fng = await fetchFearGreedIndex().catch(()=>null);
@@ -518,6 +567,20 @@ async function confirmTheses(state, capitalFlow){
         }
         const units = riskAmount / distance;
 
+        // Filtro de "caza de liquidez": si justo arriba (para un LONG) o abajo (para un SHORT) hay
+        // una concentración de liquidez mucho más grande y MUY cerca del precio de entrada, lo más
+        // probable es que el precio solo esté yendo a buscar esa liquidez (barrer stops) antes de
+        // girar — no confirmamos justo antes de esa zona, aunque el resto de la señal se vea bien.
+        const liqProfilePre = computeLiquidityProfile(data15.candles, entryPrice);
+        const nearestPOC = thesis.dir==='LONG' ? liqProfilePre.pocAbove : liqProfilePre.pocBelow;
+        const domDiff = thesis.dir==='LONG' ? (liqProfilePre.domUpPct-liqProfilePre.domDownPct) : (liqProfilePre.domDownPct-liqProfilePre.domUpPct);
+        const pocMuyCerca = nearestPOC && Math.abs(nearestPOC.price-entryPrice)/entryPrice < 0.02;
+        if(pocMuyCerca && domDiff > 15){
+          journal(thesis, `Todavía esperando confirmación: hay una concentración fuerte de liquidez muy cerca (~$${nearestPOC.price.toFixed(6)}, ${thesis.dir==='LONG'?'Dom. Arriba':'Dom. Abajo'} ${(thesis.dir==='LONG'?liqProfilePre.domUpPct:liqProfilePre.domDownPct).toFixed(0)}%) — parece más una caza de liquidez que una entrada real, se espera a que la barra o se aleje.`);
+          stillWatching.push(thesis);
+          continue;
+        }
+
         thesis.status = 'ACTIVE';
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
@@ -538,6 +601,7 @@ async function confirmTheses(state, capitalFlow){
         // sin una API paga, y no se van a simular como si lo estuvieran.
         const spotFutFlow = await fetchSpotFuturesFlow(thesis.symbol, '15m').catch(()=>null);
         const ratio = await fetchTopTraderRatio(thesis.symbol, '15m').catch(()=>null);
+        const liqProfile = liqProfilePre; // ya lo calculamos antes, para el filtro de caza de liquidez
         const st = result15.structure;
         const mt = result15.metrics;
 
@@ -551,14 +615,15 @@ async function confirmTheses(state, capitalFlow){
         }
         if(oiTrendData?.trend) puntos.push(`3️⃣ <b>Open Interest:</b> tendencia ${oiTrendData.trend} — ${oiTrendData.trend==='rising'?'entra capital nuevo apalancado':'se está desarmando apalancamiento'}.`);
         if(ratio) puntos.push(`4️⃣ <b>Posicionamiento (top traders):</b> ${ratio.ratio.toFixed(2)}:1 (${ratio.longPct.toFixed(0)}% long / ${ratio.shortPct.toFixed(0)}% short) — ${(ratio.ratio>1.3 && thesis.dir==='SHORT')?'mercado muy cargado de largos, vulnerable a una purga':(ratio.ratio<0.77 && thesis.dir==='LONG')?'mercado muy cargado de cortos, vulnerable a un short squeeze':'posicionamiento sin sesgo extremo'}.`);
+        puntos.push(`5️⃣ <b>Mapa de liquidez (perfil de volumen):</b> Dom. Arriba ${liqProfile.domUpPct.toFixed(0)}% / Dom. Abajo ${liqProfile.domDownPct.toFixed(0)}%${liqProfile.pocAbove?` — mayor concentración arriba en ~$${liqProfile.pocAbove.price.toFixed(6)}`:''}${liqProfile.pocBelow?`, abajo en ~$${liqProfile.pocBelow.price.toFixed(6)}`:''}.`);
         if(spotFutFlow){
           const flowTxt = spotFutFlow.leverageDriven
             ? `futuros +${spotFutFlow.futChangePct.toFixed(0)}% vs spot ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% — el movimiento viene de apalancamiento, no de demanda/oferta real.`
             : `spot ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% y futuros ${spotFutFlow.futChangePct>=0?'+':''}${spotFutFlow.futChangePct.toFixed(0)}% acompañando parejo — no hay señal clara de apalancamiento excesivo.`;
-          puntos.push(`5️⃣ <b>Flujo spot vs futuros:</b> ${flowTxt}`);
+          puntos.push(`6️⃣ <b>Flujo spot vs futuros:</b> ${flowTxt}`);
         }
         const fomcCheck = getFOMCWindow(24);
-        if(fomcCheck.isNear) puntos.push(`6️⃣ <b>Contexto macro:</b> ${fomcCheck.hoursUntil>0?`anuncio de la Fed en ${fomcCheck.hoursUntil.toFixed(0)}hs`:`la Fed anunció hace ${Math.abs(fomcCheck.hoursUntil).toFixed(0)}hs`} — puede agregar volatilidad extra fuera de lo técnico.`);
+        if(fomcCheck.isNear) puntos.push(`7️⃣ <b>Contexto macro:</b> ${fomcCheck.hoursUntil>0?`anuncio de la Fed en ${fomcCheck.hoursUntil.toFixed(0)}hs`:`la Fed anunció hace ${Math.abs(fomcCheck.hoursUntil).toFixed(0)}hs`} — puede agregar volatilidad extra fuera de lo técnico.`);
 
         sendPromises.push(sendTelegram(
           `📈 <b>SEÑAL: $${thesis.symbol}${thesis.tag||''} ${thesis.dir==='LONG'?'COMPRA 🟢':'VENTA 🔴'}</b>\n\n` +
