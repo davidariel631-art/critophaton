@@ -24,7 +24,7 @@ import webpush from 'web-push';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
-  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, rsi,
+  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, fetchTopTraderRatio, rsi,
   computeScore, buildSetup, buildAnalystMode
 } from '../thehaton-engine.js';
 
@@ -77,19 +77,92 @@ async function runMarketPulse(state, capitalFlow){
       const fundingTrendData = await fetchFundingTrend('BTC').catch(()=>null);
       const mc = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
       results[tf] = computeScore(data, macro, [], state.memory, mc, null);
+      if(tf==='4h') results['4h'].rawData = data; // guardamos el precio actual real de esta temporalidad
     }
     const votes = Object.values(results).map(r=>r.recommendation);
     const longCount = votes.filter(v=>v==='LONG').length, shortCount = votes.filter(v=>v==='SHORT').length;
-    const lean = longCount>shortCount ? '🟢 Sesgo alcista' : shortCount>longCount ? '🔴 Sesgo bajista' : '⚪ Sin sesgo claro (mixto)';
+    const lean = longCount>shortCount ? '🟢 Alcista' : shortCount>longCount ? '🔴 Bajista' : '⚪ Mixto, sin sesgo claro';
+
+    // Niveles clave: soporte/resistencia y liquidez (Equal Highs/Lows) del marco de 4h, que es el
+    // más representativo para un pulso "de día" (ni tan ruidoso como 1h, ni tan lento como 1D).
+    const m4h = results['4h'].metrics;
+    const st4h = results['4h'].structure;
+    const price = m4h.price;
+    const eqHighsTxt = st4h.eqHighs ? `$${st4h.eqHighs.toFixed(0)} (${st4h.eqHighsCount}x, liquidez compradora)` : 'sin cluster relevante detectado';
+    const eqLowsTxt = st4h.eqLows ? `$${st4h.eqLows.toFixed(0)} (${st4h.eqLowsCount}x, liquidez vendedora)` : 'sin cluster relevante detectado';
+
+    const ratio = await fetchTopTraderRatio('BTC', '1h').catch(()=>null);
+    const ratioTxt = ratio ? `${ratio.ratio.toFixed(2)}:1 (${ratio.longPct.toFixed(0)}% long / ${ratio.shortPct.toFixed(0)}% short)` : 'no disponible';
+
+    const fomc = getFOMCWindow(24);
+    const fomcTxt = fomc.isNear
+      ? (fomc.hoursUntil>0 ? `Anuncio de la Fed en ${fomc.hoursUntil.toFixed(0)}hs` : `la Fed anunció hace ${Math.abs(fomc.hoursUntil).toFixed(0)}hs`)
+      : null;
+
+    // Contexto de Wall Street real (mismo dato que ya usa la web, vía Twelve Data)
+    let stocksTxt = null;
+    try{
+      const stocksRes = await fetch(`https://api.twelvedata.com/quote?symbol=SPY,QQQ&apikey=afd54daf55834d41ad0b535b16b9f3b4`).then(r=>r.json());
+      const spy = stocksRes?.SPY, qqq = stocksRes?.QQQ;
+      if(spy?.percent_change) stocksTxt = `S&P 500 ${parseFloat(spy.percent_change)>=0?'+':''}${parseFloat(spy.percent_change).toFixed(1)}%${qqq?.percent_change?`, Nasdaq ${parseFloat(qqq.percent_change)>=0?'+':''}${parseFloat(qqq.percent_change).toFixed(1)}%`:''}`;
+    }catch(e){ /* si falla, seguimos sin este dato puntual */ }
+
+    // Narrativa del movimiento reciente: último rechazo (swing high) -> último mínimo (swing low) -> ahora
+    const pivots4h = st4h.pivots || [];
+    const lastHighPivot = [...pivots4h].reverse().find(p=>p.type==='high');
+    const lastLowPivot = [...pivots4h].reverse().find(p=>p.type==='low');
+    let narrativa = '';
+    if(lastHighPivot && lastLowPivot){
+      const highFirst = lastHighPivot.i < lastLowPivot.i; // ¿el rechazo pasó antes que el mínimo?
+      if(highFirst){
+        narrativa = `Rechazo en $${lastHighPivot.price.toFixed(0)}, cayó a $${lastLowPivot.price.toFixed(0)} y ahora ${price>lastLowPivot.price?'está recuperándose':'sigue presionado'} hacia $${price.toFixed(0)}. `;
+      } else {
+        narrativa = `Rebote desde $${lastLowPivot.price.toFixed(0)}, llegó a $${lastHighPivot.price.toFixed(0)} y ahora ${price<lastHighPivot.price?'está corrigiendo':'sigue empujando'} hacia $${price.toFixed(0)}. `;
+      }
+    }
+
+    // Posición respecto a las medias móviles principales (dato que faltaba vs. lo que pediste)
+    const emaTxt = (m4h.lastE20!=null && m4h.lastE50!=null)
+      ? (price > m4h.lastE20 && price > m4h.lastE50 ? 'por encima de sus medias móviles principales (EMA20/50)'
+        : price < m4h.lastE20 && price < m4h.lastE50 ? 'por debajo de sus medias móviles principales (EMA20/50)'
+        : 'justo entre sus medias móviles (EMA20/50), zona de indecisión')
+      : null;
+
+    // Tesis direccional con invalidación explícita, en vez de solo "sesgo mixto"
+    let tesis;
+    if(longCount>shortCount){
+      tesis = `Sesgo alcista mientras se sostenga por encima de $${(m4h.support||price*0.97).toFixed(0)} (soporte 4h). Objetivo si continúa: zona de resistencia $${(m4h.resistance||price*1.03).toFixed(0)}. Se invalida con un cierre de vela 4h por debajo del soporte.`;
+    } else if(shortCount>longCount){
+      tesis = `Sesgo bajista mientras se mantenga por debajo de $${(m4h.resistance||price*1.03).toFixed(0)} (resistencia 4h). Objetivo si continúa: soporte en $${(m4h.support||price*0.97).toFixed(0)}. Se invalida con un cierre de vela 4h por encima de la resistencia.`;
+    } else {
+      tesis = `Sin sesgo claro entre los 3 marcos — mejor esperar una ruptura definida de $${(m4h.support||price*0.97).toFixed(0)}–$${(m4h.resistance||price*1.03).toFixed(0)} antes de operar.`;
+    }
+
+    // Párrafo narrativo tipo "todo junto", como en tu ejemplo, antes del desglose en líneas
+    let parrafo = narrativa;
+    parrafo += `Entrando en zona de resistencia ($${(m4h.resistance||price*1.03).toFixed(0)})`;
+    if(emaTxt) parrafo += `, ${emaTxt}`;
+    parrafo += '. ';
+    const contextoExtra = [];
+    if(fomcTxt) contextoExtra.push(fomcTxt);
+    if(stocksTxt) contextoExtra.push(stocksTxt);
+    if(ratio) contextoExtra.push(`los traders grandes ya están posicionados ${ratio.ratio>=1?'largos':'cortos'} (${ratioTxt})`);
+    if(st4h.eqLows) contextoExtra.push(`hay liquidez esperando justo abajo, cerca de $${st4h.eqLows.toFixed(0)}`);
+    if(contextoExtra.length) parrafo += 'Contexto: ' + contextoExtra.join('; ') + '.';
 
     const label = type==='open' ? '🔔 Apertura de Wall Street' : '🔕 Cierre de Wall Street';
-    const contexto = type==='open' ? 'Así arranca BTC con Wall Street recién abierta:' : 'Así queda BTC de cara al día de mañana, con Wall Street ya cerrada:';
+    const contexto = type==='open' ? 'perspectiva de las próximas horas' : 'de cara al día de mañana';
+
     sendPromises.push(sendTelegram(
-      `${label} — Análisis de BTC (solo informativo, no abre operaciones)\n\n${contexto}\n\n` +
-      `1h: ${results['1h'].recommendation} (${Math.max(results['1h'].longScore,results['1h'].shortScore).toFixed(1)}/10)\n` +
-      `4h: ${results['4h'].recommendation} (${Math.max(results['4h'].longScore,results['4h'].shortScore).toFixed(1)}/10)\n` +
-      `1D: ${results['1d'].recommendation} (${Math.max(results['1d'].longScore,results['1d'].shortScore).toFixed(1)}/10)\n\n` +
-      `${lean}\n\n` +
+      `${label} — Análisis de BTC/USDT (solo informativo, no abre operaciones)\n\n` +
+      `💰 $${price.toFixed(0)} | ${contexto}\n\n` +
+      `${parrafo}\n\n` +
+      `📊 Marcos: 1h ${results['1h'].recommendation} · 4h ${results['4h'].recommendation} · 1D ${results['1d'].recommendation} → ${lean}\n\n` +
+      `📍 Soporte 4h: $${(m4h.support||0).toFixed(0)} · Resistencia 4h: $${(m4h.resistance||0).toFixed(0)}\n` +
+      `💧 Liquidez arriba: ${eqHighsTxt}\n` +
+      `💧 Liquidez abajo: ${eqLowsTxt}\n` +
+      `⚖️ Long/Short (top traders, 1h): ${ratioTxt}\n` +
+      `\n📈 Tesis: ${tesis}\n\n` +
       `⚠️ Esto es solo un pulso informativo del mercado, no una señal de entrada.`
     ));
     state.lastMarketPulse = { date: todayKey2, type };
