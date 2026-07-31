@@ -1964,50 +1964,17 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       canvas.width = cssW*dpr; canvas.height = cssH*dpr;
       const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,cssW,cssH);
 
-      const closes = data.candles.map(c=>c.c);
-      const lookback = Math.min(200, data.candles.length);
-      const recent = data.candles.slice(-lookback);
+      // Usamos la MISMA función del motor que usa el bot (computeLiquidityProfile) — antes esto era
+      // una copia pegada acá, calculando todo de nuevo por su cuenta. Ahora hay un solo cerebro para
+      // este cálculo, y la web solo se encarga de dibujarlo.
+      const profile = computeLiquidityProfile(data.candles, price);
+      const { bins, minP, priceStep, nBins, pocAbove: pocSell, pocBelow: pocBuy } = profile;
+      const recent = data.candles.slice(-Math.min(200, data.candles.length));
 
-      // Desviación estándar de 25 cierres (rolling), igual que ta.stdev(close,25) en Pine
-      function stdevAt(idx){
-        const window25 = closes.slice(Math.max(0,idx-24), idx+1);
-        if(window25.length<2) return 0;
-        const mean = window25.reduce((a,b)=>a+b,0)/window25.length;
-        const variance = window25.reduce((a,b)=>a+(b-mean)**2,0)/window25.length;
-        return Math.sqrt(variance);
-      }
-      // Precio de referencia por vela: desplazado lejos del cuerpo según su dirección — simula dónde
-      // quedarían los stops/liquidez relacionados a esa vela, no su high/low crudo.
-      const priceRefs = recent.map((c,i)=>{
-        const globalIdx = closes.length - lookback + i;
-        const dev = stdevAt(globalIdx) * 2;
-        return c.c > c.o ? c.l - dev : c.h + dev;
-      });
-
-      const minP = Math.min(...priceRefs), maxP = Math.max(...priceRefs);
-      const nBins = 60;
-      const priceStep = (maxP-minP)/nBins || 1;
-      const bins = Array.from({length:nBins},()=>0);
-      recent.forEach((c,i)=>{
-        const bin = Math.min(nBins-1, Math.max(0, Math.floor((priceRefs[i]-minP)/priceStep)));
-        const binMid = minP + bin*priceStep + priceStep/2;
-        if(Math.abs(price-binMid) < priceStep*2) return; // excluye bins pegados al precio actual (ruido, no liquidez real)
-        bins[bin] += c.v;
-      });
-
-      let sellTotal=0, buyTotal=0, pocSell=null, pocBuy=null;
-      for(let b=0;b<nBins;b++){
-        const binMid = minP + b*priceStep + priceStep/2;
-        if(binMid > price){ sellTotal+=bins[b]; if(!pocSell || bins[b]>pocSell.v) pocSell={b,v:bins[b]}; }
-        else { buyTotal+=bins[b]; if(!pocBuy || bins[b]>pocBuy.v) pocBuy={b,v:bins[b]}; }
-      }
-      // Dominancia real por volumen (no por "peso" sintético) — así de fiel al indicador original
-      const totalVol = sellTotal+buyTotal || 1;
-      const pctUpReal = (sellTotal/totalVol*100).toFixed(1), pctDownReal = (buyTotal/totalVol*100).toFixed(1);
-      document.getElementById('liqDomUp').textContent = `Dom. Arriba ${pctUpReal}%`;
-      document.getElementById('liqDomUp').style.flex = pctUpReal;
-      document.getElementById('liqDomDown').textContent = `Dom. Abajo ${pctDownReal}%`;
-      document.getElementById('liqDomDown').style.flex = pctDownReal;
+      document.getElementById('liqDomUp').textContent = `Dom. Arriba ${profile.domUpPct.toFixed(1)}%`;
+      document.getElementById('liqDomUp').style.flex = profile.domUpPct.toFixed(1);
+      document.getElementById('liqDomDown').textContent = `Dom. Abajo ${profile.domDownPct.toFixed(1)}%`;
+      document.getElementById('liqDomDown').style.flex = profile.domDownPct.toFixed(1);
 
       const maxBin = Math.max(...bins) || 1;
       for(let b=0;b<nBins;b++){
@@ -2017,7 +1984,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         if(yTop==null || yBot==null || bins[b]===0) continue;
         const barLen = (bins[b]/maxBin) * cssW;
         const binMid = (binPriceLow+binPriceHigh)/2;
-        const isPOC = (pocSell && b===pocSell.b) || (pocBuy && b===pocBuy.b);
+        const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         const baseColor = binMid > price ? [239,68,68] : [16,185,129];
         const alpha = isPOC ? 0.9 : (0.25 + (bins[b]/maxBin)*0.4);
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
