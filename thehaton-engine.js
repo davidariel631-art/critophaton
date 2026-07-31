@@ -1124,6 +1124,7 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
 
   const st = (cond, yes, no) => cond ? yes : no;
   const indicatorStatus = [
+    {name:'Estocástico (%K)', value: lastStochK!=null?lastStochK.toFixed(1):'—', status: lastStochK==null?'neutral':lastStochK>=80?'bajista':lastStochK<=20?'alcista':'neutral', note: lastStochK==null?'Sin datos suficientes.':lastStochK>=80?'Sobrecompra: el motor no confirma entradas nuevas en esta zona.':lastStochK<=20?'Sobreventa: el motor no confirma entradas nuevas en esta zona.':'Zona intermedia, es el que usa el motor para el momentum.'},
     {name:'Stochastic RSI', value: lastStochRsi!=null?lastStochRsi.toFixed(1):'—', status: lastStochRsi==null?'neutral':lastStochRsi>=80?'bajista':lastStochRsi<=20?'alcista':'neutral', note: lastStochRsi==null?'Sin datos suficientes.':lastStochRsi>=80?'Sobrecompra: posible agotamiento del impulso.':lastStochRsi<=20?'Sobreventa: posible rebote.':'Zona intermedia, sin extremos.'},
     {name:'MFI (dinero)', value: lastMFI.toFixed(1), status: lastMFI>=80?'bajista':lastMFI<=20?'alcista':'neutral', note: lastMFI>=80?'Flujo de dinero sobrecomprado.':lastMFI<=20?'Flujo de dinero sobrevendido, posible entrada de compradores.':'Flujo de dinero equilibrado.'},
     {name:'OBV (volumen acumulado)', value: obvUp?'Subiendo':'Bajando', status: obvUp?'alcista':'bajista', note: obvUp?'El volumen acompaña las subidas recientes (confirma tendencia).':'El volumen acompaña las bajadas recientes.'},
