@@ -24,8 +24,8 @@ import webpush from 'web-push';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
-  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode
+  confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -489,6 +489,11 @@ async function confirmTheses(state, capitalFlow){
       const confluenceAFavor = rawConfluenceAFavor && !sweepEnContra;
       const bearTrapConfirmacion = sweepAFavor && alineado; // "Bear Trap + Test Pump" que proponías: el sweep en contra del mercado, a favor nuestro, ya es señal
 
+      // Entrada temprana de MACD (histograma "aclarándose"), blindada con ADX + Estocástico alineado —
+      // ya viene armada y verificada desde el motor (confluence.macdEarlyBull/macdEarlyBear). No se usa
+      // sola nunca: solo confirma si además no hay un sweep en contra reciente (misma lógica que el resto).
+      const macdEarlyAFavor = (thesis.dir==='LONG' ? confluence.macdEarlyBull : confluence.macdEarlyBear) && !sweepEnContra;
+
       // Patrón completo (más específico y confiable que un sweep suelto): Acumulación con varios
       // "test pumps" fallidos + Bear Trap recién ahora (o el espejo Distribución + Bull Trap para SHORT).
       const patronCompleto = thesis.dir==='LONG' ? result15.structure?.accBearTrap?.patternDetected : result15.structure?.distBullTrap?.patternDetected;
@@ -567,11 +572,19 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
-      // Filtro de Estocástico: no abrir operaciones con el Estocástico en sobrecompra (≥80) o
-      // sobreventa (≤20) en 15m — entrar justo en un extremo es perseguir un movimiento ya agotado.
+      // Filtro de Estocástico — RECODIFICADO para que dependa del régimen del mercado (investigado a
+      // fondo): un Estocástico "pegado" en un extremo NO significa lo mismo siempre.
+      // - En RANGO (ADX débil, <20): un extremo (≥80/≤20) sí es señal real de agotamiento/reversión —
+      //   se mantiene el bloqueo de siempre, ahí es donde ese filtro tiene sentido de verdad.
+      // - En TENDENCIA real (ADX≥20): quedarse pegado en el extremo es FUERZA de tendencia, no
+      //   agotamiento — pelear contra eso (como hacía el filtro viejo, bloqueando SIEMPRE) es el error
+      //   clásico de principiante que describe toda la bibliografía. Acá simplemente no se veta: se
+      //   deja que los demás caminos (sobre todo "Momentum Continuation", que ya busca el pullback a
+      //   EMA20/50 dentro de la tendencia) hagan su trabajo sin este filtro peleando en contra.
       const stochK = result15.metrics.lastStochK;
-      if(stochK!=null && (stochK>=80 || stochK<=20)){
-        journal(thesis, `Todavía esperando confirmación (Estocástico en ${stochK.toFixed(0)}, zona de ${stochK>=80?'sobrecompra':'sobreventa'} — no se abren operaciones nuevas en un extremo del Estocástico).`);
+      const enRegimenDeTendencia = confluence.adxStrong; // ADX>=20, mismo umbral que ya usa el motor
+      if(stochK!=null && !enRegimenDeTendencia && (stochK>=80 || stochK<=20)){
+        journal(thesis, `Todavía esperando confirmación (Estocástico en ${stochK.toFixed(0)}, zona de ${stochK>=80?'sobrecompra':'sobreventa'} en un mercado LATERAL, ADX ${confluence.adxVal?.toFixed(0)} — acá sí es agotamiento real, no se abren operaciones nuevas en el extremo).`);
         stillWatching.push(thesis);
         continue;
       }
@@ -585,22 +598,24 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
-      // Filtro FOMC: antes del anuncio de la Fed no hay análisis técnico que valga (es un evento binario,
-      // no una señal de mercado) — se pausa por completo. Después del anuncio, se exige más evidencia,
+      // Filtro macro AMPLIADO: antes no solo miraba FOMC — ahora también NFP (empleo, primer viernes
+      // del mes) y peticiones de desempleo semanales (todos los jueves), que son los otros datos de
+      // EE.UU. que más mueven el mercado. Antes de cualquiera de estos eventos no hay análisis técnico
+      // que valga (son eventos binarios) — se pausa por completo. Después, se exige más evidencia,
       // igual que con Fear&Greed, porque el mercado puede estar reaccionando de forma errática todavía.
-      const fomc = getFOMCWindow(3);
+      const fomc = getHighImpactMacroWindow(2);
       if(fomc.isNear && fomc.hoursUntil>0){
-        journal(thesis, `Pausado: anuncio de la Fed (FOMC) en ${fomc.hoursUntil.toFixed(1)}hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe.`);
+        journal(thesis, `Pausado: ${fomc.kind} en ${fomc.hoursUntil.toFixed(1)}hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe.`);
         stillWatching.push(thesis);
         continue;
       }
       if(fomc.isNear && fomc.hoursUntil<=0 && !bosAFavor && !bearTrapConfirmacion){
-        journal(thesis, `Todavía esperando confirmación (el anuncio de la Fed fue hace ${Math.abs(fomc.hoursUntil).toFixed(1)}hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente).`);
+        journal(thesis, `Todavía esperando confirmación (${fomc.kind} fue hace ${Math.abs(fomc.hoursUntil).toFixed(1)}hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente).`);
         stillWatching.push(thesis);
         continue;
       }
 
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion)){
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
         const patternQuality = (bosAFavor || bearTrapConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion) ? 'high' : 'normal';
@@ -630,11 +645,39 @@ async function confirmTheses(state, capitalFlow){
           continue;
         }
 
+        // Filtro de CVD (flujo de compra/venta aproximado): si vamos a COMPRAR pero el CVD muestra
+        // divergencia bajista (el precio sube sin volumen comprador real detrás), o vamos a VENDER
+        // pero el CVD muestra divergencia alcista, es señal de ruptura débil — no confirmamos.
+        const cvdEnContra = thesis.dir==='LONG' ? result15.cvd?.bearishDivergence : result15.cvd?.bullishDivergence;
+        if(cvdEnContra){
+          journal(thesis, `Todavía esperando confirmación: el CVD (flujo de compra/venta aproximado) muestra que el movimiento actual no tiene volumen real detrás — parece una ruptura débil, se espera a que se confirme con volumen de verdad.`);
+          stillWatching.push(thesis);
+          continue;
+        }
+
+        // Comité con pesos automáticos: cada Dios ya tiene su historial real de aciertos guardado
+        // (computeGodPerformance). PERO solo lo usamos como filtro una vez que un Dios tiene AL MENOS
+        // 15 votos de muestra — con menos que eso, actuar sobre el número sería repetir el mismo
+        // error que ya identificamos (sacar conclusiones de una muestra chica). Hoy (con 1-6 votos
+        // por Dios) esto todavía no hace nada — se activa solo cuando la evidencia real alcanza.
+        const MIN_VOTOS_PARA_CONFIAR = 15;
+        const godPerf = computeGodPerformance(acc.closedTrades);
+        const godsAFavor = (result15.committee||[]).filter(g=>g.vote===thesis.dir);
+        const godsMaduros = godsAFavor.map(g=>godPerf.find(p=>p.name===g.name)).filter(p=>p && p.agreedTotal>=MIN_VOTOS_PARA_CONFIAR);
+        if(godsMaduros.length>0){
+          const avgWinRate = godsMaduros.reduce((s,g)=>s+g.winRate,0)/godsMaduros.length;
+          if(avgWinRate < 30){
+            journal(thesis, `Todavía esperando confirmación: los Dioses que votan a favor de esta entrada (${godsMaduros.map(g=>g.name).join(', ')}) tienen un historial real flojo (${avgWinRate.toFixed(0)}% de aciertos con ${godsMaduros.reduce((s,g)=>s+g.agreedTotal,0)} votos acumulados) — se pausa esta entrada hasta que mejore ese historial o aparezca otra confirmación más fuerte.`);
+            stillWatching.push(thesis);
+            continue;
+          }
+        }
+
         thesis.status = 'ACTIVE';
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
-        const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : `la confianza del motor subió a ${result15.confidence}%`;
+        const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
