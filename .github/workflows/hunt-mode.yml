@@ -1,8 +1,7 @@
 name: Fortress Hunt Mode - Telegram Signals
-
 on:
   schedule:
-    - cron: '0 * * * *'   # cada 1 hora, en punto
+    - cron: '*/30 * * * *'   # cada 30 minutos de verdad (dos veces por hora: min 0 y min 30)
   workflow_dispatch:
     inputs:
       force_test_trade:
@@ -10,29 +9,23 @@ on:
         type: boolean
         default: false
 
-# Evita que dos corridas se pisen (ej: una corrida manual justo cuando arranca la programada),
-# que es justo lo que causó el error de "git push rejected" — en vez de correr en paralelo,
-# la nueva corrida espera a que termine la anterior.
 concurrency:
   group: hunt-mode
   cancel-in-progress: false
 
 permissions:
-  contents: write            # necesario para que el bot pueda guardar el estado (dedupe + cuenta TheHaton)
+  contents: write
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'   # Node 20 quedó obsoleto en los runners de GitHub Actions
-
+          node-version: '22'
       - name: Instalar dependencias (web-push, para las notificaciones push)
         run: npm install
-
       - name: Ejecutar el escáner y enviar señales a Telegram
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -40,7 +33,6 @@ jobs:
           FORCE_TEST_TRADE: ${{ github.event.inputs.force_test_trade }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
         run: node telegram-bot/scan.js
-
       - name: Guardar el estado (para no repetir alertas y no perder la cuenta de TheHaton)
         if: always()
         run: |
@@ -49,8 +41,6 @@ jobs:
           git add telegram-bot/state.json
           git diff --staged --quiet && exit 0
           git commit -m "chore: actualizar estado del hunt mode [skip ci]"
-          # Defensa extra (además de "concurrency" arriba): si el push falla porque el remoto
-          # cambió mientras tanto, se trae lo nuevo y se reintenta, en vez de perder la corrida.
           for i in 1 2 3; do
             if git push; then break; fi
             echo "Push rechazado, reintentando con pull --rebase ($i/3)..."
