@@ -1,6 +1,6 @@
 // KRAX Capital — service worker mínimo, solo para que el navegador reconozca la app como instalable.
 // No cachea agresivamente (los datos son en vivo), solo permite que "Agregar a inicio" / "Instalar app" aparezca.
-const CACHE_NAME = 'krax-capital-v1';
+const CACHE_NAME = 'krax-capital-v2';
 const CORE_ASSETS = ['./', './index.html', './thehaton-engine.js', './manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -22,8 +22,18 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if(url.origin !== self.location.origin) return;
   event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
+    // 'no-store' asegura que el pedido a la red nunca use una copia vieja guardada por el navegador
+    // (el caché de la Service Worker es distinto, ese lo manejamos nosotros abajo) — así, si subiste
+    // un archivo nuevo, la próxima vez que se abra la app se trae la versión real, no una vieja.
+    fetch(event.request, {cache:'no-store'}).catch(() => caches.match(event.request))
   );
+});
+
+// Si la web le pide a este service worker que tome el control ya mismo (en vez de esperar a que se
+// cierren todas las pestañas viejas), lo hacemos — así el botón de "hay una versión nueva" funciona
+// de verdad en el momento, sin tener que cerrar y volver a abrir la app.
+self.addEventListener('message', (event) => {
+  if(event.data === 'skipWaiting') self.skipWaiting();
 });
 
 // ---- Notificaciones push de verdad (llegan aunque la app esté cerrada) ----

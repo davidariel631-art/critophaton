@@ -163,11 +163,15 @@
 
   /* ---- tabs ---- */
   .tabnav{display:flex;gap:6px;margin-bottom:18px;padding:6px;background:var(--panel);border:1px solid var(--border);border-radius:16px;position:sticky;top:8px;z-index:10;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .analyze-subnav{display:flex;gap:4px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;border-bottom:1px solid var(--border);}
+  .asub-btn{background:transparent;border:none;color:var(--sub);padding:9px 14px;font-family:var(--display);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;}
+  .asub-btn.active{color:var(--amber);border-bottom-color:var(--amber);}
 
   /* Barra inferior estilo app (Mercado Pago / fintech): oculta en el navegador normal, visible solo instalada */
   .bottom-nav{display:none;position:fixed;left:0;right:0;bottom:0;z-index:50;background:rgba(10,13,18,0.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--border);padding:8px 6px calc(8px + env(safe-area-inset-bottom));justify-content:space-around;}
   .bn-btn{background:none;border:none;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--display);font-size:10.5px;font-weight:600;padding:4px 6px;border-radius:12px;flex:1;max-width:80px;}
-  .bn-btn .bn-icon{font-size:21px;line-height:1;}
+  .bn-btn .bn-icon{line-height:1;display:flex;}
+  .bn-btn .bn-icon svg{width:21px;height:21px;}
   .bn-btn.active{color:var(--amber);}
   @media (display-mode: standalone){
     .tabnav{display:none;}
@@ -262,6 +266,9 @@
       <div style="min-width:0;overflow:hidden;"><h1>KRAX CAPITAL</h1><small>Análisis técnico + Smart Money</small> <span class="pill live" style="margin-left:6px;">En vivo</span></div>
     </div>
     <div class="avatar-wrap" id="avatarWrap">
+      <div id="updateBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:100;background:linear-gradient(135deg,var(--amber),var(--accent2));color:#00131a;padding:10px 16px;text-align:center;font-family:var(--display);font-weight:700;font-size:13px;cursor:pointer;">
+        🔄 Hay una versión nueva de KRAX — tocá para actualizar
+      </div>
       <button class="avatar-btn" id="notifBtn" style="margin-right:8px;background:var(--panel2);" title="Activar notificaciones">🔔</button>
       <button class="avatar-btn" id="avatarBtn">👤</button>
       <div class="avatar-dropdown" id="avatarDropdown">
@@ -325,28 +332,28 @@
   <div class="tabnav" id="tabNav">
     <button class="tab-btn active" data-tab="analizar">Analizar</button>
     <button class="tab-btn" data-tab="heatmap">Heatmap</button>
-    <button class="tab-btn" data-tab="liquidez">💧 Liquidez</button>
+    <button class="tab-btn" data-tab="liquidez">Liquidez</button>
     <button class="tab-btn" data-tab="dexnuevos">DEX Nuevos</button>
     <button class="tab-btn" data-tab="comparar">Comparar</button>
     <button class="tab-btn" data-tab="historial">Historial</button>
-    <button class="tab-btn" data-tab="wallet">👛 Wallet</button>
-    <button class="tab-btn" data-tab="thehaton">🏛️ TheHaton</button>
+    <button class="tab-btn" data-tab="wallet">Wallet</button>
+    <button class="tab-btn" data-tab="thehaton">TheHaton</button>
   </div>
 
   <nav class="bottom-nav" id="bottomNav">
-    <button class="bn-btn active" data-tab="analizar"><span class="bn-icon">📊</span><span>Analizar</span></button>
-    <button class="bn-btn" data-tab="heatmap"><span class="bn-icon">🔥</span><span>Heatmap</span></button>
-    <button class="bn-btn" data-tab="thehaton"><span class="bn-icon">🏛️</span><span>TheHaton</span></button>
-    <button class="bn-btn" data-tab="wallet"><span class="bn-icon">👛</span><span>Wallet</span></button>
-    <button class="bn-btn" id="bnMoreBtn"><span class="bn-icon">☰</span><span>Más</span></button>
+    <button class="bn-btn active" data-tab="analizar"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-3.4-3.4-4.2 4.2"/></svg></span><span>Analizar</span></button>
+    <button class="bn-btn" data-tab="heatmap"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span><span>Heatmap</span></button>
+    <button class="bn-btn" data-tab="thehaton"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M4 10h16M12 3l8 5H4l8-5zM6 10v8M10 10v8M14 10v8M18 10v8"/></svg></span><span>TheHaton</span></button>
+    <button class="bn-btn" data-tab="wallet"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></span><span>Wallet</span></button>
+    <button class="bn-btn" id="bnMoreBtn"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></span><span>Más</span></button>
   </nav>
 
   <div class="more-sheet" id="moreSheet">
     <div class="more-sheet-inner">
-      <button class="more-item" data-tab="liquidez">💧 Zonas de Liquidez</button>
-      <button class="more-item" data-tab="dexnuevos">🆕 DEX Nuevos</button>
-      <button class="more-item" data-tab="comparar">⚖️ Comparar</button>
-      <button class="more-item" data-tab="historial">🕓 Historial</button>
+      <button class="more-item" data-tab="liquidez">Zonas de Liquidez</button>
+      <button class="more-item" data-tab="dexnuevos">DEX Nuevos</button>
+      <button class="more-item" data-tab="comparar">Comparar</button>
+      <button class="more-item" data-tab="historial">Historial</button>
       <button class="more-item" id="moreCloseBtn">✕ Cerrar</button>
     </div>
   </div>
@@ -381,6 +388,13 @@
   </div>
 
   <div id="results" style="display:none;">
+    <div class="analyze-subnav" id="analyzeSubnav">
+      <button class="asub-btn active" data-subgroup="resumen">Resumen</button>
+      <button class="asub-btn" data-subgroup="grafico">Gráfico</button>
+      <button class="asub-btn" data-subgroup="indicadores">Indicadores</button>
+      <button class="asub-btn" data-subgroup="analisis">Análisis IA</button>
+    </div>
+    <div class="analyze-subgroup" data-subgroup="resumen">
     <div class="card">
       <h2>Long Score / Short Score</h2>
       <div class="dual-hero">
@@ -462,7 +476,9 @@
       <button class="copy-btn" id="copySignalBtn" style="position:static;margin-top:10px;">📋 Copiar señal</button>
       <button class="copy-btn" id="shareImageBtn" style="position:static;margin-top:10px;margin-left:8px;">📤 Compartir como imagen</button>
     </div>
+    </div><!-- /subgroup resumen -->
 
+    <div class="analyze-subgroup" data-subgroup="grafico" style="display:none;">
     <div class="card" style="margin-top:18px;">
       <h2>Lectura de estructura (Smart Money Concepts)</h2>
       <div id="structureNotes" class="signal-text"></div>
@@ -505,7 +521,9 @@
         <div id="oiMcResult" class="subrow" style="margin-top:6px;"></div>
       </div>
     </div>
+    </div><!-- /subgroup grafico -->
 
+    <div class="analyze-subgroup" data-subgroup="indicadores" style="display:none;">
     <div class="card" style="margin-top:18px;">
       <h2>📊 Estado de indicadores (ampliado)</h2>
       <div class="indi-grid" id="indicatorStatusGrid" style="grid-template-columns:repeat(3,1fr);"></div>
@@ -525,7 +543,9 @@
         <div class="checklist" id="riskChecklist"></div>
       </div>
     </div>
+    </div><!-- /subgroup indicadores -->
 
+    <div class="analyze-subgroup" data-subgroup="analisis" style="display:none;">
     <div class="card" style="margin-top:18px;">
       <h2>🧠 Modo Analista</h2>
       <div class="signal-text" id="analystExplanation" style="background:var(--panel2);"></div>
@@ -540,6 +560,7 @@
         </div>
       </div>
     </div>
+    </div><!-- /subgroup analisis -->
 
     <div class="disclaimer">
       Esto es un análisis técnico y de derivados generado automáticamente con datos públicos (Binance / GeckoTerminal). No es asesoría financiera. El score y la señal son heurísticas basadas en indicadores, no una predicción garantizada. Siempre verificá liquidez, contrato y datos on-chain manualmente (DYOR) antes de operar.
@@ -1012,6 +1033,8 @@ function drawCandles(candles, series, support, resistance, structure, setup){
 function renderResults(data, result, setup){
   document.getElementById('emptyState').style.display='none';
   document.getElementById('results').style.display='block';
+  document.querySelectorAll('.asub-btn').forEach(b=>b.classList.toggle('active', b.dataset.subgroup==='resumen'));
+  document.querySelectorAll('.analyze-subgroup').forEach(g=>{ g.style.display = g.dataset.subgroup==='resumen' ? 'block' : 'none'; });
 
   document.getElementById('tokenLabel').textContent = `${data.displayName} · ${currentTF} · fuente: ${data.source}`;
   document.getElementById('priceLabel').textContent = `$${fmt(data.price)}  (${fmtPct(data.change24h||0)} 24h)`;
@@ -1581,6 +1604,17 @@ function switchTab(tabName){
   if(tabName==='historial') renderHistory();
   if(tabName==='thehaton') loadTheHaton();
 }
+// Sub-pestañas DENTRO de "Analizar" (Resumen / Gráfico / Indicadores / Análisis IA) — para no tener
+// que scrollear un solo bloque gigante en el celular. Ningún ID de adentro cambió, solo se agrupó
+// visualmente lo que ya existía.
+document.getElementById('analyzeSubnav').addEventListener('click', e=>{
+  const btn = e.target.closest('.asub-btn'); if(!btn) return;
+  document.querySelectorAll('.asub-btn').forEach(b=>b.classList.toggle('active', b===btn));
+  document.querySelectorAll('.analyze-subgroup').forEach(g=>{
+    g.style.display = g.dataset.subgroup===btn.dataset.subgroup ? 'block' : 'none';
+  });
+  document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
+});
 document.getElementById('tabNav').addEventListener('click', e=>{
   const btn = e.target.closest('.tab-btn'); if(!btn) return;
   switchTab(btn.dataset.tab);
@@ -2652,9 +2686,48 @@ document.getElementById('cmpBtn').addEventListener('click', async ()=>{
 
 <script>
   // Registro del service worker: sin esto, la mayoría de los navegadores no ofrecen "Instalar app".
+  // Además: detecta cuando hay una versión nueva subida al repo, y la aplica con un toque, sin
+  // que haga falta desinstalar y volver a instalar la app.
   if('serviceWorker' in navigator){
-    window.addEventListener('load', ()=>{
-      navigator.serviceWorker.register('sw.js').catch(()=>{ /* si falla, la app sigue funcionando normal, solo sin instalación */ });
+    window.addEventListener('load', async ()=>{
+      try{
+        const reg = await navigator.serviceWorker.register('sw.js');
+
+        // Si ya había una versión esperando (por ejemplo, se instaló mientras la pestaña estaba
+        // cerrada), la mostramos directo.
+        if(reg.waiting) showUpdateBanner(reg);
+
+        // Cuando se detecta una versión nueva instalándose...
+        reg.addEventListener('updatefound', ()=>{
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', ()=>{
+            // "installed" + ya había un controller activo = es una ACTUALIZACIÓN, no la primera instalación
+            if(newWorker.state==='installed' && navigator.serviceWorker.controller){
+              showUpdateBanner(reg);
+            }
+          });
+        });
+
+        // Revisa activamente si hay una versión nueva cada vez que se abre la app (no espera a que
+        // el navegador lo chequee solo, que puede tardar horas).
+        reg.update().catch(()=>{});
+      }catch(e){ /* si falla, la app sigue funcionando normal, solo sin instalación */ }
+    });
+
+    // Cuando el service worker nuevo toma el control, recargamos una sola vez para mostrar la versión fresca.
+    let refrescando = false;
+    navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+      if(refrescando) return;
+      refrescando = true;
+      window.location.reload();
+    });
+  }
+  function showUpdateBanner(reg){
+    const banner = document.getElementById('updateBanner');
+    banner.style.display = 'block';
+    banner.addEventListener('click', ()=>{
+      banner.textContent = 'Actualizando...';
+      reg.waiting?.postMessage('skipWaiting');
     });
   }
 </script>
