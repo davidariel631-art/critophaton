@@ -453,7 +453,23 @@ function confluenceScore15m(candles){
   const bullConfluence = [macdBull, stochBull, strongBullCandles>=2, volumeConfirms, adxStrong].filter(Boolean).length;
   const bearConfluence = [macdBear, stochBear, strongBearCandles>=2, volumeConfirms, adxStrong].filter(Boolean).length;
 
-  return { bullConfluence, bearConfluence, macdBull, macdBear, stochBull, stochBear, strongBullCandles, strongBearCandles, volumeConfirms, adxStrong, adxVal, lastStoch };
+  // ---- Entrada temprana de MACD (histograma "aclarándose") — arreglada con 2 filtros extra ----
+  // La técnica original (Aspray, 1986): el histograma achicándose HACIA CERO anticipa el cruce real,
+  // antes de que la barra cambie de color. Un estudio real (Chio, 2022, backtest de todo el Dow/Nasdaq/
+  // S&P500) encontró que esta entrada gana MÁS SEGUIDO, pero cuando pierde, pierde MÁS GRANDE — el MACD
+  // solo, sin nada más, gana menos del 50% de las veces. Por eso acá NUNCA se usa sola: solo cuenta si
+  // además (1) el ADX confirma que hay una tendencia real (no ruido de mercado lateral) y (2) el
+  // Estocástico está alineado (recuperándose desde su propia zona, no ya agotado en el sentido contrario).
+  // Exigimos 2 velas seguidas de achicamiento (no solo 1) para la confirmación de pendiente real.
+  const h1=macdData.hist.at(-1), h2=macdData.hist.at(-2), h3=macdData.hist.at(-3);
+  const histShrinkingBull = h1!=null && h2!=null && h3!=null && h1<0 && h2<0 && h1>h2 && h2>=h3; // menos negativo cada vez
+  const histShrinkingBear = h1!=null && h2!=null && h3!=null && h1>0 && h2>0 && h1<h2 && h2<=h3; // menos positivo cada vez
+  const stochAlignedBull = lastStoch!=null && lastStoch>25 && lastStoch<70; // recuperándose, no ya agotado arriba
+  const stochAlignedBear = lastStoch!=null && lastStoch<75 && lastStoch>30; // cayendo, no ya agotado abajo
+  const macdEarlyBull = histShrinkingBull && adxStrong && stochAlignedBull;
+  const macdEarlyBear = histShrinkingBear && adxStrong && stochAlignedBear;
+
+  return { bullConfluence, bearConfluence, macdBull, macdBear, stochBull, stochBear, strongBullCandles, strongBearCandles, volumeConfirms, adxStrong, adxVal, lastStoch, macdEarlyBull, macdEarlyBear };
 }
 
 // ---- Fear & Greed (para el filtro macro suave) ----
@@ -489,6 +505,42 @@ function getFOMCWindow(bufferHours=3){
     }
   }
   return { isNear:false, hoursUntil:null, announcementTime:null };
+}
+
+// ---- Filtro macro AMPLIADO: no solo FOMC, también los datos de EE.UU. que más mueven el mercado ----
+// NFP (empleo, primer viernes del mes) y peticiones de desempleo semanales (todos los jueves) tienen
+// fecha exacta y se pueden calcular. CPI real varía año a año dentro del BLS (no hay una regla fija
+// simple) — acá usamos una ventana aproximada (día 10 al 15 del mes) como aviso de precaución, no
+// como fecha exacta confirmada; es mejor que nada, pero no reemplaza un calendario económico real.
+function getHighImpactMacroWindow(bufferHours=2){
+  const fomc = getFOMCWindow(bufferHours);
+  if(fomc.isNear) return { ...fomc, kind:'FOMC (anuncio de tasas)' };
+
+  const now = new Date();
+  const targetUTCHour = 13; // 8:30am ET en horario de verano (la mayor parte del año que corre el bot)
+
+  // NFP: primer viernes del mes
+  const year = now.getUTCFullYear(), month = now.getUTCMonth();
+  const firstOfMonth = new Date(Date.UTC(year, month, 1));
+  const firstFridayDate = 1 + ((5 - firstOfMonth.getUTCDay() + 7) % 7);
+  const nfpTime = new Date(Date.UTC(year, month, firstFridayDate, targetUTCHour, 30));
+  const nfpDiff = (nfpTime.getTime()-now.getTime())/(3600*1000);
+  if(Math.abs(nfpDiff) <= bufferHours) return { isNear:true, hoursUntil:nfpDiff, announcementTime:nfpTime.toISOString(), kind:'NFP (reporte de empleo)' };
+
+  // Peticiones de desempleo semanales: todos los jueves
+  const dayOfWeek = now.getUTCDay(); // 4 = jueves
+  const daysToThursday = (4 - dayOfWeek + 7) % 7;
+  const thursdayTime = new Date(Date.UTC(year, month, now.getUTCDate()+daysToThursday, targetUTCHour, 30));
+  const claimsDiff = (thursdayTime.getTime()-now.getTime())/(3600*1000);
+  if(Math.abs(claimsDiff) <= bufferHours) return { isNear:true, hoursUntil:claimsDiff, announcementTime:thursdayTime.toISOString(), kind:'Peticiones de desempleo semanales' };
+
+  // CPI: ventana aproximada (día 10-15), no fecha exacta confirmada — aviso más suave
+  const dayOfMonth = now.getUTCDate();
+  if(dayOfMonth>=10 && dayOfMonth<=15 && now.getUTCHours()===targetUTCHour){
+    return { isNear:true, hoursUntil:0, announcementTime:now.toISOString(), kind:'Posible CPI (ventana aproximada, no fecha exacta)' };
+  }
+
+  return { isNear:false, hoursUntil:null, announcementTime:null, kind:null };
 }
 
 // ---- Capital Flow real (DeFiLlama: 100% gratis, sin key, sin límite) ----
@@ -572,13 +624,17 @@ function computeLiquidityProfile(candles, price, lookback=200){
   let sellTotal=0, buyTotal=0, pocSell=null, pocBuy=null;
   for(let b=0;b<nBins;b++){
     const binMid = minP + b*priceStep + priceStep/2;
-    if(binMid > price){ sellTotal+=bins[b]; if(!pocSell || bins[b]>pocSell.v) pocSell={price:binMid,v:bins[b]}; }
-    else { buyTotal+=bins[b]; if(!pocBuy || bins[b]>pocBuy.v) pocBuy={price:binMid,v:bins[b]}; }
+    if(binMid > price){ sellTotal+=bins[b]; if(!pocSell || bins[b]>pocSell.v) pocSell={price:binMid,v:bins[b],bin:b}; }
+    else { buyTotal+=bins[b]; if(!pocBuy || bins[b]>pocBuy.v) pocBuy={price:binMid,v:bins[b],bin:b}; }
   }
   const totalVol = sellTotal+buyTotal || 1;
   return {
     domUpPct: sellTotal/totalVol*100, domDownPct: buyTotal/totalVol*100,
     pocAbove: pocSell, pocBelow: pocBuy,
+    // Se exponen también los bins crudos (con su rango de precio) para que quien necesite DIBUJAR
+    // el perfil (como la pestaña Liquidez de la web) use esta misma función en vez de recalcular
+    // todo de nuevo por su cuenta — antes la web tenía una copia duplicada de este cálculo.
+    bins, minP, maxP, priceStep, nBins,
   };
 }
 function mfi(candles, period=14){
@@ -869,6 +925,58 @@ function fibLevels(labeledPivots){
   };
 }
 
+// ---- VWAP (Volume Weighted Average Price) + bandas de desviación ----
+// El nivel que usan de verdad los institucionales para ejecutar sus órdenes — por eso funciona como
+// soporte/resistencia dinámico real, no solo un promedio más. Cripto es 24/7 (sin sesión de apertura
+// como las acciones), así que anclamos a una ventana fija (por defecto ~200 velas) en vez de "desde
+// la apertura del día". Devuelve el VWAP actual + bandas de ±1 y ±2 desviaciones estándar.
+function computeVWAP(candles, lookback=200){
+  const recent = candles.slice(-Math.min(lookback, candles.length));
+  let cumPV = 0, cumVol = 0;
+  const vwapSeries = [];
+  for(const c of recent){
+    const typical = (c.h+c.l+c.c)/3;
+    cumPV += typical*c.v; cumVol += c.v;
+    vwapSeries.push(cumVol>0 ? cumPV/cumVol : typical);
+  }
+  const lastVwap = vwapSeries.at(-1);
+  let sumSqDiff = 0;
+  recent.forEach((c,i)=>{ const typical=(c.h+c.l+c.c)/3; sumSqDiff += c.v*Math.pow(typical-vwapSeries[i],2); });
+  const stdev = cumVol>0 ? Math.sqrt(sumSqDiff/cumVol) : 0;
+  return {
+    vwap: lastVwap,
+    upper1: lastVwap+stdev, lower1: lastVwap-stdev,
+    upper2: lastVwap+stdev*2, lower2: lastVwap-stdev*2,
+  };
+}
+
+// ---- CVD aproximado (Cumulative Volume Delta) ----
+// El dato real necesita saber quién fue el agresor en cada operación (comprador pegándole al ask,
+// o vendedor pegándole al bid) — eso requiere trades tick-por-tick, no las velas OHLC que ya tenemos,
+// y pedirlo agregaría muchas llamadas nuevas a las APIs. En su lugar usamos una aproximación conocida:
+// dónde cierra la vela dentro de su propio rango alto-bajo estima qué tan "comprador" o "vendedor" fue
+// el volumen de esa vela. No es tan preciso como un footprint real, pero es gratis y no rompe nada.
+function computeCVD(candles, lookback=50){
+  const recent = candles.slice(-Math.min(lookback, candles.length));
+  let cvd = 0;
+  const series = [];
+  for(const c of recent){
+    const range = (c.h-c.l) || 1e-9;
+    const buyRatio = (c.c-c.l)/range; // 1 = cerró en el máximo (todo comprador), 0 = cerró en el mínimo (todo vendedor)
+    const delta = c.v*(buyRatio*2-1); // escala a -volumen..+volumen
+    cvd += delta;
+    series.push(cvd);
+  }
+  // Divergencia: precio hace un máximo/mínimo nuevo pero el CVD no lo acompaña -> ruptura débil, sospechosa.
+  const priceCloses = recent.map(c=>c.c);
+  const lastPrice = priceCloses.at(-1);
+  const maxPriceIdx = priceCloses.indexOf(Math.max(...priceCloses));
+  const minPriceIdx = priceCloses.indexOf(Math.min(...priceCloses));
+  const bearishDivergence = maxPriceIdx===priceCloses.length-1 && series.at(-1) < Math.max(...series.slice(0,-5));
+  const bullishDivergence = minPriceIdx===priceCloses.length-1 && series.at(-1) > Math.min(...series.slice(0,-5));
+  return { cvd: series.at(-1), series, bearishDivergence, bullishDivergence };
+}
+
 function detectCandlePattern(candles){
   const c = candles.at(-1), p = candles.at(-2);
   const body = Math.abs(c.c-c.o), range = c.h-c.l || 1e-9;
@@ -931,7 +1039,20 @@ function computeStructure(candles, atrArr){
     score -= 6;
     notes.push(`🎯 PATRÓN: Distribución + Bull Trap confirmado — rango de ${(distBullTrap.rangeWidthPct*100).toFixed(0)}% con ${distBullTrap.testDumpCount} test(s) fallido(s) contra el soporte ($${fmt(distBullTrap.rangeLow)}), y ahora una barrida por encima de la resistencia ($${fmt(distBullTrap.rangeHigh)}) que rechazó. Señal de venta de alta calidad, más confiable que un sweep aislado.`);
   }
-  if(candlePattern){ notes.push(`Última vela: ${candlePattern}.`); }
+  if(candlePattern){
+    // Antes esto era solo informativo (no sumaba ni restaba nada al score). La investigación es clara:
+    // una vela de reversión "en el medio de la nada" no vale lo mismo que la misma vela justo en una
+    // zona real (Order Block, FVG) — "un grito" vs "un susurro". Ahora exigimos esa cercanía para que
+    // el patrón realmente sume o reste puntos.
+    const cerca = (lvl, tol=0.015) => lvl!=null && Math.abs(price-lvl)/price <= tol;
+    const enZonaAlcista = cerca(bullishOB?.top) || cerca(bullishOB?.bottom) || cerca(bullFVG?.top) || cerca(bullFVG?.bottom);
+    const enZonaBajista = cerca(bearishOB?.top) || cerca(bearishOB?.bottom) || cerca(bearFVG?.top) || cerca(bearFVG?.bottom);
+    const esAlcista = /alcista|Bullish|Hammer \(/.test(candlePattern);
+    const esBajista = /bajista|Bearish|Shooting Star/.test(candlePattern);
+    if(esAlcista && enZonaAlcista){ score+=2; notes.push(`Última vela: ${candlePattern} — justo en una zona real (Order Block/FVG alcista), no en el aire: la señal vale más acá.`); }
+    else if(esBajista && enZonaBajista){ score-=2; notes.push(`Última vela: ${candlePattern} — justo en una zona real (Order Block/FVG bajista), no en el aire: la señal vale más acá.`); }
+    else notes.push(`Última vela: ${candlePattern} (sin una zona estructural real cerca — patrón de vela solo, se lo trata como referencia débil).`);
+  }
 
   // Fuerza en tests sucesivos: ¿el soporte/resistencia se está debilitando o fortaleciendo con cada toque?
   const {support: srSupport, resistance: srResistance} = findSupportResistance(candles);
@@ -1211,6 +1332,30 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   }
   committee.push({name:'💪 Dios de Fuerza Relativa (vs BTC)', signal:relStrengthSignal, vote:vote(relStrengthSignal), note:relStrengthNote});
 
+  // ---- Dios VWAP (13°): el nivel que usan de verdad los institucionales para ejecutar sus órdenes.
+  // Precio arriba del VWAP = sesgo alcista real (compradores pagando por encima del promedio ponderado
+  // por volumen), abajo = sesgo bajista. Las bandas de desviación marcan qué tan "estirado" está.
+  const vwapData = computeVWAP(data.candles);
+  let vwapSignal = 0, vwapNote = 'Sin datos suficientes para VWAP.';
+  if(vwapData.vwap){
+    const stdevBand = vwapData.upper1 - vwapData.vwap;
+    vwapSignal = stdevBand>0 ? Math.max(-1, Math.min(1, (price-vwapData.vwap)/(stdevBand*1.5))) : 0;
+    const zona = price>vwapData.upper2 ? 'muy por encima de +2 desviaciones (extendido)' : price>vwapData.upper1 ? 'por encima de +1 desviación' : price>vwapData.vwap ? 'por encima del VWAP' : price>vwapData.lower1 ? 'por debajo del VWAP' : price>vwapData.lower2 ? 'por debajo de -1 desviación' : 'muy por debajo de -2 desviaciones (extendido)';
+    vwapNote = `Precio $${price.toFixed(6)} está ${zona} ($${vwapData.vwap.toFixed(6)}) — nivel real donde ejecutan los grandes jugadores.`;
+  }
+  committee.push({name:'📊 Dios VWAP', signal:vwapSignal, vote:vote(vwapSignal), note:vwapNote});
+
+  // ---- Dios CVD (14°): flujo de compra/venta aproximado (ver nota en computeCVD) — detecta rupturas
+  // débiles (el precio hace un máximo/mínimo nuevo, pero el volumen que empuja no acompaña).
+  const cvdData = computeCVD(data.candles);
+  let cvdSignal = 0, cvdNote = 'Sin datos suficientes para CVD.';
+  if(cvdData){
+    if(cvdData.bearishDivergence){ cvdSignal = -0.6; cvdNote = 'Divergencia bajista de CVD: el precio sube pero el volumen comprador se debilita — posible ruptura falsa.'; }
+    else if(cvdData.bullishDivergence){ cvdSignal = 0.6; cvdNote = 'Divergencia alcista de CVD: el precio baja pero el volumen vendedor se debilita — posible ruptura falsa a la baja.'; }
+    else cvdNote = `CVD acompañando el movimiento actual sin divergencia (aproximado por vela, no tick-a-tick real).`;
+  }
+  committee.push({name:'📉 Dios CVD', signal:cvdSignal, vote:vote(cvdSignal), note:cvdNote});
+
   // ---- Dios Market Context Matrix (12°): OI + Precio + Funding combinados, no aislados ----
   const priceTrend = classifyTrend(data.candles.map(c=>c.c).slice(-8), 2);
   const ctx = marketContext ? marketContextMatrix(marketContext.oiTrend, priceTrend, marketContext.fundingTrend) : null;
@@ -1242,8 +1387,8 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
     score10, bias,
     longScore, shortScore, confidence, stars, recommendation,
     breakdown:[{label:'Tendencia',val:Math.round(trendR),max:25},{label:'Momentum',val:Math.round(momentumR),max:20},{label:'Volumen',val:Math.round(volumeR),max:12},{label:'Volatilidad',val:Math.round(volatR),max:8},{label:'Derivados',val:Math.round(derivR),max:15},{label:'Estructura SMC',val:Math.round(structure.score),max:20}],
-    metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastStochK,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct},
-    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality,
+    metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastStochK,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct,vwap:vwapData},
+    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality, cvd:cvdData,
     series:{closes,e20,e50,e200,rsiArr,macd:m,bb}
   };
 }
@@ -1494,9 +1639,9 @@ export {
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
-  fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow,
+  fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
-  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, mfi, obvSeries, adx, cci, roc,
+  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
