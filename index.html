@@ -358,6 +358,15 @@
     </div>
   </div>
 
+  <div class="more-sheet" id="photoPreviewSheet">
+    <div class="more-sheet-inner">
+      <h3 style="font-family:var(--display);font-size:16px;text-align:center;margin:0 0 12px;">¿Se ve bien así?</h3>
+      <div id="photoPreviewImg" style="width:120px;height:120px;border-radius:50%;background-size:cover;background-position:center;margin:0 auto 16px;border:2px solid var(--border);"></div>
+      <button class="backtest-btn" id="photoPreviewSave" style="width:100%;">Guardar</button>
+      <button class="more-item" id="photoPreviewCancel">Probar con otra foto</button>
+    </div>
+  </div>
+
   <div class="more-sheet" id="notifSheet">
     <div class="more-sheet-inner">
       <div style="text-align:center;font-size:38px;margin-bottom:4px;">🔔</div>
@@ -1531,33 +1540,27 @@ function applyProfilePhoto(dataUrl){
     else { btn.style.backgroundImage = ''; btn.classList.remove('has-photo'); }
   });
 }
-async function compressImageToDataUrl(file, size=128){
-  // createImageBitmap con imageOrientation:'from-image' respeta el dato de rotación que graban los
-  // celulares en la foto (EXIF) — el método viejo con new Image() lo ignora, por eso el recorte
-  // agarraba la imagen "de costado" y cortaba cualquier cosa en fotos sacadas en vertical.
-  let bitmap;
-  try{
-    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-  }catch(e){
-    // navegador viejo sin soporte: caemos al método anterior (mejor que nada)
-    bitmap = await new Promise((resolve, reject)=>{
-      const img = new Image();
-      const reader = new FileReader();
-      reader.onload = ()=>{ img.src = reader.result; };
-      reader.onerror = reject;
-      img.onload = ()=>resolve(img);
-      img.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-  }
-  const canvas = document.createElement('canvas');
-  canvas.width = size; canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  // recorte cuadrado centrado, para que no se deforme la foto
-  const side = Math.min(bitmap.width, bitmap.height);
-  const sx = (bitmap.width-side)/2, sy = (bitmap.height-side)/2;
-  ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, size, size);
-  return canvas.toDataURL('image/jpeg', 0.82);
+function compressImageToDataUrl(file, size=128){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = ()=>{ img.src = reader.result; };
+    reader.onerror = ()=>reject(new Error('No se pudo leer el archivo.'));
+    img.onload = ()=>{
+      if(!img.naturalWidth || !img.naturalHeight){ reject(new Error('La imagen no tiene dimensiones válidas (formato no soportado).')); return; }
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // recorte cuadrado centrado, para que no se deforme la foto — los navegadores actuales ya
+      // corrigen solos la rotación de la foto (EXIF) acá, no hace falta hacerlo a mano.
+      const side = Math.min(img.naturalWidth, img.naturalHeight);
+      const sx = (img.naturalWidth-side)/2, sy = (img.naturalHeight-side)/2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.onerror = ()=>reject(new Error('No se pudo cargar la imagen (¿formato no soportado, tipo HEIC?).'));
+    reader.readAsDataURL(file);
+  });
 }
 // ================= NOTIFICACIONES PUSH DE VERDAD (llegan con la app cerrada) =================
 const VAPID_PUBLIC_KEY = 'BPXgVxHRjeFdsHoHmlRSMx8LlpSu2fWy-Pm6y32m8PYbjpvtg0691ctw46NCnoXyqndoitb98ljppeh26faP9Gk';
@@ -1624,12 +1627,29 @@ document.getElementById('photoFileInput').addEventListener('change', async (e)=>
   if(!file) return;
   try{
     const dataUrl = await compressImageToDataUrl(file);
-    localStorage.setItem('krax_profile_photo', dataUrl); // instantáneo, funciona incluso sin sesión
-    applyProfilePhoto(dataUrl);
-    if(window.fb && window.fb.auth.currentUser){
-      window.fb.savePhoto(dataUrl).catch(()=>{}); // se sincroniza a otros dispositivos si iniciás sesión ahí también
-    }
-  }catch(err){ console.error('No se pudo procesar la foto:', err); }
+    // Vista previa antes de guardar — así si el recorte quedó mal, lo ves al toque y podés
+    // cancelar y probar con otra foto, en vez de que quede guardada una imagen rota sin darte cuenta.
+    document.getElementById('photoPreviewImg').style.backgroundImage = `url(${dataUrl})`;
+    document.getElementById('photoPreviewSheet').dataset.pendingUrl = dataUrl;
+    document.getElementById('photoPreviewSheet').classList.add('open');
+  }catch(err){
+    console.error('No se pudo procesar la foto:', err);
+    showNotifResult('⚠️', 'No se pudo procesar esa foto: ' + err.message + ' — probá con otra.');
+  }
+  e.target.value = ''; // para que puedas elegir la misma foto de nuevo si cancelás y querés reintentar
+});
+document.getElementById('photoPreviewSave').addEventListener('click', ()=>{
+  const dataUrl = document.getElementById('photoPreviewSheet').dataset.pendingUrl;
+  if(!dataUrl) return;
+  localStorage.setItem('krax_profile_photo', dataUrl); // instantáneo, funciona incluso sin sesión
+  applyProfilePhoto(dataUrl);
+  if(window.fb && window.fb.auth.currentUser){
+    window.fb.savePhoto(dataUrl).catch(()=>{}); // se sincroniza a otros dispositivos si iniciás sesión ahí también
+  }
+  document.getElementById('photoPreviewSheet').classList.remove('open');
+});
+document.getElementById('photoPreviewCancel').addEventListener('click', ()=>{
+  document.getElementById('photoPreviewSheet').classList.remove('open');
 });
 // Al cargar la página, mostrar la foto guardada localmente de una (sin esperar a Firebase)
 (function(){
