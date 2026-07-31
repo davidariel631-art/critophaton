@@ -312,18 +312,18 @@ async function tryKuCoin(symbolRaw, tf){
 }
 
 async function fetchTokenData(query, tf){
-  const sources = [tryBinance, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin];
-  // Antes probábamos cada exchange UNA POR VEZ, en fila — si las primeras fallaban, se sumaba el
-  // tiempo de cada intento (podía llegar a 30-60s). Ahora las probamos casi al mismo tiempo (con un
-  // escalonado mínimo de 150ms entre cada una, para no disparar 6 pedidos de golpe a los mismos
-  // proxies gratis si todas necesitan usarlos — eso sí volvería a saturarlos como nos pasó antes).
-  // El resultado: el tiempo total pasa a ser el de la más lenta que igual sirvió, no la suma de todas.
-  const results = await Promise.allSettled(sources.map((src,i) =>
-    new Promise(res=>setTimeout(res, i*150)).then(()=>src(query, tf))
-  ));
-  for(let i=0; i<sources.length; i++){
-    const r = results[i];
-    if(r.status==='fulfilled' && r.value?.candles && r.value.candles.length>=30) return r.value;
+  // Volvimos a probar cada exchange UNA POR VEZ, en fila — lo probé en paralelo (Promise.allSettled)
+  // pensando que sería más rápido, pero fue al revés: esa función espera a que TODAS terminen (ganen
+  // o pierdan) antes de decidir, así que si Binance respondía rápido pero las demás fallaban y cada
+  // una reintentaba con 4 proxies (10s cada uno), la espera total terminaba siendo la de la MÁS LENTA
+  // en fallar del todo, no la de la primera en responder bien. Orden actualizado: Binance primero
+  // (la más completa), MEXC segundo (mejor cobertura de altcoins chicas), después el resto.
+  const sources = [tryBinance, tryMEXC, tryOKX, tryBybit, tryGate, tryKuCoin];
+  for(const src of sources){
+    try{
+      const data = await src(query, tf);
+      if(data.candles && data.candles.length>=30) return data;
+    }catch(e){ /* probamos con la siguiente fuente */ }
   }
   // ninguna fuente de exchanges centralizados lo tiene -> probamos DEXs (GeckoTerminal)
   return await tryGecko(query, tf);
