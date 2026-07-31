@@ -344,13 +344,13 @@
     <button class="bn-btn active" data-tab="analizar"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.1-3.4-3.4-4.2 4.2"/></svg></span><span>Analizar</span></button>
     <button class="bn-btn" data-tab="heatmap"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span><span>Heatmap</span></button>
     <button class="bn-btn" data-tab="thehaton"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M4 10h16M12 3l8 5H4l8-5zM6 10v8M10 10v8M14 10v8M18 10v8"/></svg></span><span>TheHaton</span></button>
-    <button class="bn-btn" data-tab="wallet"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg></span><span>Wallet</span></button>
+    <button class="bn-btn" data-tab="liquidez"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.69s5 5.5 5 9.31a5 5 0 0 1-10 0c0-3.81 5-9.31 5-9.31z"/></svg></span><span>Liquidez</span></button>
     <button class="bn-btn" id="bnMoreBtn"><span class="bn-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg></span><span>Más</span></button>
   </nav>
 
   <div class="more-sheet" id="moreSheet">
     <div class="more-sheet-inner">
-      <button class="more-item" data-tab="liquidez">Zonas de Liquidez</button>
+      <button class="more-item" data-tab="wallet">Wallet</button>
       <button class="more-item" data-tab="dexnuevos">DEX Nuevos</button>
       <button class="more-item" data-tab="comparar">Comparar</button>
       <button class="more-item" data-tab="historial">Historial</button>
@@ -1613,6 +1613,16 @@ document.getElementById('analyzeSubnav').addEventListener('click', e=>{
   document.querySelectorAll('.analyze-subgroup').forEach(g=>{
     g.style.display = g.dataset.subgroup===btn.dataset.subgroup ? 'block' : 'none';
   });
+  // El gráfico se crea con el ancho que tenga su contenedor EN ESE MOMENTO — si se creó mientras
+  // esta sub-pestaña estaba oculta (display:none), el ancho quedaba en 0 y el gráfico no se veía.
+  // Al mostrar la pestaña "Gráfico", le pedimos que recalcule su tamaño ahora que sí es visible.
+  if(btn.dataset.subgroup==='grafico' && candleChart){
+    requestAnimationFrame(()=>{
+      const container = document.getElementById('candleChartContainer');
+      candleChart.applyOptions({ width: container.clientWidth });
+      candleChart.timeScale().fitContent();
+    });
+  }
   document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
 });
 document.getElementById('tabNav').addEventListener('click', e=>{
@@ -1947,12 +1957,13 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
     candleSeries.setData(data.candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c })));
 
-    // Líneas finas de referencia (Equal Highs/Lows, OB, swings) por encima del perfil
+    // Líneas de referencia (Equal Highs/Lows, OB, swings) — bien visibles, sin etiquetas de texto
+    // (esas ensuciaban el gráfico), pero con suficiente grosor y opacidad para que se noten de verdad.
     const maxWeight = Math.max(...zones.map(z=>z.weight));
     zones.forEach(z=>{
-      const intensity = 0.3 + (z.weight/maxWeight)*0.4;
+      const intensity = 0.55 + (z.weight/maxWeight)*0.4;
       const color = z.dir==='above' ? `rgba(239,68,68,${intensity})` : `rgba(16,185,129,${intensity})`;
-      candleSeries.createPriceLine({ price:z.price, color, lineWidth:1, lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible:false });
+      candleSeries.createPriceLine({ price:z.price, color, lineWidth:2, lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible:false });
     });
     liqChart.timeScale().fitContent();
 
