@@ -26,7 +26,7 @@
   },
   "account": {
     "id": 1,
-    "capital": 94.4038,
+    "capital": 94.8286,
     "initialCapital": 100,
     "openPositions": [
       {
@@ -779,8 +779,8 @@
       }
     ],
     "tradesToday": {
-      "date": "2026-07-30",
-      "count": 8
+      "date": "2026-07-31",
+      "count": 0
     },
     "peakCapital": 100,
     "theses": [
@@ -842,19 +842,23 @@
           {
             "ts": 1785476477039,
             "note": "Entrada CONFIRMADA en 15m (Bear Trap barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)). Entrada: $0.012790, Stop: $0.012026, TP1: $0.013937, TP2: $0.015083. riesgo reducido a 0.5% (drawdown 6% o 3 pérdidas seguidas) · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor."
+          },
+          {
+            "ts": 1785487931250,
+            "note": "TP1 alcanzado ($0.013937). Se tomó el 50% de la ganancia (+0.42 USDT) y se movió el Stop al punto de entrada. El 50% restante sigue corriendo hacia TP2 ($0.015083)."
           }
         ],
         "theoEntry": 0.013866,
         "theoStop": 0.009047917539994768,
         "theoTp1": 0.021093123690007848,
         "entry": 0.01279,
-        "stop": 0.012025556372533153,
+        "stop": 0.01279,
         "tp1": 0.013936665441200268,
         "tp2": 0.015083330882400537,
-        "units": 740.9608500197301,
+        "units": 370.48042500986503,
         "riskPct": 0.006,
         "confirmedAt": 1785476477038,
-        "partialTaken": false,
+        "partialTaken": true,
         "committeeSnapshot": [
           {
             "name": "📈 Dios de Tendencia",
@@ -902,7 +906,8 @@
           }
         ],
         "priceFailCount": 0,
-        "lastCheckedAt": 1785477524769
+        "lastCheckedAt": 1785487931250,
+        "partialPnl": 0.4248171
       },
       {
         "id": "1785430797763_OPEN",
@@ -966,11 +971,55 @@
           {
             "ts": 1785477526244,
             "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785487933079,
+            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
         "theoEntry": 0.18117,
         "theoStop": 0.16930219782124256,
         "theoTp1": 0.19897170326813615
+      },
+      {
+        "id": "1785487949974_AIO",
+        "symbol": "AIO",
+        "dir": "SHORT",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 78,
+        "detectedAt": 1785487949974,
+        "expiresAt": 1785552749974,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785487949975,
+            "note": "Tesis detectada en 4h: SHORT (score 7.8/10, confianza 55%). A favor: Dios de Tendencia, Dios Smart Money, Dios Macro (4h), Dios de Fuerza Relativa (vs BTC). Bajando a 15m a buscar confirmación de entrada."
+          }
+        ],
+        "theoEntry": 0.06603,
+        "theoStop": 0.07973050537392809,
+        "theoTp1": 0.04547924193910788
+      },
+      {
+        "id": "1785487966508_ENSO",
+        "symbol": "ENSO",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 76,
+        "detectedAt": 1785487966508,
+        "expiresAt": 1785552766508,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785487966508,
+            "note": "Tesis detectada en 4h: LONG (score 7.6/10, confianza 53%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          }
+        ],
+        "theoEntry": 0.8624,
+        "theoStop": 0.8331929,
+        "theoTp1": 0.9062106500000001
       }
     ],
     "expiredTheses": [
@@ -2556,27 +2605,27 @@
     },
     "SEI": {
       "lastRecommendation": "SHORT",
-      "ts": 1785477527146
+      "ts": 1785487934268
     },
     "JUP": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785477527462
+      "ts": 1785487934770
     },
     "STRK": {
       "lastRecommendation": "SHORT",
-      "ts": 1785477529109
+      "ts": 1785487937040
     },
     "ENA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785477529543
+      "ts": 1785487937579
     },
     "W": {
       "lastRecommendation": "SHORT",
-      "ts": 1785477529967
+      "ts": 1785487938147
     },
     "TNSR": {
       "lastRecommendation": "SHORT",
-      "ts": 1785477530400
+      "ts": 1785487938703
     },
     "WOLF": {
       "lastRecommendation": "SHORT",
@@ -2724,7 +2773,7 @@
     },
     "CORE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455817155
+      "ts": 1785487942381
     },
     "REAL": {
       "lastRecommendation": "NO OPERAR",
@@ -2743,8 +2792,8 @@
       "ts": 1784998471936
     },
     "TIA": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785477526695
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487933720
     },
     "CATE": {
       "lastRecommendation": "NO OPERAR",
@@ -2920,11 +2969,11 @@
     },
     "ORDI": {
       "lastRecommendation": "SHORT",
-      "ts": 1785477528671
+      "ts": 1785487936490
     },
     "PYTH": {
       "lastRecommendation": "SHORT",
-      "ts": 1785477527814
+      "ts": 1785487935338
     },
     "BANK": {
       "lastRecommendation": "SHORT",
@@ -2940,7 +2989,7 @@
     },
     "OPG": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455844545
+      "ts": 1785487965425
     },
     "BAT": {
       "lastRecommendation": "SHORT",
@@ -2956,7 +3005,7 @@
     },
     "WIF": {
       "lastRecommendation": "SHORT",
-      "ts": 1785477528241
+      "ts": 1785487935940
     },
     "LUNA": {
       "lastRecommendation": "NO OPERAR",
@@ -3036,7 +3085,7 @@
     },
     "HIVE": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455814180
+      "ts": 1785487939349
     },
     "RLC": {
       "lastRecommendation": "NO OPERAR",
@@ -3044,211 +3093,211 @@
     },
     "MERL": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455815598
+      "ts": 1785487941253
     },
     "AIO": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455826100
+      "ts": 1785487949973
     },
     "WOO": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455819506
+      "ts": 1785487944074
     },
     "SIREN": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785455816470
+      "lastRecommendation": "SHORT",
+      "ts": 1785487941808
     },
     "AUCTION": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455817907
+      "ts": 1785487942931
     },
     "EWT": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455822946
+      "ts": 1785487946520
     },
     "HOME": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455821143
+      "ts": 1785487945414
     },
     "SKL": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455823691
+      "ts": 1785487947056
     },
     "REZ": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455818787
+      "ts": 1785487943523
     },
     "IOTX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455822005
+      "ts": 1785487945966
     },
     "IOST": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455826787
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487950829
     },
     "STORJ": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785455820196
+      "lastRecommendation": "SHORT",
+      "ts": 1785487944609
     },
     "STEEM": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455827636
+      "ts": 1785487951443
     },
     "PUNDIX": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455830024
+      "ts": 1785487953865
     },
     "HYPER": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455828498
+      "ts": 1785487952093
     },
     "CTSI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455825247
+      "ts": 1785487949407
     },
     "GMT": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455829201
+      "ts": 1785487953313
     },
     "ONG": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455830938
+      "ts": 1785487954406
     },
     "LISTA": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455831797
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487954953
     },
     "B2": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455833831
+      "ts": 1785487957258
     },
     "MTL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455832950
+      "ts": 1785487956700
     },
     "NAORIS": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455837826
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487960056
     },
     "SLP": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455835449
+      "ts": 1785487958395
     },
     "ARK": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455834666
+      "ts": 1785487957808
     },
     "METIS": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455836200
+      "ts": 1785487958957
     },
     "CVC": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455839554
+      "ts": 1785487961942
     },
     "LQTY": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455841270
+      "ts": 1785487963155
     },
     "BASED": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455836928
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487959518
     },
     "SIGN": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455840507
+      "ts": 1785487962600
     },
     "CARV": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785455838767
+      "lastRecommendation": "SHORT",
+      "ts": 1785487960612
     },
     "DOGS": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455842012
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487963707
     },
     "YGG": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455845242
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487965967
     },
     "CGPT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455858417
+      "ts": 1785487977711
     },
     "POWER": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455847923
+      "lastRecommendation": "LONG",
+      "ts": 1785487968428
     },
     "ENSO": {
       "lastRecommendation": "LONG",
-      "ts": 1785401512647
+      "ts": 1785487966507
     },
     "CYBER": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785455843656
+      "lastRecommendation": "SHORT",
+      "ts": 1785487964874
     },
     "ONE": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455845927
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487967346
     },
     "BREV": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455848606
+      "ts": 1785487968972
     },
     "TRIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455849541
+      "ts": 1785487969506
     },
     "TREE": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455846997
+      "ts": 1785487967888
     },
     "NIL": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455860060
+      "ts": 1785487978870
     },
     "FIDA": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455850400
+      "ts": 1785487970040
     },
     "AEVO": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455859230
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487978263
     },
     "WAXP": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455842778
+      "ts": 1785487964319
     },
     "LSK": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455855220
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487975344
     },
     "AIXBT": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455857516
+      "ts": 1785487977114
     },
     "STG": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455856039
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487975881
     },
     "CETUS": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455856714
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487976508
     },
     "LUMIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455851222
+      "ts": 1785487970577
     },
     "XNY": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455852097
+      "ts": 1785487971129
     },
     "ARPA": {
       "lastRecommendation": "SHORT",
-      "ts": 1785455860911
+      "ts": 1785487979421
     },
     "CELR": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455862483
+      "ts": 1785487980510
     },
     "CLO": {
       "lastRecommendation": "NO OPERAR",
@@ -3256,7 +3305,7 @@
     },
     "CTK": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785455861748
+      "ts": 1785487979960
     },
     "RAVE": {
       "lastRecommendation": "SHORT",
@@ -3563,8 +3612,8 @@
       "ts": 1785464852195
     },
     "ICX": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785455814857
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785487940698
     },
     "APR": {
       "lastRecommendation": "SHORT",
@@ -3824,7 +3873,11 @@
     },
     "WET": {
       "lastRecommendation": "LONG",
-      "ts": 1785455863264
+      "ts": 1785487981057
+    },
+    "SLX": {
+      "lastRecommendation": "SHORT",
+      "ts": 1785487947619
     }
   },
   "midCapCache": {
