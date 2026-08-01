@@ -2648,7 +2648,7 @@ async function loadTheHaton(){
   document.getElementById('thActive').innerHTML = active.length ? active.map(t=>`
     <div class="hist-row" style="display:block;">
       <div style="display:flex;justify-content:space-between;"><div>${t.symbol}${t.tag||''}</div><span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir} · activa${t.breakEvenMoved?' · BE':''}</span></div>
-      <div class="subrow">Entrada $${t.entry?.toFixed?.(6)} · Stop $${t.stop?.toFixed?.(6)} · TP $${t.tp?.toFixed?.(6)}</div>
+      <div class="subrow">Entrada $${t.entry?.toFixed?.(6)} · Stop $${t.stop?.toFixed?.(6)} · TP1 $${t.tp1?.toFixed?.(6)??'—'}${t.tp2!=null?` · TP2 $${t.tp2.toFixed(6)}`:''}${t.tp3!=null?` · TP3 $${t.tp3.toFixed(6)}`:''}${t.secondPartialTaken?' (40%+40% ya tomado, 20% final corriendo)':t.partialTaken?' (40% ya tomado, resto corriendo)':''}</div>
       ${journalHtml(t)}
     </div>`).join('') : 'Ninguna en este momento.';
 

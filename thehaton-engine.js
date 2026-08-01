@@ -1548,8 +1548,33 @@ function buildSetup(data, result, riskProfile){
     if(liqProfileForStop?.pocBelow && Math.abs(liqProfileForStop.pocBelow.price-stop)/price < 0.01){
       stop = Math.min(stop, liqProfileForStop.pocBelow.price*0.995);
     }
+    // Piso mínimo de seguridad: si todo lo anterior (estructura, ATR, colchón de liquidez) igual dejó
+    // el stop a menos de 0.8% del precio de entrada, se empuja a esa distancia mínima — un stop más
+    // cerca que eso muere por ruido normal del mercado, no porque la idea haya fallado de verdad.
+    // Piso mínimo de seguridad: si todo lo anterior (estructura, ATR, colchón de liquidez) igual dejó
+    // el stop demasiado cerca, se empuja a una distancia mínima — pero esa distancia mínima ahora se
+    // ADAPTA a qué tan volátil es la moneda (1.5x el ATR% reciente), con un piso de 1% y techo de 2% —
+    // una moneda chica y movida necesita más aire que una más calma, no el mismo número fijo para todas.
+    const atrPct = lastATR/price;
+    const MIN_STOP_PCT = Math.max(0.01, Math.min(0.02, atrPct*1.5));
+    if((price-stop)/price < MIN_STOP_PCT) stop = price*(1-MIN_STOP_PCT);
     const R = price-stop;
     t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5);
+    // Los TP también buscan liquidez real, no solo un múltiplo matemático — si hay una zona de
+    // liquidez real (POC) en el camino hacia arriba, a una distancia sensata, el objetivo más cercano
+    // a esa zona se ajusta para apuntar ahí — porque el mercado se mueve buscando esa liquidez, no
+    // un número redondo de "3R" porque sí.
+    if(liqProfileForStop?.pocAbove){
+      const targets = [{k:'t1',v:t1},{k:'t2',v:t2},{k:'t3',v:t3}];
+      const closest = targets.reduce((a,b)=>Math.abs(liqProfileForStop.pocAbove.price-a.v)<Math.abs(liqProfileForStop.pocAbove.price-b.v)?a:b);
+      const distToLiq = liqProfileForStop.pocAbove.price - price;
+      const esRazonableLiq = distToLiq > R*0.8 && distToLiq < R*6; // ni muy cerca (ruido) ni tan lejos que no tenga sentido apuntar ahí
+      if(esRazonableLiq && Math.abs(liqProfileForStop.pocAbove.price-closest.v)/closest.v < 0.08){
+        if(closest.k==='t1') t1 = liqProfileForStop.pocAbove.price;
+        else if(closest.k==='t2') t2 = liqProfileForStop.pocAbove.price;
+        else t3 = liqProfileForStop.pocAbove.price;
+      }
+    }
   } else if(dirSource==='SHORT'){
     dir='SHORT'; entryLow=price*0.995; entryHigh=price*1.005;
     const atrStop = price + risk;
@@ -1561,8 +1586,26 @@ function buildSetup(data, result, riskProfile){
     if(liqProfileForStop?.pocAbove && Math.abs(liqProfileForStop.pocAbove.price-stop)/price < 0.01){
       stop = Math.max(stop, liqProfileForStop.pocAbove.price*1.005);
     }
+    // Mismo piso mínimo de seguridad, mirado hacia arriba.
+    // Mismo piso mínimo adaptativo, mirado hacia arriba.
+    const atrPctShort = lastATR/price;
+    const MIN_STOP_PCT_SHORT = Math.max(0.01, Math.min(0.02, atrPctShort*1.5));
+    if((stop-price)/price < MIN_STOP_PCT_SHORT) stop = price*(1+MIN_STOP_PCT_SHORT);
     const R = stop-price;
     t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5);
+    // Mismo criterio que en LONG, mirado hacia abajo: si hay una zona real de liquidez a distancia
+    // sensata, el objetivo más cercano se ajusta para apuntar ahí en vez de un múltiplo matemático.
+    if(liqProfileForStop?.pocBelow){
+      const targets = [{k:'t1',v:t1},{k:'t2',v:t2},{k:'t3',v:t3}];
+      const closest = targets.reduce((a,b)=>Math.abs(liqProfileForStop.pocBelow.price-a.v)<Math.abs(liqProfileForStop.pocBelow.price-b.v)?a:b);
+      const distToLiq = price - liqProfileForStop.pocBelow.price;
+      const esRazonableLiq = distToLiq > R*0.8 && distToLiq < R*6;
+      if(esRazonableLiq && Math.abs(liqProfileForStop.pocBelow.price-closest.v)/closest.v < 0.08){
+        if(closest.k==='t1') t1 = liqProfileForStop.pocBelow.price;
+        else if(closest.k==='t2') t2 = liqProfileForStop.pocBelow.price;
+        else t3 = liqProfileForStop.pocBelow.price;
+      }
+    }
   } else {
     dir='NEUTRAL / ESPERAR'; entryLow=support; entryHigh=resistance;
     stop=support-risk; t1=resistance; t2=resistance+risk; t3=resistance+risk*2;
