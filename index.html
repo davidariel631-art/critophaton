@@ -650,8 +650,8 @@
           <div class="indi-line"><div class="il-k">Nivel cercano ↓</div><div class="il-v" id="liqNearDown">—</div></div>
         </div>
         <div id="liqChartContainer" style="width:100%;height:420px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
+          <canvas id="liqProfileCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
           <div id="liqChartInner" style="width:100%;height:100%;position:relative;z-index:2;"></div>
-          <canvas id="liqProfileCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;"></canvas>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
@@ -2059,10 +2059,14 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const binMid = (binPriceLow+binPriceHigh)/2;
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         const baseColor = binMid > price ? [239,68,68] : [16,185,129];
-        const alpha = isPOC ? 1.0 : Math.pow(bins[b]/maxBin, 1.8)*0.85+0.03;
+        const alpha = isPOC ? 0.45 : Math.pow(bins[b]/maxBin, 1.8)*0.35+0.02; // más sutil que antes — ahora cubre todo el historial de velas, no solo el espacio vacío
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
         const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
-        ctx.fillRect(lastCandleX, yC, barLen, hC);
+        // Ahora la barra cruza por DETRÁS de todas las velas (desde el borde izquierdo del todo),
+        // no solo en el espacio vacío de la derecha — por eso el canvas quedó con menos z-index que
+        // el gráfico, así las velas se siguen viendo bien encima, con la banda de fondo asomando
+        // entre ellas y en los huecos.
+        ctx.fillRect(0, yC, lastCandleX+barLen, hC);
         if(isPOC){
           ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'left';
           ctx.fillText(formatVol(bins[b]), lastCandleX+barLen+4, yC+hC/2+3);
