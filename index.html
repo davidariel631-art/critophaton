@@ -650,9 +650,8 @@
           <div class="indi-line"><div class="il-k">Nivel cercano ↓</div><div class="il-v" id="liqNearDown">—</div></div>
         </div>
         <div id="liqChartContainer" style="width:100%;height:420px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
-          <canvas id="liqBgCanvas" style="position:absolute;top:0;left:0;width:68%;height:100%;pointer-events:none;z-index:1;"></canvas>
-          <div id="liqChartInner" style="width:68%;height:100%;position:relative;z-index:2;"></div>
-          <canvas id="liqProfileCanvas" style="position:absolute;top:0;right:0;width:32%;height:100%;pointer-events:none;z-index:5;border-left:1px solid var(--border);"></canvas>
+          <div id="liqChartInner" style="width:100%;height:100%;position:relative;z-index:2;"></div>
+          <canvas id="liqProfileCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;"></canvas>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
@@ -2010,99 +2009,78 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const chartInner = document.getElementById('liqChartInner');
     chartInner.innerHTML = '';
     const container = document.getElementById('liqChartContainer');
-    const chartAreaWidth = container.clientWidth*0.68; // el gráfico de velas ahora ocupa 68%, no el 100% — así el panel de liquidez queda pegado, sin hueco en el medio
     liqChart = LightweightCharts.createChart(chartInner, {
-      width: chartAreaWidth, height: 420,
+      width: container.clientWidth, height: 420,
       layout: { background:{color:'transparent'}, textColor:'#8b98a8', fontFamily:"'Manrope',sans-serif" },
       grid: { vertLines:{color:'#1a2029'}, horzLines:{color:'#1a2029'} },
-      rightPriceScale: { visible:false }, // se oculta la propia (quedaría en el medio, no en el borde real) — los precios se dibujan en el panel de liquidez
-      timeScale: { borderColor:'#242c38', timeVisible:true, rightOffset:1 },
+      rightPriceScale: { borderColor:'#242c38' },
+      timeScale: { borderColor:'#242c38', timeVisible:true, rightOffset:8 }, // deja espacio vacío después de la última vela, para que el perfil tenga dónde dibujarse
     });
     const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
     candleSeries.setData(data.candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c })));
-
-    // Las líneas gruesas dentro del gráfico ahora salen directo de los niveles más fuertes del
-    // perfil de volumen (ver más abajo, después de calcular los bins) — no de una lista aparte de
-    // zonas. Así coinciden exactamente con las barras más largas del histograma de la derecha.
     liqChart.timeScale().fitContent();
 
-    requestAnimationFrame(()=>{
+    // El perfil de liquidez se calcula UNA vez (los datos no cambian), pero el DIBUJO se rehace cada
+    // vez que el usuario mueve o hace zoom al gráfico — así el "indicador" se comporta pegado al
+    // gráfico de verdad, no como una imagen fija en un lugar distinto.
+    const profile = computeLiquidityProfile(data.candles, price);
+    const { bins, minP, priceStep, nBins, pocAbove: pocSell, pocBelow: pocBuy } = profile;
+    const maxBin = Math.max(...bins) || 1;
+
+    document.getElementById('liqDomUp').textContent = `Dom. Arriba ${profile.domUpPct.toFixed(1)}%`;
+    document.getElementById('liqDomUp').style.flex = profile.domUpPct.toFixed(1);
+    document.getElementById('liqDomDown').textContent = `Dom. Abajo ${profile.domDownPct.toFixed(1)}%`;
+    document.getElementById('liqDomDown').style.flex = profile.domDownPct.toFixed(1);
+
+    function redrawLiquidityOverlay(){
       const canvas = document.getElementById('liqProfileCanvas');
+      if(!canvas) return;
       const dpr = window.devicePixelRatio||1;
-      const cssW = container.clientWidth*0.32, cssH = 420;
+      const cssW = container.clientWidth, cssH = 420;
       canvas.style.width = cssW+'px'; canvas.style.height = cssH+'px';
       canvas.width = cssW*dpr; canvas.height = cssH*dpr;
       const ctx = canvas.getContext('2d'); ctx.scale(dpr,dpr); ctx.clearRect(0,0,cssW,cssH);
 
-      // Usamos la MISMA función del motor que usa el bot (computeLiquidityProfile) — antes esto era
-      // una copia pegada acá, calculando todo de nuevo por su cuenta. Ahora hay un solo cerebro para
-      // este cálculo, y la web solo se encarga de dibujarlo.
-      const profile = computeLiquidityProfile(data.candles, price);
-      const { bins, minP, priceStep, nBins, pocAbove: pocSell, pocBelow: pocBuy } = profile;
-      const recent = data.candles.slice(-Math.min(200, data.candles.length));
+      // Dónde está la última vela AHORA MISMO en pantalla — esto cambia si el usuario hace zoom o
+      // mueve el gráfico, por eso se recalcula acá adentro, no una sola vez al principio.
+      const lastCandleX = liqChart.timeScale().timeToCoordinate(Math.floor(data.candles.at(-1).t/1000));
+      if(lastCandleX==null) return;
+      const rightEdge = cssW; // el histograma y las líneas usan todo el espacio hasta el borde derecho real
 
-      document.getElementById('liqDomUp').textContent = `Dom. Arriba ${profile.domUpPct.toFixed(1)}%`;
-      document.getElementById('liqDomUp').style.flex = profile.domUpPct.toFixed(1);
-      document.getElementById('liqDomDown').textContent = `Dom. Abajo ${profile.domDownPct.toFixed(1)}%`;
-      document.getElementById('liqDomDown').style.flex = profile.domDownPct.toFixed(1);
-
-      const maxBin = Math.max(...bins) || 1;
+      // 1) Barras del histograma, arrancando PEGADAS a la pared (la última vela), creciendo hacia
+      // la derecha según su fuerza — máximo 55% del espacio disponible, para dejar lugar a las líneas.
+      const availableW = rightEdge - lastCandleX;
       for(let b=0;b<nBins;b++){
         const binPriceLow = minP + b*priceStep, binPriceHigh = binPriceLow+priceStep;
         const yTop = candleSeries.priceToCoordinate(binPriceHigh);
         const yBot = candleSeries.priceToCoordinate(binPriceLow);
         if(yTop==null || yBot==null || bins[b]===0) continue;
-        // Grosor máximo del 55% del panel — así queda espacio real a la derecha para que las líneas
-        // (más abajo) se distingan como una zona aparte, no mezcladas con las barras.
-        const barLen = (bins[b]/maxBin) * cssW * 0.55;
+        const barLen = (bins[b]/maxBin) * availableW * 0.55;
         const binMid = (binPriceLow+binPriceHigh)/2;
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         const baseColor = binMid > price ? [239,68,68] : [16,185,129];
-        const alpha = isPOC ? 1.0 : Math.pow(bins[b]/maxBin, 1.8)*0.85+0.03; // curva no lineal: las zonas débiles casi no se ven, las fuertes se marcan mucho más
+        const alpha = isPOC ? 1.0 : Math.pow(bins[b]/maxBin, 1.8)*0.85+0.03;
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
         const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
-        // Las barras arrancan PEGADAS a la izquierda (justo donde terminan las velas), no al revés —
-        // por eso se ve como una "pared" consistente en ese borde, con cada barra estirándose hacia
-        // la derecha según su fuerza.
-        ctx.fillRect(0, yC, barLen, hC);
-        // Etiqueta con el volumen exacto en el POC de cada lado (igual que el indicador original)
+        ctx.fillRect(lastCandleX, yC, barLen, hC);
         if(isPOC){
           ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'left';
-          ctx.fillText(formatVol(bins[b]), barLen+4, yC+hC/2+3);
+          ctx.fillText(formatVol(bins[b]), lastCandleX+barLen+4, yC+hC/2+3);
         }
       }
 
-      // Etiquetas de precio simples en el borde derecho — antes las mostraba el gráfico mismo, pero
-      // ahora esa escala está oculta (quedaría en el medio, no en el borde real).
-      const maxP = minP + nBins*priceStep;
-      ctx.font = '10px Manrope'; ctx.textAlign = 'right'; ctx.fillStyle = '#8b98a8';
-      for(let i=0;i<=5;i++){
-        const p = minP + (maxP-minP)*(i/5);
-        const y = candleSeries.priceToCoordinate(p);
-        if(y==null) continue;
-        const yClamped = Math.max(10, Math.min(cssH-4, y+4));
-        ctx.fillText(fmt(p), cssW-4, yClamped);
-      }
+      // 2) La "pared": línea VERTICAL fuerte, justo en el borde de la última vela — el límite exacto
+      // entre "acá es precio real" y "acá empieza la proyección de liquidez".
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(lastCandleX, 0);
+      ctx.lineTo(lastCandleX, cssH);
+      ctx.stroke();
 
-      // La "pared" separadora: una línea gruesa simple, fija en el precio actual — no representa
-      // ningún nivel de volumen especial, es solo el borde visual entre "acá termina el precio real"
-      // y "acá empieza la proyección de liquidez". Se dibuja siempre, sin depender de si ahí hay
-      // mucho o poco volumen.
-      const yPrice = candleSeries.priceToCoordinate(price);
-      if(yPrice!=null){
-        ctx.strokeStyle = 'rgba(239,68,68,0.9)';
-        ctx.lineWidth = 8;
-        ctx.beginPath();
-        ctx.moveTo(0, yPrice);
-        ctx.lineTo(cssW, yPrice);
-        ctx.stroke();
-      }
-
-      // Las líneas de los niveles más fuertes SOLO aparecen del lado derecho (en el espacio vacío
-      // después de la última vela, igual que en la referencia) — no cruzan toda la historia de
-      // precios como antes con createPriceLine (que dibuja de punta a punta del gráfico siempre).
-      // Se dibujan en este mismo canvas, ocupando todo su ancho (desde donde termina la vela hasta
-      // el borde derecho del todo).
+      // 3) Líneas horizontales de los niveles más fuertes, conectadas al histograma, extendiéndose
+      // desde la pared hasta el borde derecho — sin cajas ni divisiones raras en el medio, todo una
+      // sola pieza continua con las barras.
       const topBins = bins.map((v,i)=>({v,i})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,6);
       topBins.forEach(({v,i:b})=>{
         const binPriceLow = minP + b*priceStep, binPriceHigh = binPriceLow+priceStep;
@@ -2110,53 +2088,23 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const yMid = candleSeries.priceToCoordinate(binMid);
         if(yMid==null) return;
         const strength = v/maxBin;
-        const lineWidth = Math.max(1, Math.round(1 + strength*3)); // grosor 1 a 4, según fuerza real
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         ctx.strokeStyle = binMid > price ? '#ef4444' : '#10b981';
-        ctx.lineWidth = isPOC ? 10 : lineWidth; // el POC va como un bloque grueso, no una línea más — así queda la "pared" que se ve en la referencia
+        ctx.lineWidth = isPOC ? 6 : Math.max(1, Math.round(1 + strength*3));
         ctx.beginPath();
-        ctx.moveTo(0, yMid);
-        ctx.lineTo(cssW, yMid);
+        ctx.moveTo(lastCandleX, yMid);
+        ctx.lineTo(rightEdge, yMid);
         ctx.stroke();
       });
+    }
 
-      // Extensión de niveles hacia atrás: para los bins con más volumen, buscamos desde la vela más
-      // reciente hacia atrás hasta encontrar dónde el precio ya "cruzó" ese nivel — la caja se dibuja
-      // desde ese cruce hasta ahora. Si nunca se cruzó, se extiende hasta el inicio del lookback.
-      // Una caja LARGA = zona que hace rato no se toca (más significativa, "imán" de precio).
-      const bgCanvas = document.getElementById('liqBgCanvas');
-      const bgDpr = window.devicePixelRatio||1;
-      bgCanvas.width = chartAreaWidth*bgDpr; bgCanvas.height = cssH*bgDpr;
-      const bgCtx = bgCanvas.getContext('2d'); bgCtx.scale(bgDpr,bgDpr); bgCtx.clearRect(0,0,container.clientWidth,cssH);
-
-      const topBinsIdx = bins.map((v,i)=>({v,i})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,12).map(x=>x.i);
-      const timeScale = liqChart.timeScale();
-      topBinsIdx.forEach(b=>{
-        const binLow = minP+b*priceStep, binHigh = binLow+priceStep;
-        let crossIdx = 0; // por defecto, se extiende hasta el principio (nunca se cruzó)
-        for(let i=recent.length-1;i>=0;i--){
-          if(recent[i].h>=binLow && recent[i].l<=binHigh){ crossIdx = i+1; break; }
-        }
-        const xRight = timeScale.timeToCoordinate(Math.floor(recent[recent.length-1].t/1000)+3600*24);
-        const xLeft = timeScale.timeToCoordinate(Math.floor(recent[Math.max(0,crossIdx)].t/1000));
-        if(xLeft==null || xRight==null) return;
-        const yTop = candleSeries.priceToCoordinate(binHigh), yBot = candleSeries.priceToCoordinate(binLow);
-        if(yTop==null || yBot==null) return;
-        const binMid = (binLow+binHigh)/2;
-        // El POC (nivel más fuerte de todos) se marca mucho más fuerte acá también — la "pared"
-        // roja/verde bien visible cruzando por encima de las velas, igual que en la referencia —
-        // el resto de los niveles se quedan sutiles, para no ensuciar el gráfico.
-        const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
-        const color = isPOC
-          ? (binMid>price ? 'rgba(239,68,68,0.55)' : 'rgba(16,185,129,0.55)')
-          : (binMid>price ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)');
-        const boxTop = isPOC ? Math.min(yTop,yBot)-4 : Math.min(yTop,yBot);
-        const boxHeight = isPOC ? Math.max(1,Math.abs(yBot-yTop))+8 : Math.max(1,Math.abs(yBot-yTop));
-        bgCtx.fillStyle = color;
-        bgCtx.fillRect(Math.min(xLeft,xRight), boxTop, Math.abs(xRight-xLeft), boxHeight);
-      });
+    redrawLiquidityOverlay();
+    // Cada vez que el usuario hace zoom o mueve el gráfico, se vuelve a dibujar en la posición
+    // correcta — así se comporta como un indicador de verdad, pegado al gráfico.
+    liqChart.timeScale().subscribeVisibleTimeRangeChange(redrawLiquidityOverlay);
+    window.addEventListener('resize', ()=>{
+      if(liqChart){ liqChart.applyOptions({ width: container.clientWidth }); redrawLiquidityOverlay(); }
     });
-    window.addEventListener('resize', ()=>{ if(liqChart) liqChart.applyOptions({ width: container.clientWidth*0.68 }); });
   }catch(e){ status.textContent = 'No se pudo analizar: ' + e.message; }
 });
 
