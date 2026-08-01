@@ -2027,6 +2027,18 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const { bins, minP, priceStep, nBins, pocAbove: pocSell, pocBelow: pocBuy } = profile;
     const maxBin = Math.max(...bins) || 1;
 
+    // Punto 3/4: la intensidad de color no depende solo del volumen aproximado — se cruza con las
+    // zonas ESTRUCTURALES reales (Equal Highs/Lows con su conteo real de toques, Order Blocks sin
+    // mitigar) que ya calcula el motor. Un bin que coincide con un cluster real de toques se ve más
+    // marcado que uno con el mismo volumen pero sin ninguna estructura real detrás — así el color sí
+    // tiene lógica técnica, no es solo el volumen de las velas solo.
+    const structuralBoost = new Array(nBins).fill(0);
+    zones.filter(z=>z.kind==='pivot').forEach(z=>{
+      const binIdx = Math.floor((z.price-minP)/priceStep);
+      if(binIdx>=0 && binIdx<nBins) structuralBoost[binIdx] = Math.max(structuralBoost[binIdx], z.weight);
+    });
+    const maxBoost = Math.max(...structuralBoost, 1);
+
     document.getElementById('liqDomUp').textContent = `Dom. Arriba ${profile.domUpPct.toFixed(1)}%`;
     document.getElementById('liqDomUp').style.flex = profile.domUpPct.toFixed(1);
     document.getElementById('liqDomDown').textContent = `Dom. Abajo ${profile.domDownPct.toFixed(1)}%`;
@@ -2059,7 +2071,12 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const binMid = (binPriceLow+binPriceHigh)/2;
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         const baseColor = binMid > price ? [239,68,68] : [16,185,129];
-        const alpha = isPOC ? 0.45 : Math.pow(bins[b]/maxBin, 1.8)*0.35+0.02; // más sutil que antes — ahora cubre todo el historial de velas, no solo el espacio vacío
+        // Combina volumen (siempre) con la confluencia estructural real (Equal Highs/Lows, Order
+        // Blocks) — un nivel con toques reales encima se ve más marcado que uno solo por volumen.
+        const volFactor = Math.pow(bins[b]/maxBin, 1.8);
+        const structFactor = structuralBoost[b]/maxBoost;
+        const combined = Math.min(1, volFactor*0.7 + structFactor*0.5);
+        const alpha = isPOC ? 0.5 : combined*0.35+0.02;
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
         const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
         // Ahora la barra cruza por DETRÁS de todas las velas (desde el borde izquierdo del todo),
@@ -2085,7 +2102,12 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       // 3) Líneas horizontales de los niveles más fuertes, conectadas al histograma, extendiéndose
       // desde la pared hasta el borde derecho — sin cajas ni divisiones raras en el medio, todo una
       // sola pieza continua con las barras.
-      const topBins = bins.map((v,i)=>({v,i})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,6);
+      // Las líneas más importantes ahora se eligen por el mismo puntaje combinado (volumen +
+      // confluencia estructural real) — no solo por volumen puro. Así los niveles marcados son
+      // realmente los más significativos (con toques reales/Order Blocks encima), no solo los que
+      // tuvieron más volumen de vela por casualidad.
+      const topBins = bins.map((v,i)=>({v,i,score: (v/maxBin)*0.7 + (structuralBoost[i]/maxBoost)*0.5}))
+        .filter(x=>x.v>0).sort((a,b)=>b.score-a.score).slice(0,6);
       topBins.forEach(({v,i:b})=>{
         const binPriceLow = minP + b*priceStep, binPriceHigh = binPriceLow+priceStep;
         const binMid = (binPriceLow+binPriceHigh)/2;
