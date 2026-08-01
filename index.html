@@ -2066,6 +2066,20 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         }
       }
 
+      // La "pared" separadora: una línea gruesa simple, fija en el precio actual — no representa
+      // ningún nivel de volumen especial, es solo el borde visual entre "acá termina el precio real"
+      // y "acá empieza la proyección de liquidez". Se dibuja siempre, sin depender de si ahí hay
+      // mucho o poco volumen.
+      const yPrice = candleSeries.priceToCoordinate(price);
+      if(yPrice!=null){
+        ctx.strokeStyle = 'rgba(239,68,68,0.9)';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        ctx.moveTo(0, yPrice);
+        ctx.lineTo(cssW, yPrice);
+        ctx.stroke();
+      }
+
       // Las líneas de los niveles más fuertes SOLO aparecen del lado derecho (en el espacio vacío
       // después de la última vela, igual que en la referencia) — no cruzan toda la historia de
       // precios como antes con createPriceLine (que dibuja de punta a punta del gráfico siempre).
@@ -2081,7 +2095,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const lineWidth = Math.max(1, Math.round(1 + strength*3)); // grosor 1 a 4, según fuerza real
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         ctx.strokeStyle = binMid > price ? '#ef4444' : '#10b981';
-        ctx.lineWidth = isPOC ? 4 : lineWidth;
+        ctx.lineWidth = isPOC ? 10 : lineWidth; // el POC va como un bloque grueso, no una línea más — así queda la "pared" que se ve en la referencia
         ctx.beginPath();
         ctx.moveTo(0, yMid);
         ctx.lineTo(cssW, yMid);
@@ -2111,9 +2125,17 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const yTop = candleSeries.priceToCoordinate(binHigh), yBot = candleSeries.priceToCoordinate(binLow);
         if(yTop==null || yBot==null) return;
         const binMid = (binLow+binHigh)/2;
-        const color = binMid>price ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)';
+        // El POC (nivel más fuerte de todos) se marca mucho más fuerte acá también — la "pared"
+        // roja/verde bien visible cruzando por encima de las velas, igual que en la referencia —
+        // el resto de los niveles se quedan sutiles, para no ensuciar el gráfico.
+        const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
+        const color = isPOC
+          ? (binMid>price ? 'rgba(239,68,68,0.55)' : 'rgba(16,185,129,0.55)')
+          : (binMid>price ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.08)');
+        const boxTop = isPOC ? Math.min(yTop,yBot)-4 : Math.min(yTop,yBot);
+        const boxHeight = isPOC ? Math.max(1,Math.abs(yBot-yTop))+8 : Math.max(1,Math.abs(yBot-yTop));
         bgCtx.fillStyle = color;
-        bgCtx.fillRect(Math.min(xLeft,xRight), Math.min(yTop,yBot), Math.abs(xRight-xLeft), Math.max(1,Math.abs(yBot-yTop)));
+        bgCtx.fillRect(Math.min(xLeft,xRight), boxTop, Math.abs(xRight-xLeft), boxHeight);
       });
     });
     window.addEventListener('resize', ()=>{ if(liqChart) liqChart.applyOptions({ width: container.clientWidth }); });
