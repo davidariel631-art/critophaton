@@ -1,7 +1,10 @@
 name: Fortress Hunt Mode - Telegram Signals
 on:
   schedule:
-    - cron: '*/30 * * * *'   # cada 30 minutos (antes era '0 * * * *', una vez por hora)
+    - cron: '7,37 * * * *'   # cada 30 min, pero en los minutos :07 y :37 (no en punto) — GitHub atrasa
+                              # más los horarios "en punto" (:00/:30) por la carga alta de todos los
+                              # repos del mundo disparando al mismo tiempo; correr descolgado ayuda,
+                              # aunque GitHub igual no garantiza el horario exacto (limitación conocida).
   workflow_dispatch:
     inputs:
       force_test_trade:
