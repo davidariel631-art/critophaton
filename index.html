@@ -2076,15 +2076,15 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       if(lastCandleX==null) return;
       const rightEdge = cssW; // el histograma y las líneas usan todo el espacio hasta el borde derecho real
 
-      // 1) Barras del histograma, arrancando PEGADAS a la pared (la última vela), creciendo hacia
-      // la derecha según su fuerza — máximo 55% del espacio disponible, para dejar lugar a las líneas.
-      const availableW = rightEdge - lastCandleX;
+      // 1) Histograma del lado IZQUIERDO: una banda de fondo semitransparente detrás de las velas,
+      // desde el borde izquierdo del gráfico hasta donde termina la última vela. No varía el LARGO
+      // (cubre siempre todo el ancho de precio), varía la OPACIDAD según qué tan fuerte es cada nivel
+      // — así se ve como un indicador de fondo real, no como una barra que "crece".
       for(let b=0;b<nBins;b++){
         const binPriceLow = minP + b*priceStep, binPriceHigh = binPriceLow+priceStep;
         const yTop = candleSeries.priceToCoordinate(binPriceHigh);
         const yBot = candleSeries.priceToCoordinate(binPriceLow);
         if(yTop==null || yBot==null || bins[b]===0) continue;
-        const barLen = (bins[b]/maxBin) * availableW * 0.55;
         const binMid = (binPriceLow+binPriceHigh)/2;
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         const baseColor = binMid > price ? [239,68,68] : [16,185,129];
@@ -2093,19 +2093,17 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const volFactor = Math.pow(bins[b]/maxBin, 1.8);
         const structFactor = structuralBoost[b]/maxBoost;
         const combined = Math.min(1, volFactor*0.7 + structFactor*0.5);
-        const alpha = isPOC ? 0.5 : combined*0.35+0.02;
+        const alpha = isPOC ? 0.35 : combined*0.25+0.015; // sutil, para no tapar las velas que quedan por encima
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
         const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
-        // Las barras arrancan pegadas exactamente al borde de la última vela — "espalda con
-        // espalda", sin superponerse a las velas y sin ningún hueco en el medio.
-        ctx.fillRect(lastCandleX, yC, barLen, hC);
+        ctx.fillRect(0, yC, lastCandleX, hC);
         if(isPOC){
-          ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'left';
-          ctx.fillText(formatVol(bins[b]), lastCandleX+barLen+4, yC+hC/2+3);
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'right';
+          ctx.fillText(formatVol(bins[b]), lastCandleX-4, yC+hC/2+3);
         }
       }
 
-      // Sin línea divisoria — las barras arrancan directo del borde de la vela, sin nada en el medio.
+      // Sin línea divisoria — el histograma de fondo termina y las líneas arrancan del mismo borde exacto.
 
       // 3) Líneas horizontales de los niveles más fuertes, conectadas al histograma, extendiéndose
       // desde ese mismo borde hasta el borde derecho — sin cajas ni divisiones raras en el medio, todo una
