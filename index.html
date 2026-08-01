@@ -2014,7 +2014,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       layout: { background:{color:'transparent'}, textColor:'#8b98a8', fontFamily:"'Manrope',sans-serif" },
       grid: { vertLines:{color:'#1a2029'}, horzLines:{color:'#1a2029'} },
       rightPriceScale: { borderColor:'#242c38' },
-      timeScale: { borderColor:'#242c38', timeVisible:true, rightOffset:8 }, // deja espacio vacío después de la última vela, para que el perfil tenga dónde dibujarse
+      timeScale: { borderColor:'#242c38', timeVisible:true, rightOffset:90 }, // espacio vacío grande después de la última vela — antes era muy chico (8) y el perfil casi no tenía dónde dibujarse
     });
     const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
     candleSeries.setData(data.candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c })));
