@@ -2037,6 +2037,23 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       const binIdx = Math.floor((z.price-minP)/priceStep);
       if(binIdx>=0 && binIdx<nBins) structuralBoost[binIdx] = Math.max(structuralBoost[binIdx], z.weight);
     });
+
+    // Más preciso todavía: en vez de depender solo de las ~20 zonas con nombre (Equal Highs/Lows/OB),
+    // cuento CUÁNTAS VELAS DISTINTAS tocaron cada uno de los 90 niveles del histograma — una
+    // frecuencia real de toques por nivel, mucho más fina que solo los puntos ya identificados.
+    // Un nivel tocado por 8 velas distintas a lo largo del tiempo es más significativo que uno
+    // tocado por 1 sola, aunque las dos tengan volumen parecido.
+    const touchCount = new Array(nBins).fill(0);
+    const recentForTouches = data.candles.slice(-Math.min(200, data.candles.length));
+    recentForTouches.forEach(c=>{
+      const binLowIdx = Math.max(0, Math.floor((c.l-minP)/priceStep));
+      const binHighIdx = Math.min(nBins-1, Math.floor((c.h-minP)/priceStep));
+      for(let bi=binLowIdx; bi<=binHighIdx; bi++) touchCount[bi]++;
+    });
+    const maxTouch = Math.max(...touchCount, 1);
+    // Se suma (no reemplaza) al boost estructural — un nivel puede ser fuerte por zona nombrada, por
+    // toques reales, o por las dos cosas a la vez.
+    for(let b=0;b<nBins;b++) structuralBoost[b] = structuralBoost[b] + (touchCount[b]/maxTouch)*3;
     const maxBoost = Math.max(...structuralBoost, 1);
 
     document.getElementById('liqDomUp').textContent = `Dom. Arriba ${profile.domUpPct.toFixed(1)}%`;
@@ -2079,28 +2096,19 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const alpha = isPOC ? 0.5 : combined*0.35+0.02;
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
         const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
-        // Ahora la barra cruza por DETRÁS de todas las velas (desde el borde izquierdo del todo),
-        // no solo en el espacio vacío de la derecha — por eso el canvas quedó con menos z-index que
-        // el gráfico, así las velas se siguen viendo bien encima, con la banda de fondo asomando
-        // entre ellas y en los huecos.
-        ctx.fillRect(0, yC, lastCandleX+barLen, hC);
+        // Las barras arrancan pegadas exactamente al borde de la última vela — "espalda con
+        // espalda", sin superponerse a las velas y sin ningún hueco en el medio.
+        ctx.fillRect(lastCandleX, yC, barLen, hC);
         if(isPOC){
           ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'left';
           ctx.fillText(formatVol(bins[b]), lastCandleX+barLen+4, yC+hC/2+3);
         }
       }
 
-      // 2) La "pared": línea VERTICAL fuerte, justo en el borde de la última vela — el límite exacto
-      // entre "acá es precio real" y "acá empieza la proyección de liquidez".
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(lastCandleX, 0);
-      ctx.lineTo(lastCandleX, cssH);
-      ctx.stroke();
+      // Sin línea divisoria — las barras arrancan directo del borde de la vela, sin nada en el medio.
 
       // 3) Líneas horizontales de los niveles más fuertes, conectadas al histograma, extendiéndose
-      // desde la pared hasta el borde derecho — sin cajas ni divisiones raras en el medio, todo una
+      // desde ese mismo borde hasta el borde derecho — sin cajas ni divisiones raras en el medio, todo una
       // sola pieza continua con las barras.
       // Las líneas más importantes ahora se eligen por el mismo puntaje combinado (volumen +
       // confluencia estructural real) — no solo por volumen puro. Así los niveles marcados son
