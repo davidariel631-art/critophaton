@@ -650,9 +650,9 @@
           <div class="indi-line"><div class="il-k">Nivel cercano ↓</div><div class="il-v" id="liqNearDown">—</div></div>
         </div>
         <div id="liqChartContainer" style="width:100%;height:420px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
-          <canvas id="liqBgCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
-          <div id="liqChartInner" style="width:100%;height:100%;position:relative;z-index:2;"></div>
-          <canvas id="liqProfileCanvas" style="position:absolute;top:0;right:0;height:100%;pointer-events:none;z-index:5;"></canvas>
+          <canvas id="liqBgCanvas" style="position:absolute;top:0;left:0;width:68%;height:100%;pointer-events:none;z-index:1;"></canvas>
+          <div id="liqChartInner" style="width:68%;height:100%;position:relative;z-index:2;"></div>
+          <canvas id="liqProfileCanvas" style="position:absolute;top:0;right:0;width:32%;height:100%;pointer-events:none;z-index:5;border-left:1px solid var(--border);"></canvas>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
@@ -2010,11 +2010,12 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const chartInner = document.getElementById('liqChartInner');
     chartInner.innerHTML = '';
     const container = document.getElementById('liqChartContainer');
+    const chartAreaWidth = container.clientWidth*0.68; // el gráfico de velas ahora ocupa 68%, no el 100% — así el panel de liquidez queda pegado, sin hueco en el medio
     liqChart = LightweightCharts.createChart(chartInner, {
-      width: container.clientWidth, height: 420,
+      width: chartAreaWidth, height: 420,
       layout: { background:{color:'transparent'}, textColor:'#8b98a8', fontFamily:"'Manrope',sans-serif" },
       grid: { vertLines:{color:'#1a2029'}, horzLines:{color:'#1a2029'} },
-      rightPriceScale: { borderColor:'#242c38' },
+      rightPriceScale: { visible:false }, // se oculta la propia (quedaría en el medio, no en el borde real) — los precios se dibujan en el panel de liquidez
       timeScale: { borderColor:'#242c38', timeVisible:true, rightOffset:1 },
     });
     const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
@@ -2066,6 +2067,18 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         }
       }
 
+      // Etiquetas de precio simples en el borde derecho — antes las mostraba el gráfico mismo, pero
+      // ahora esa escala está oculta (quedaría en el medio, no en el borde real).
+      const maxP = minP + nBins*priceStep;
+      ctx.font = '10px Manrope'; ctx.textAlign = 'right'; ctx.fillStyle = '#8b98a8';
+      for(let i=0;i<=5;i++){
+        const p = minP + (maxP-minP)*(i/5);
+        const y = candleSeries.priceToCoordinate(p);
+        if(y==null) continue;
+        const yClamped = Math.max(10, Math.min(cssH-4, y+4));
+        ctx.fillText(fmt(p), cssW-4, yClamped);
+      }
+
       // La "pared" separadora: una línea gruesa simple, fija en el precio actual — no representa
       // ningún nivel de volumen especial, es solo el borde visual entre "acá termina el precio real"
       // y "acá empieza la proyección de liquidez". Se dibuja siempre, sin depender de si ahí hay
@@ -2108,7 +2121,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       // Una caja LARGA = zona que hace rato no se toca (más significativa, "imán" de precio).
       const bgCanvas = document.getElementById('liqBgCanvas');
       const bgDpr = window.devicePixelRatio||1;
-      bgCanvas.width = container.clientWidth*bgDpr; bgCanvas.height = cssH*bgDpr;
+      bgCanvas.width = chartAreaWidth*bgDpr; bgCanvas.height = cssH*bgDpr;
       const bgCtx = bgCanvas.getContext('2d'); bgCtx.scale(bgDpr,bgDpr); bgCtx.clearRect(0,0,container.clientWidth,cssH);
 
       const topBinsIdx = bins.map((v,i)=>({v,i})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,12).map(x=>x.i);
@@ -2138,7 +2151,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         bgCtx.fillRect(Math.min(xLeft,xRight), boxTop, Math.abs(xRight-xLeft), boxHeight);
       });
     });
-    window.addEventListener('resize', ()=>{ if(liqChart) liqChart.applyOptions({ width: container.clientWidth }); });
+    window.addEventListener('resize', ()=>{ if(liqChart) liqChart.applyOptions({ width: container.clientWidth*0.68 }); });
   }catch(e){ status.textContent = 'No se pudo analizar: ' + e.message; }
 });
 
