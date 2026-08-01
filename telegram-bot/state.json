@@ -26,7 +26,7 @@
   },
   "account": {
     "id": 1,
-    "capital": 91.2534,
+    "capital": 91.5876,
     "initialCapital": 100,
     "openPositions": [
       {
@@ -1650,7 +1650,7 @@
     ],
     "tradesToday": {
       "date": "2026-08-01",
-      "count": 3
+      "count": 4
     },
     "peakCapital": 100,
     "theses": [
@@ -1708,19 +1708,23 @@
           {
             "ts": 1785562754105,
             "note": "Entrada CONFIRMADA en 15m (BOS a favor detectado). Entrada: $0.039700, Stop: $0.040602, TP1: $0.038347, TP2: $0.036995. riesgo reducido a 0.5% (drawdown 7% o 3 pérdidas seguidas) · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor."
+          },
+          {
+            "ts": 1785609178505,
+            "note": "TP1 alcanzado ($0.038347). Se tomó el 40% de la ganancia (+0.33 USDT) y se movió el Stop al punto de entrada. El 60% restante sigue corriendo hacia TP2 ($0.036995) y TP3 ($—)."
           }
         ],
         "theoEntry": 0.03969,
         "theoStop": 0.04172479999999999,
         "theoTp1": 0.03663780000000002,
         "entry": 0.0397,
-        "stop": 0.040601710995264176,
+        "stop": 0.0397,
         "tp1": 0.038347433507103734,
         "tp2": 0.03699486701420747,
-        "units": 617.7409424144897,
+        "units": 370.6445654486938,
         "riskPct": 0.006,
         "confirmedAt": 1785562754105,
-        "partialTaken": false,
+        "partialTaken": true,
         "committeeSnapshot": [
           {
             "name": "📈 Dios de Tendencia",
@@ -1777,14 +1781,15 @@
         ],
         "originalUnits": 617.7409424144897,
         "priceFailCount": 0,
-        "lastCheckedAt": 1785604221178
+        "lastCheckedAt": 1785609178505,
+        "partialPnl": 0.33421428000000003
       },
       {
         "id": "1785570829168_MOVE",
         "symbol": "MOVE",
         "dir": "SHORT",
         "tag": " (cap chico)",
-        "status": "WATCHING",
+        "status": "ACTIVE",
         "conviction": 78,
         "detectedAt": 1785570829168,
         "expiresAt": 1785635629168,
@@ -1817,11 +1822,79 @@
           {
             "ts": 1785604222164,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 4 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785609180510,
+            "note": "Entrada CONFIRMADA en 15m (Momentum Continuation: pullback a EMA20 dentro de una tendencia ya fuerte). Entrada: $0.007357, Stop: $0.007509, TP1: $0.007128, TP2: $0.006900. riesgo reducido a 0.5% (drawdown 8% o 3 pérdidas seguidas)."
           }
         ],
         "theoEntry": 0.00751,
         "theoStop": 0.00801397,
-        "theoTp1": 0.006754045
+        "theoTp1": 0.006754045,
+        "entry": 0.007357,
+        "stop": 0.0075094609999999985,
+        "tp1": 0.007128308500000001,
+        "tp2": 0.006899617000000004,
+        "tp3": 0.006594695000000006,
+        "units": 3003.6402752179497,
+        "originalUnits": 3003.6402752179497,
+        "riskPct": 0.005,
+        "confirmedAt": 1785609180510,
+        "partialTaken": false,
+        "committeeSnapshot": [
+          {
+            "name": "📈 Dios de Tendencia",
+            "vote": "SHORT"
+          },
+          {
+            "name": "⚡ Dios Momentum",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "🧠 Dios Smart Money",
+            "vote": "SHORT"
+          },
+          {
+            "name": "💰 Dios Derivados",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "🌐 Dios Macro (4h)",
+            "vote": "SHORT"
+          },
+          {
+            "name": "💧 Dios Capital Flow",
+            "vote": "LONG"
+          },
+          {
+            "name": "⚠️ Dios Gestión de Riesgo",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📡 Dios Radar del Mercado",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "🧠 Dios Memoria",
+            "vote": "LONG"
+          },
+          {
+            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios VWAP",
+            "vote": "SHORT"
+          },
+          {
+            "name": "📉 Dios CVD",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios Market Context Matrix",
+            "vote": "NEUTRAL"
+          }
+        ]
       },
       {
         "id": "1785570834303_ACX",
@@ -1860,6 +1933,10 @@
           },
           {
             "ts": 1785604223285,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785609182538,
             "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
@@ -1901,6 +1978,10 @@
           {
             "ts": 1785604224168,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 90 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785609184049,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 91 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.2408,
@@ -1941,6 +2022,10 @@
           {
             "ts": 1785604225062,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (24) — la tendencia se está quedando sin fuerza. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785609185259,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
         "theoEntry": 0.2142,
@@ -1977,6 +2062,10 @@
           {
             "ts": 1785604226019,
             "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785609186685,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
         "theoEntry": 0.31774,
@@ -2005,6 +2094,10 @@
           {
             "ts": 1785604226963,
             "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785609187977,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
         "theoEntry": 0.02573,
@@ -2029,6 +2122,10 @@
           {
             "ts": 1785604227780,
             "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785609189196,
+            "note": "Confirmación técnica presente pero R:R a TP1 es solo 1.11:1 (mínimo exigido 1.5:1). Se sigue observando en vez de forzar una entrada con mala relación riesgo/beneficio."
           }
         ],
         "theoEntry": 0.0045896,
@@ -2121,7 +2218,9 @@
             "name": "📊 Dios Market Context Matrix",
             "vote": "NEUTRAL"
           }
-        ]
+        ],
+        "priceFailCount": 0,
+        "lastCheckedAt": 1785609178885
       }
     ],
     "expiredTheses": [
@@ -4413,27 +4512,27 @@
     },
     "SEI": {
       "lastRecommendation": "SHORT",
-      "ts": 1785604230420
+      "ts": 1785609190419
     },
     "JUP": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785604230738
+      "ts": 1785609190995
     },
     "STRK": {
       "lastRecommendation": "SHORT",
-      "ts": 1785604232113
+      "ts": 1785609192723
     },
     "ENA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785604232561
+      "ts": 1785609193307
     },
     "W": {
       "lastRecommendation": "SHORT",
-      "ts": 1785604233015
+      "ts": 1785609193959
     },
     "TNSR": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785604233472
+      "ts": 1785609194547
     },
     "WOLF": {
       "lastRecommendation": "SHORT",
@@ -4601,7 +4700,7 @@
     },
     "TIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785604229969
+      "ts": 1785609189848
     },
     "CATE": {
       "lastRecommendation": "NO OPERAR",
@@ -4777,7 +4876,7 @@
     },
     "ORDI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785604231642
+      "ts": 1785609192145
     },
     "PYTH": {
       "lastRecommendation": "SHORT",
@@ -4785,7 +4884,7 @@
     },
     "BANK": {
       "lastRecommendation": "SHORT",
-      "ts": 1785604262568
+      "ts": 1785609198170
     },
     "ICNT": {
       "lastRecommendation": "SHORT",
@@ -4797,7 +4896,7 @@
     },
     "OPG": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542116500
+      "ts": 1785609219279
     },
     "BAT": {
       "lastRecommendation": "SHORT",
@@ -4813,7 +4912,7 @@
     },
     "WIF": {
       "lastRecommendation": "SHORT",
-      "ts": 1785604231189
+      "ts": 1785609191566
     },
     "LUNA": {
       "lastRecommendation": "NO OPERAR",
@@ -4893,7 +4992,7 @@
     },
     "HIVE": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542093635
+      "ts": 1785609197002
     },
     "RLC": {
       "lastRecommendation": "NO OPERAR",
@@ -4909,19 +5008,19 @@
     },
     "WOO": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542097574
+      "ts": 1785609201135
     },
     "SIREN": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785604260284
+      "lastRecommendation": "SHORT",
+      "ts": 1785609197587
     },
     "AUCTION": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542096458
+      "lastRecommendation": "SHORT",
+      "ts": 1785609198782
     },
     "EWT": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542098698
+      "ts": 1785609204429
     },
     "HOME": {
       "lastRecommendation": "NO OPERAR",
@@ -4929,135 +5028,135 @@
     },
     "SKL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542097018
+      "ts": 1785609199944
     },
     "REZ": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542095906
+      "ts": 1785609199363
     },
     "IOTX": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542099790
+      "ts": 1785609205017
     },
     "IOST": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542098171
+      "lastRecommendation": "SHORT",
+      "ts": 1785609201731
     },
     "STORJ": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542105989
+      "ts": 1785609212212
     },
     "STEEM": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542102316
+      "ts": 1785609203831
     },
     "PUNDIX": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542107683
+      "ts": 1785609210335
     },
     "HYPER": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785542110041
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785609209726
     },
     "CTSI": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785542105429
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785609209086
     },
     "GMT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542101726
+      "ts": 1785609203196
     },
     "ONG": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785542106535
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785609206811
     },
     "LISTA": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542099253
+      "lastRecommendation": "LONG",
+      "ts": 1785609200552
     },
     "B2": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542107103
+      "ts": 1785609206185
     },
     "MTL": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542108910
+      "ts": 1785609215436
     },
     "NAORIS": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785542110654
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785609216138
     },
     "SLP": {
-      "lastRecommendation": "LONG",
-      "ts": 1785542109491
+      "lastRecommendation": "SHORT",
+      "ts": 1785609218112
     },
     "ARK": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542113198
+      "ts": 1785609218700
     },
     "METIS": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542113610
+      "ts": 1785609217384
     },
     "CVC": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542112640
+      "ts": 1785609220676
     },
     "LQTY": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542123545
+      "lastRecommendation": "SHORT",
+      "ts": 1785609228915
     },
     "BASED": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542111272
+      "ts": 1785609224256
     },
     "SIGN": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542118804
+      "ts": 1785609227747
     },
     "CARV": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542114156
+      "lastRecommendation": "SHORT",
+      "ts": 1785609222461
     },
     "DOGS": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542118250
+      "ts": 1785609225431
     },
     "YGG": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542117667
+      "ts": 1785609223069
     },
     "CGPT": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785542126239
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785609228327
     },
     "POWER": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542114712
+      "lastRecommendation": "LONG",
+      "ts": 1785609221286
     },
     "ENSO": {
       "lastRecommendation": "LONG",
-      "ts": 1785487966507
+      "ts": 1785609212682
     },
     "CYBER": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785542120568
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785609227182
     },
     "ONE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542117045
+      "ts": 1785609224839
     },
     "BREV": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542120023
+      "lastRecommendation": "SHORT",
+      "ts": 1785609229487
     },
     "TRIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542115288
+      "ts": 1785609223640
     },
     "TREE": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542124207
+      "ts": 1785609230657
     },
     "NIL": {
       "lastRecommendation": "SHORT",
@@ -5065,55 +5164,55 @@
     },
     "FIDA": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542127090
+      "ts": 1785609231841
     },
     "AEVO": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542121119
+      "lastRecommendation": "LONG",
+      "ts": 1785609210924
     },
     "WAXP": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542115871
+      "lastRecommendation": "SHORT",
+      "ts": 1785609226015
     },
     "LSK": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542125574
+      "ts": 1785609233856
     },
     "AIXBT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542122388
+      "ts": 1785609231243
     },
     "STG": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542121726
+      "ts": 1785609230073
     },
     "CETUS": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542122994
+      "ts": 1785609232434
     },
     "LUMIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542119407
+      "ts": 1785609226612
     },
     "XNY": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542102945
+      "ts": 1785609235617
     },
     "ARPA": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785542128298
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785609234457
     },
     "CELR": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542130022
+      "ts": 1785609237892
     },
     "CLO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785593402397
+      "ts": 1785609236747
     },
     "CTK": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542129440
+      "ts": 1785609221877
     },
     "RAVE": {
       "lastRecommendation": "SHORT",
@@ -5393,7 +5492,7 @@
     },
     "SYN": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542094232
+      "ts": 1785609211563
     },
     "ZORA": {
       "lastRecommendation": "NO OPERAR",
@@ -5649,15 +5748,15 @@
     },
     "PIPPIN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785542128859
+      "ts": 1785609235038
     },
     "YB": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785542127685
+      "lastRecommendation": "SHORT",
+      "ts": 1785609237322
     },
     "INX": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785593404051
+      "lastRecommendation": "LONG",
+      "ts": 1785609236191
     },
     "TAC": {
       "lastRecommendation": "NO OPERAR",
@@ -5677,7 +5776,7 @@
     },
     "BLESS": {
       "lastRecommendation": "LONG",
-      "ts": 1785593405545
+      "ts": 1785609216759
     },
     "WET": {
       "lastRecommendation": "NO OPERAR",
@@ -5685,7 +5784,7 @@
     },
     "SLX": {
       "lastRecommendation": "SHORT",
-      "ts": 1785542103514
+      "ts": 1785609205589
     },
     "BIRB": {
       "lastRecommendation": "SHORT",
@@ -5716,261 +5815,258 @@
     "symbols": [
       "SENT",
       "BAT",
-      "MET",
-      "KMNO",
-      "DYDX",
-      "AKE",
-      "GLM",
       "GPS",
+      "DYDX",
+      "KMNO",
       "FLUID",
-      "UAI",
+      "GLM",
+      "MET",
       "RIF",
       "GALA",
-      "PRL",
+      "ICNT",
       "EGLD",
       "SAPIEN",
-      "FORM",
       "ZK",
-      "MELANIA",
       "ATH",
       "RSR",
-      "ICNT",
       "SOON",
-      "SAFE",
+      "FORM",
+      "MELANIA",
       "ORDI",
+      "SAFE",
       "YFI",
       "NXPC",
-      "RE",
-      "BANANAS31",
+      "MYX",
       "ZEN",
       "BAN",
-      "RAVE",
+      "BANANAS31",
+      "RE",
+      "PRL",
       "BAS",
-      "PLUME",
+      "RAVE",
       "QTUM",
-      "ORCA",
-      "CFG",
+      "PLUME",
       "ZRX",
-      "MYX",
-      "COW",
+      "ORCA",
       "ALLO",
-      "ARKM",
-      "GMX",
-      "HOLO",
-      "WAL",
-      "CAP",
+      "CFG",
+      "COW",
       "SAFE",
+      "ARKM",
+      "WAL",
+      "HOLO",
       "LPT",
+      "GMX",
+      "COAI",
       "GAS",
       "NMR",
-      "COAI",
       "HOT",
       "RVN",
       "BILL",
-      "JELLYJELLY",
-      "MAGMA",
       "KSM",
       "ARX",
+      "JELLYJELLY",
       "TURBO",
       "LINEA",
-      "MINA",
-      "COTI",
-      "SUPER",
-      "MEME",
-      "USELESS",
-      "ZIL",
       "AIOT",
-      "CHIP",
-      "ENJ",
-      "BIO",
-      "IO",
-      "RIVER",
-      "SKR",
-      "SPK",
-      "FLOW",
-      "LAB",
-      "XVS",
-      "CYS",
+      "MAGMA",
+      "MINA",
+      "SUPER",
+      "ZIL",
       "BABY",
+      "MEME",
+      "CHIP",
+      "IO",
+      "USELESS",
+      "ENJ",
+      "RIVER",
+      "FLOW",
+      "CAP",
+      "SPK",
+      "BIO",
+      "BR",
+      "IDOL",
+      "CYS",
+      "XVS",
       "BERA",
+      "SKR",
+      "CROSS",
       "AXL",
       "KAVA",
       "SUSHI",
-      "ESP",
-      "TOSHI",
       "ZETA",
-      "BR",
-      "PRL",
-      "CROSS",
-      "POPCAT",
-      "ASTR",
-      "POLYX",
-      "RED",
-      "BOME",
-      "JCT",
-      "AZTEC",
-      "BLUR",
-      "MEGA",
-      "UP",
       "ROSE",
-      "MMT",
+      "COTI",
+      "TOSHI",
+      "LAB",
+      "ASTR",
+      "PRL",
+      "POLYX",
+      "ESP",
+      "MEGA",
+      "POPCAT",
+      "RED",
+      "EUL",
+      "RECALL",
+      "AZTEC",
+      "JCT",
+      "UP",
       "CKB",
-      "GIGGLE",
+      "BLUR",
       "ALT",
       "POWR",
+      "BRETT",
+      "GIGGLE",
+      "BOME",
+      "PNUT",
+      "OPEN",
+      "MMT",
       "DEEP",
       "BARD",
-      "PNUT",
-      "BRETT",
       "CELO",
-      "OPEN",
       "TRB",
-      "RECALL",
       "ONT",
-      "EDEN",
-      "ON",
-      "EUL",
       "CATI",
-      "ME",
-      "ZEST",
-      "PEOPLE",
-      "RPL",
-      "SQD",
-      "MASK",
-      "MOODENG",
-      "KGEN",
+      "ON",
       "FOLKS",
+      "ZEST",
+      "EDEN",
+      "KGEN",
+      "SQD",
+      "ME",
+      "MASK",
+      "RPL",
+      "ARX",
+      "MOODENG",
+      "SPACE",
+      "SXT",
+      "VTHO",
+      "ANKR",
       "ZEREBRO",
       "HUMA",
-      "VTHO",
-      "SXT",
-      "ANKR",
-      "SPACE",
-      "ARX",
-      "NOT",
+      "PROM",
       "PROVE",
-      "MEME",
+      "NOT",
+      "PEOPLE",
       "MOCA",
-      "APEX",
-      "GWEI",
-      "FOGO",
-      "SSV",
-      "IDOL",
-      "GRVT",
       "AT",
+      "MEME",
+      "IRYS",
+      "SSV",
+      "APEX",
+      "FOGO",
+      "0G",
+      "GWEI",
+      "GRVT",
       "MOVE",
       "UMA",
-      "PROM",
-      "0G",
+      "EPIC",
       "TNSR",
-      "IRYS",
-      "NOW",
+      "COLLECT",
       "MEW",
-      "ALCH",
-      "ACX",
-      "MANTRA",
-      "DUSK",
-      "BIGTIME",
-      "BNT",
-      "MANTA",
       "XAN",
+      "BAND",
+      "NOW",
+      "ACX",
+      "DUSK",
+      "ALCH",
+      "MANTRA",
       "BSB",
+      "MANTA",
+      "BNT",
+      "BIGTIME",
+      "VANA",
       "AVNT",
+      "SAHARA",
       "API3",
       "USTC",
-      "COLLECT",
-      "VANA",
-      "ROBO",
-      "SAHARA",
-      "BAND",
-      "TRUTH",
       "EDU",
-      "ACU",
-      "ZORA",
-      "KNC",
-      "SIREN",
-      "ETHW",
-      "RLC",
       "SKYAI",
-      "EPIC",
-      "BANK",
-      "FRAX",
-      "ILV",
-      "HOME",
-      "ICX",
-      "HIVE",
-      "SYN",
-      "MERL",
+      "ZORA",
+      "TRUTH",
+      "ETHW",
+      "ROBO",
+      "ACU",
+      "KNC",
       "CORE",
-      "REZ",
+      "HOME",
+      "ILV",
+      "FRAX",
+      "ICX",
+      "MERL",
+      "RLC",
+      "HIVE",
+      "SIREN",
+      "BANK",
       "AUCTION",
+      "REZ",
       "SKL",
+      "LISTA",
       "WOO",
       "IOST",
-      "EWT",
-      "LISTA",
-      "IOTX",
-      "UP",
       "GMT",
       "STEEM",
-      "XNY",
+      "EWT",
+      "IOTX",
       "SLX",
-      "CTSI",
-      "STORJ",
-      "ONG",
       "B2",
-      "PUNDIX",
-      "MTL",
-      "SLP",
+      "ONG",
+      "CTSI",
       "HYPER",
-      "NAORIS",
-      "BASED",
-      "CVC",
-      "ARK",
-      "METIS",
-      "ENSO",
-      "CARV",
-      "POWER",
-      "TRIA",
-      "WAXP",
-      "OPG",
-      "ONE",
-      "YGG",
-      "DOGS",
-      "SIGN",
-      "LUMIA",
-      "BREV",
-      "CYBER",
+      "PUNDIX",
       "AEVO",
-      "STG",
-      "AIXBT",
-      "CETUS",
-      "LQTY",
-      "TREE",
-      "LSK",
+      "SYN",
+      "STORJ",
+      "ENSO",
+      "MTL",
+      "NAORIS",
+      "BLESS",
+      "METIS",
+      "SLP",
+      "ARK",
+      "OPG",
+      "CVC",
+      "POWER",
+      "CTK",
+      "CARV",
+      "UP",
+      "YGG",
+      "TRIA",
+      "BASED",
+      "ONE",
+      "DOGS",
+      "WAXP",
+      "LUMIA",
+      "CYBER",
+      "SIGN",
       "CGPT",
+      "LQTY",
+      "BREV",
+      "STG",
+      "TREE",
+      "AIXBT",
       "FIDA",
-      "YB",
+      "CETUS",
+      "LSK",
       "ARPA",
       "PIPPIN",
-      "CTK",
-      "CELR",
-      "WET",
-      "CLO",
-      "TAC",
+      "XNY",
       "INX",
-      "AEON",
-      "BIRB",
-      "BLESS",
+      "CLO",
+      "YB",
+      "CELR",
       "SOPH",
-      "NIL",
+      "TAC",
+      "WET",
+      "BANANA",
       "TAIKO",
+      "TUT",
+      "USUAL",
       "MOVR",
-      "KOMA",
-      "BLEND",
-      "USUAL"
+      "BLUAI",
+      "NIL"
     ],
-    "updatedAt": 1785518910574
+    "updatedAt": 1785609196357
   },
   "lastMarketPulse": {
     "date": "2026-08-01",
