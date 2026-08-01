@@ -1,5 +1,9 @@
 // Fortress Terminal — TheHaton Strategy Center (bot)
-// Corre en GitHub Actions cada 1 hora. USA EL MISMO MOTOR que la web
+// Corre en GitHub Actions programado cada 30 min (minutos :07 y :37, no en punto — GitHub atrasa
+// más los horarios "en punto" por la carga alta). Aun así, GitHub NO garantiza el horario exacto:
+// en la práctica puede tardar entre 30 min y varias horas entre corrida y corrida — es una
+// limitación conocida y documentada de GitHub Actions, no un bug de este código.
+// USA EL MISMO MOTOR que la web
 // (../thehaton-engine.js, un único archivo físico en la raíz del repo,
 // el mismo que carga index.html) — no hay una versión "simplificada" acá.
 // Cualquier análisis (Binance top N, CUSTOM_COINS multi-exchange, DEX
@@ -794,8 +798,8 @@ async function manageActiveTheses(state){
     if(price==null){
       thesis.priceFailCount = (thesis.priceFailCount||0) + 1;
       console.log(`⚠️ No se pudo obtener precio de ${thesis.symbol} (falla #${thesis.priceFailCount} seguida).`);
-      if(thesis.priceFailCount===3){ // ~3 horas de fallas seguidas (ahora corre cada 1 hora)
-        sendPromises.push(sendTelegram(`⚠️ <b>TheHaton no puede leer el precio de ${thesis.symbol}${thesis.tag||''} hace 2 horas.</b>\nLa posición sigue abierta pero no se puede chequear TP/SL. Revisá si el símbolo sigue existiendo en su fuente original (${thesis.source}).`));
+      if(thesis.priceFailCount===3){ // se cuenta por corridas fallidas seguidas, no por horas — se adapta solo aunque la cadencia real de GitHub sea irregular
+        sendPromises.push(sendTelegram(`⚠️ <b>TheHaton no puede leer el precio de ${thesis.symbol}${thesis.tag||''} hace 3 corridas seguidas.</b>\nLa posición sigue abierta pero no se puede chequear TP/SL. Revisá si el símbolo sigue existiendo en su fuente original (${thesis.source}).`));
       }
       stillOpen.push(thesis); continue;
     }
