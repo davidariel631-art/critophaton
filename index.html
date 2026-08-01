@@ -2052,18 +2052,23 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const yTop = candleSeries.priceToCoordinate(binPriceHigh);
         const yBot = candleSeries.priceToCoordinate(binPriceLow);
         if(yTop==null || yBot==null || bins[b]===0) continue;
-        const barLen = (bins[b]/maxBin) * cssW;
+        // Grosor máximo del 55% del panel — así queda espacio real a la derecha para que las líneas
+        // (más abajo) se distingan como una zona aparte, no mezcladas con las barras.
+        const barLen = (bins[b]/maxBin) * cssW * 0.55;
         const binMid = (binPriceLow+binPriceHigh)/2;
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
         const baseColor = binMid > price ? [239,68,68] : [16,185,129];
         const alpha = isPOC ? 1.0 : Math.pow(bins[b]/maxBin, 1.8)*0.85+0.03; // curva no lineal: las zonas débiles casi no se ven, las fuertes se marcan mucho más
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
         const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
-        ctx.fillRect(cssW-barLen, yC, barLen, hC);
+        // Las barras arrancan PEGADAS a la izquierda (justo donde terminan las velas), no al revés —
+        // por eso se ve como una "pared" consistente en ese borde, con cada barra estirándose hacia
+        // la derecha según su fuerza.
+        ctx.fillRect(0, yC, barLen, hC);
         // Etiqueta con el volumen exacto en el POC de cada lado (igual que el indicador original)
         if(isPOC){
-          ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'right';
-          ctx.fillText(formatVol(bins[b]), cssW-barLen-4, yC+hC/2+3);
+          ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'left';
+          ctx.fillText(formatVol(bins[b]), barLen+4, yC+hC/2+3);
         }
       }
 
