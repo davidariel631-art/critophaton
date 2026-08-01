@@ -26,7 +26,7 @@
   },
   "account": {
     "id": 1,
-    "capital": 92.8373,
+    "capital": 92.2683,
     "initialCapital": 100,
     "openPositions": [
       {
@@ -1329,14 +1329,7 @@
         "result": "loss",
         "pnl": -0.4741,
         "closedAt": 1785562750548
-      }
-    ],
-    "tradesToday": {
-      "date": "2026-08-01",
-      "count": 0
-    },
-    "peakCapital": 100,
-    "theses": [
+      },
       {
         "id": "1785497069039_TOSHI",
         "symbol": "TOSHI",
@@ -1371,6 +1364,10 @@
           {
             "ts": 1785531416006,
             "note": "Entrada CONFIRMADA en 15m (BOS a favor detectado). Entrada: $0.000103, Stop: $0.000105, TP1: $0.000100, TP2: $0.000098. riesgo reducido a 0.5% (drawdown 5% o 2 pérdidas seguidas) · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor."
+          },
+          {
+            "ts": 1785578825114,
+            "note": "Stop tocado antes de TP1 (-0.57 USDT). Capital: 92.27."
           }
         ],
         "theoEntry": 0.0001044,
@@ -1439,9 +1436,20 @@
           }
         ],
         "priceFailCount": 0,
-        "lastCheckedAt": 1785570808747,
-        "originalUnits": 313690.3738008637
-      },
+        "lastCheckedAt": 1785578825113,
+        "originalUnits": 313690.3738008637,
+        "exit": 0.00010491379999999998,
+        "result": "loss",
+        "pnl": -0.569,
+        "closedAt": 1785578825114
+      }
+    ],
+    "tradesToday": {
+      "date": "2026-08-01",
+      "count": 0
+    },
+    "peakCapital": 100,
+    "theses": [
       {
         "id": "1785513462775_PYTH",
         "symbol": "PYTH",
@@ -1565,135 +1573,7 @@
         ],
         "originalUnits": 617.7409424144897,
         "priceFailCount": 0,
-        "lastCheckedAt": 1785570809046
-      },
-      {
-        "id": "1785513473980_FORM",
-        "symbol": "FORM",
-        "dir": "LONG",
-        "tag": " (cap chico)",
-        "status": "WATCHING",
-        "conviction": 81,
-        "detectedAt": 1785513473980,
-        "expiresAt": 1785578273980,
-        "breakEvenMoved": false,
-        "journal": [
-          {
-            "ts": 1785513473980,
-            "note": "Tesis detectada en 4h: LONG (score 8.1/10, confianza 62%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
-          },
-          {
-            "ts": 1785518900609,
-            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785525220945,
-            "note": "Todavía esperando confirmación (Estocástico en 83, zona de sobrecompra — no se abren operaciones nuevas en un extremo del Estocástico)."
-          },
-          {
-            "ts": 1785531423130,
-            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785534118121,
-            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785534395126,
-            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785538494845,
-            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785542081664,
-            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785547952699,
-            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785549710091,
-            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785562756367,
-            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          },
-          {
-            "ts": 1785570810182,
-            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
-          }
-        ],
-        "theoEntry": 0.2079,
-        "theoStop": 0.1969075,
-        "theoTp1": 0.22438874999999997
-      },
-      {
-        "id": "1785513498220_USELESS",
-        "symbol": "USELESS",
-        "dir": "SHORT",
-        "tag": " (cap chico)",
-        "status": "WATCHING",
-        "conviction": 80,
-        "detectedAt": 1785513498220,
-        "expiresAt": 1785578298220,
-        "breakEvenMoved": false,
-        "journal": [
-          {
-            "ts": 1785513498220,
-            "note": "Tesis detectada en 4h: SHORT (score 8.0/10, confianza 60%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
-          },
-          {
-            "ts": 1785518904597,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1785525225302,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1785531426213,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 10 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785534119283,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785534396506,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785538496169,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785542082889,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 11 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785547953598,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (22) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 14 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785549711254,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (22) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 14 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785562757660,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (20) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 13 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1785570811078,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (22) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          }
-        ],
-        "theoEntry": 0.050206,
-        "theoStop": 0.05487011799999999,
-        "theoTp1": 0.04320982300000002
+        "lastCheckedAt": 1785578825300
       },
       {
         "id": "1785518919724_MOCA",
@@ -1748,6 +1628,10 @@
           },
           {
             "ts": 1785570812055,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1785578827308,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -1809,6 +1693,10 @@
           {
             "ts": 1785570813320,
             "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785578828623,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
         "theoEntry": 0.01652,
@@ -1829,6 +1717,10 @@
           {
             "ts": 1785570829168,
             "note": "Tesis detectada en 4h: SHORT (score 7.8/10, confianza 57%). A favor: Dios de Tendencia, Dios Smart Money, Dios Macro (4h), Dios VWAP. Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1785578829520,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 4 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.00751,
@@ -1849,11 +1741,95 @@
           {
             "ts": 1785570834303,
             "note": "Tesis detectada en 4h: LONG (score 7.8/10, confianza 56%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1785578830492,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
         "theoEntry": 0.04171,
         "theoStop": 0.03983155315082923,
         "theoTp1": 0.04452767027375615
+      },
+      {
+        "id": "1785578836900_AKE",
+        "symbol": "AKE",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 78,
+        "detectedAt": 1785578836900,
+        "expiresAt": 1785643636900,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785578836900,
+            "note": "Tesis detectada en 4h: LONG (score 7.8/10, confianza 56%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          }
+        ],
+        "theoEntry": 0.0041327,
+        "theoStop": 0.003647026,
+        "theoTp1": 0.004861210999999999
+      },
+      {
+        "id": "1785578840180_RIF",
+        "symbol": "RIF",
+        "dir": "SHORT",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 76,
+        "detectedAt": 1785578840180,
+        "expiresAt": 1785643640180,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785578840180,
+            "note": "Tesis detectada en 4h: SHORT (score 7.6/10, confianza 53%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          }
+        ],
+        "theoEntry": 0.08618,
+        "theoStop": 0.09066116999999999,
+        "theoTp1": 0.07945824500000004
+      },
+      {
+        "id": "1785578841246_PRL",
+        "symbol": "PRL",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 78,
+        "detectedAt": 1785578841246,
+        "expiresAt": 1785643641246,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785578841246,
+            "note": "Tesis detectada en 4h: LONG (score 7.8/10, confianza 56%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          }
+        ],
+        "theoEntry": 0.2408,
+        "theoStop": 0.21439084329574415,
+        "theoTp1": 0.26689327505134103
+      },
+      {
+        "id": "1785578842874_FORM",
+        "symbol": "FORM",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 78,
+        "detectedAt": 1785578842874,
+        "expiresAt": 1785643642874,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785578842874,
+            "note": "Tesis detectada en 4h: LONG (score 7.8/10, confianza 56%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          }
+        ],
+        "theoEntry": 0.2142,
+        "theoStop": 0.20438499999999998,
+        "theoTp1": 0.22421956068997942
       }
     ],
     "expiredTheses": [
@@ -3858,6 +3834,144 @@
         "theoStop": 0.2506497,
         "theoTp1": 0.17552545000000003,
         "wouldHaveWon": null
+      },
+      {
+        "id": "1785513473980_FORM",
+        "symbol": "FORM",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 81,
+        "detectedAt": 1785513473980,
+        "expiresAt": 1785578273980,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785513473980,
+            "note": "Tesis detectada en 4h: LONG (score 8.1/10, confianza 62%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1785518900609,
+            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785525220945,
+            "note": "Todavía esperando confirmación (Estocástico en 83, zona de sobrecompra — no se abren operaciones nuevas en un extremo del Estocástico)."
+          },
+          {
+            "ts": 1785531423130,
+            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785534118121,
+            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785534395126,
+            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785538494845,
+            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785542081664,
+            "note": "Todavía esperando confirmación (Fear&Greed en 25, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785547952699,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785549710091,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785562756367,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785570810182,
+            "note": "Todavía esperando confirmación (Fear&Greed en 27, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1785578825615,
+            "note": "Expiró sin confirmación después de 18h. Simulación pasiva (si hubiéramos entrado igual): Todavía indefinido (nunca tocó ni el TP1 ni el Stop teórico en ese lapso).. Se archiva (el historial nunca se borra)."
+          }
+        ],
+        "theoEntry": 0.2079,
+        "theoStop": 0.1969075,
+        "theoTp1": 0.22438874999999997,
+        "wouldHaveWon": null
+      },
+      {
+        "id": "1785513498220_USELESS",
+        "symbol": "USELESS",
+        "dir": "SHORT",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 80,
+        "detectedAt": 1785513498220,
+        "expiresAt": 1785578298220,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1785513498220,
+            "note": "Tesis detectada en 4h: SHORT (score 8.0/10, confianza 60%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1785518904597,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1785525225302,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1785531426213,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 10 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785534119283,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785534396506,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785538496169,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785542082889,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 11 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785547953598,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (22) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 14 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785549711254,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (22) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 14 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785562757660,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (20) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 13 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785570811078,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (22) — la tendencia se está quedando sin fuerza; Estocástico 1D ya en 12 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1785578825919,
+            "note": "Expiró sin confirmación después de 18h. Simulación pasiva (si hubiéramos entrado igual): Todavía indefinido (nunca tocó ni el TP1 ni el Stop teórico en ese lapso).. Se archiva (el historial nunca se borra)."
+          }
+        ],
+        "theoEntry": 0.050206,
+        "theoStop": 0.05487011799999999,
+        "theoTp1": 0.04320982300000002,
+        "wouldHaveWon": null
       }
     ]
   },
@@ -3869,27 +3983,27 @@
     },
     "SEI": {
       "lastRecommendation": "SHORT",
-      "ts": 1785570814249
+      "ts": 1785578831391
     },
     "JUP": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785570814693
+      "ts": 1785578831836
     },
     "STRK": {
       "lastRecommendation": "SHORT",
-      "ts": 1785570815916
+      "ts": 1785578833032
     },
     "ENA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785570816380
+      "ts": 1785578833359
     },
     "W": {
       "lastRecommendation": "SHORT",
-      "ts": 1785570816881
+      "ts": 1785578833804
     },
     "TNSR": {
-      "lastRecommendation": "SHORT",
-      "ts": 1785570817324
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785578834233
     },
     "WOLF": {
       "lastRecommendation": "SHORT",
@@ -3965,7 +4079,7 @@
     },
     "RIF": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562773790
+      "ts": 1785578840179
     },
     "USDe": {
       "lastRecommendation": "NO OPERAR",
@@ -4057,7 +4171,7 @@
     },
     "TIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785570813779
+      "ts": 1785578830958
     },
     "CATE": {
       "lastRecommendation": "NO OPERAR",
@@ -4068,20 +4182,20 @@
       "ts": 1785400076341
     },
     "GALA": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562774378
+      "lastRecommendation": "SHORT",
+      "ts": 1785578840808
     },
     "AB": {
       "lastRecommendation": "NO OPERAR",
       "ts": 1785400060986
     },
     "MET": {
-      "lastRecommendation": "LONG",
-      "ts": 1785562768098
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785578835560
     },
     "ZK": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562776818
+      "ts": 1785578843622
     },
     "NEX": {
       "lastRecommendation": "SHORT",
@@ -4097,7 +4211,7 @@
     },
     "KMNO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562768708
+      "ts": 1785578836017
     },
     "RAIL": {
       "lastRecommendation": "NO OPERAR",
@@ -4105,15 +4219,15 @@
     },
     "FLUID": {
       "lastRecommendation": "LONG",
-      "ts": 1785562772567
+      "ts": 1785578839302
     },
     "SENT": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562766897
+      "lastRecommendation": "LONG",
+      "ts": 1785578834683
     },
     "GPS": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562771925
+      "ts": 1785578838862
     },
     "SN64": {
       "lastRecommendation": "NO OPERAR",
@@ -4121,11 +4235,11 @@
     },
     "ATH": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562778010
+      "ts": 1785578844503
     },
     "EGLD": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562775597
+      "lastRecommendation": "SHORT",
+      "ts": 1785578841991
     },
     "DBR": {
       "lastRecommendation": "SHORT",
@@ -4141,11 +4255,11 @@
     },
     "PRL": {
       "lastRecommendation": "LONG",
-      "ts": 1785562774986
+      "ts": 1785578841245
     },
     "ALLO": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562791109
+      "ts": 1785578853386
     },
     "RSC": {
       "lastRecommendation": "SHORT",
@@ -4153,15 +4267,15 @@
     },
     "RSR": {
       "lastRecommendation": "LONG",
-      "ts": 1785562778604
+      "ts": 1785578844952
     },
     "MELANIA": {
-      "lastRecommendation": "LONG",
-      "ts": 1785562777414
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785578844062
     },
     "SAPIEN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562776186
+      "ts": 1785578842436
     },
     "Cate": {
       "lastRecommendation": "NO OPERAR",
@@ -4169,27 +4283,27 @@
     },
     "SAFE": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562794582
+      "ts": 1785578855871
     },
     "UAI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562773189
+      "ts": 1785578839745
     },
     "COW": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562790487
+      "ts": 1785578852944
     },
     "RE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562782517
+      "ts": 1785578847624
     },
     "WEMIX": {
       "lastRecommendation": "NO OPERAR",
       "ts": 1785398252533
     },
     "AKE": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562769767
+      "lastRecommendation": "LONG",
+      "ts": 1785578836897
     },
     "PYBOBO": {
       "lastRecommendation": "NO OPERAR",
@@ -4201,7 +4315,7 @@
     },
     "NXPC": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562781870
+      "ts": 1785578847175
     },
     "BELIEVE": {
       "lastRecommendation": "SHORT",
@@ -4209,19 +4323,19 @@
     },
     "SOON": {
       "lastRecommendation": "LONG",
-      "ts": 1785562779939
+      "ts": 1785578845846
     },
     "BILL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562799846
+      "ts": 1785578859556
     },
     "DYDX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562769288
+      "ts": 1785578836454
     },
     "GLM": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562771327
+      "lastRecommendation": "SHORT",
+      "ts": 1785578838404
     },
     "IMX": {
       "lastRecommendation": "SHORT",
@@ -4229,11 +4343,11 @@
     },
     "FORM": {
       "lastRecommendation": "LONG",
-      "ts": 1785513473979
+      "ts": 1785578842873
     },
     "ORDI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785570815461
+      "ts": 1785578832590
     },
     "PYTH": {
       "lastRecommendation": "SHORT",
@@ -4245,7 +4359,7 @@
     },
     "ICNT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562779210
+      "ts": 1785578845393
     },
     "pipe": {
       "lastRecommendation": "NO OPERAR",
@@ -4257,7 +4371,7 @@
     },
     "BAT": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562767503
+      "ts": 1785578835119
     },
     "ELSA": {
       "lastRecommendation": "SHORT",
@@ -4265,11 +4379,11 @@
     },
     "HOLO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562792963
+      "ts": 1785578854712
     },
     "WIF": {
       "lastRecommendation": "SHORT",
-      "ts": 1785570815021
+      "ts": 1785578832153
     },
     "LUNA": {
       "lastRecommendation": "NO OPERAR",
@@ -4572,96 +4686,96 @@
       "ts": 1785542129440
     },
     "RAVE": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562785122
+      "lastRecommendation": "SHORT",
+      "ts": 1785578849396
     },
     "PLUME": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562786508
+      "ts": 1785578850287
     },
     "YFI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562781280
+      "ts": 1785578846735
     },
     "ORCA": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562787826
+      "ts": 1785578851166
     },
     "ZEN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562783838
+      "ts": 1785578848510
     },
     "CFG": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562788460
+      "lastRecommendation": "SHORT",
+      "ts": 1785578851607
     },
     "QTUM": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562787142
+      "lastRecommendation": "SHORT",
+      "ts": 1785578850728
     },
     "BAN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562784458
+      "ts": 1785578848958
     },
     "BANANAS31": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562783204
+      "ts": 1785578848071
     },
     "GMX": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562792351
+      "ts": 1785578854266
     },
     "ZRX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562789132
+      "ts": 1785578852053
     },
     "MYX": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1785562789812
+      "lastRecommendation": "LONG",
+      "ts": 1785578852508
     },
     "ARKM": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562791731
+      "ts": 1785578853831
     },
     "LPT": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562795183
+      "ts": 1785578856306
     },
     "WAL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562793586
+      "ts": 1785578855146
     },
     "COAI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562798044
+      "ts": 1785578858235
     },
     "GAS": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562796856
+      "ts": 1785578857344
     },
     "BAS": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562785881
+      "ts": 1785578849838
     },
     "HOT": {
-      "lastRecommendation": "LONG",
-      "ts": 1785562798646
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785578858685
     },
     "NMR": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562797443
+      "ts": 1785578857798
     },
     "RVN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562799248
+      "ts": 1785578859123
     },
     "JELLYJELLY": {
       "lastRecommendation": "LONG",
-      "ts": 1785562800440
+      "ts": 1785578859992
     },
     "MAGMA": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562801045
+      "ts": 1785578860442
     },
     "SUPER": {
       "lastRecommendation": "SHORT",
@@ -4669,19 +4783,19 @@
     },
     "ARX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785570822725
+      "ts": 1785578861315
     },
     "KSM": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562801649
+      "ts": 1785578860879
     },
     "MINA": {
       "lastRecommendation": "SHORT",
-      "ts": 1785562804145
+      "ts": 1785578862644
     },
     "LINEA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562803520
+      "ts": 1785578862192
     },
     "ESP": {
       "lastRecommendation": "SHORT",
@@ -4689,7 +4803,7 @@
     },
     "TURBO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1785562802903
+      "ts": 1785578861751
     },
     "USELESS": {
       "lastRecommendation": "SHORT",
@@ -4944,8 +5058,8 @@
       "ts": 1785547970654
     },
     "COTI": {
-      "lastRecommendation": "LONG",
-      "ts": 1785562804788
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1785578862958
     },
     "FLOW": {
       "lastRecommendation": "LONG",
