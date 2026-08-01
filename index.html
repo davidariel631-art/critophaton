@@ -2093,7 +2093,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const volFactor = Math.pow(bins[b]/maxBin, 1.8);
         const structFactor = structuralBoost[b]/maxBoost;
         const combined = Math.min(1, volFactor*0.7 + structFactor*0.5);
-        const alpha = isPOC ? 0.35 : combined*0.25+0.015; // sutil, para no tapar las velas que quedan por encima
+        const alpha = isPOC ? 0.7 : combined*0.55+0.06; // tonos sólidos y bien definidos, no apenas visibles
         ctx.fillStyle = `rgba(${baseColor[0]},${baseColor[1]},${baseColor[2]},${alpha})`;
         const yC = Math.min(yTop,yBot), hC = Math.max(1,Math.abs(yBot-yTop)-1);
         ctx.fillRect(0, yC, lastCandleX, hC);
