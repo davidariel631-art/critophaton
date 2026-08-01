@@ -1,21 +1,21 @@
 name: Fortress Hunt Mode - Telegram Signals
 on:
   schedule:
-    - cron: '*/30 * * * *'   # cada 30 minutos de verdad (dos veces por hora: min 0 y min 30)
+    - cron: '*/30 * * * *'   # cada 30 minutos (antes era '0 * * * *', una vez por hora)
   workflow_dispatch:
     inputs:
       force_test_trade:
         description: '¿Forzar una operación de PRUEBA en BTC para chequear que todo funcione?'
         type: boolean
         default: false
-
+# Evita que dos corridas se pisen (ej: una corrida manual justo cuando arranca la programada),
+# que es justo lo que causó el error de "git push rejected" — en vez de correr en paralelo,
+# la nueva corrida espera a que termine la anterior.
 concurrency:
   group: hunt-mode
   cancel-in-progress: false
-
 permissions:
-  contents: write
-
+  contents: write            # necesario para que el bot pueda guardar el estado (dedupe + cuenta TheHaton)
 jobs:
   scan:
     runs-on: ubuntu-latest
@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '22'   # Node 20 quedó obsoleto en los runners de GitHub Actions
       - name: Instalar dependencias (web-push, para las notificaciones push)
         run: npm install
       - name: Ejecutar el escáner y enviar señales a Telegram
@@ -41,6 +41,8 @@ jobs:
           git add telegram-bot/state.json
           git diff --staged --quiet && exit 0
           git commit -m "chore: actualizar estado del hunt mode [skip ci]"
+          # Defensa extra (además de "concurrency" arriba): si el push falla porque el remoto
+          # cambió mientras tanto, se trae lo nuevo y se reintenta, en vez de perder la corrida.
           for i in 1 2 3; do
             if git push; then break; fi
             echo "Push rechazado, reintentando con pull --rebase ($i/3)..."
