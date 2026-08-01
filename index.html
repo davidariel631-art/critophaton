@@ -2066,22 +2066,26 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         }
       }
 
-      // Líneas gruesas DENTRO del gráfico (sobre las velas), una por cada uno de los niveles más
-      // fuertes del histograma — no una lista aparte de "zonas". Pocas líneas en total (las 6 más
-      // fuertes), con el grosor escalado según qué tan fuerte es cada una — exactamente coincidiendo
-      // con las barras más largas de la derecha, como pediste.
+      // Las líneas de los niveles más fuertes SOLO aparecen del lado derecho (en el espacio vacío
+      // después de la última vela, igual que en la referencia) — no cruzan toda la historia de
+      // precios como antes con createPriceLine (que dibuja de punta a punta del gráfico siempre).
+      // Se dibujan en este mismo canvas, ocupando todo su ancho (desde donde termina la vela hasta
+      // el borde derecho del todo).
       const topBins = bins.map((v,i)=>({v,i})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,6);
       topBins.forEach(({v,i:b})=>{
         const binPriceLow = minP + b*priceStep, binPriceHigh = binPriceLow+priceStep;
         const binMid = (binPriceLow+binPriceHigh)/2;
-        const strength = v/maxBin; // 0..1, qué tan fuerte es este nivel comparado con el más fuerte de todos
+        const yMid = candleSeries.priceToCoordinate(binMid);
+        if(yMid==null) return;
+        const strength = v/maxBin;
         const lineWidth = Math.max(1, Math.round(1 + strength*3)); // grosor 1 a 4, según fuerza real
         const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
-        const color = binMid > price ? '#ef4444' : '#10b981';
-        candleSeries.createPriceLine({
-          price: binMid, color, lineWidth: isPOC ? 4 : lineWidth,
-          lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible:false,
-        });
+        ctx.strokeStyle = binMid > price ? '#ef4444' : '#10b981';
+        ctx.lineWidth = isPOC ? 4 : lineWidth;
+        ctx.beginPath();
+        ctx.moveTo(0, yMid);
+        ctx.lineTo(cssW, yMid);
+        ctx.stroke();
       });
 
       // Extensión de niveles hacia atrás: para los bins con más volumen, buscamos desde la vela más
