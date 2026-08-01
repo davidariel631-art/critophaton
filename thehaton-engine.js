@@ -612,7 +612,7 @@ function computeLiquidityProfile(candles, price, lookback=200){
     return c.c > c.o ? c.l - dev : c.h + dev;
   });
   const minP = Math.min(...priceRefs), maxP = Math.max(...priceRefs);
-  const nBins = 60;
+  const nBins = 90; // subido de 60 a 90 para más detalle/resolución en el perfil de volumen
   const priceStep = (maxP-minP)/nBins || 1;
   const bins = Array.from({length:nBins},()=>0);
   recent.forEach((c,i)=>{
@@ -628,13 +628,25 @@ function computeLiquidityProfile(candles, price, lookback=200){
     else { buyTotal+=bins[b]; if(!pocBuy || bins[b]>pocBuy.v) pocBuy={price:binMid,v:bins[b],bin:b}; }
   }
   const totalVol = sellTotal+buyTotal || 1;
+
+  // Toques reales por nivel: cuántas velas distintas (de las últimas 200) tocaron cada uno de los
+  // 90 niveles — una frecuencia de toques real, más fina que solo Equal Highs/Lows/Order Blocks
+  // nombrados. Antes esto vivía solo en la web (para el color del histograma); ahora es parte del
+  // motor compartido, así el bot también puede usarlo como señal, no solo la web para dibujar.
+  const touchCount = Array.from({length:nBins},()=>0);
+  recent.forEach(c=>{
+    const binLowIdx = Math.max(0, Math.floor((c.l-minP)/priceStep));
+    const binHighIdx = Math.min(nBins-1, Math.floor((c.h-minP)/priceStep));
+    for(let bi=binLowIdx; bi<=binHighIdx; bi++) touchCount[bi]++;
+  });
+
   return {
     domUpPct: sellTotal/totalVol*100, domDownPct: buyTotal/totalVol*100,
     pocAbove: pocSell, pocBelow: pocBuy,
     // Se exponen también los bins crudos (con su rango de precio) para que quien necesite DIBUJAR
     // el perfil (como la pestaña Liquidez de la web) use esta misma función en vez de recalcular
     // todo de nuevo por su cuenta — antes la web tenía una copia duplicada de este cálculo.
-    bins, minP, maxP, priceStep, nBins,
+    bins, minP, maxP, priceStep, nBins, touchCount,
   };
 }
 function mfi(candles, period=14){
