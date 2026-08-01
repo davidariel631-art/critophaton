@@ -674,7 +674,7 @@ async function confirmTheses(state, capitalFlow){
         }
 
         thesis.status = 'ACTIVE';
-        thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.units = units;
+        thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.tp3 = setup.t3; thesis.units = units; thesis.originalUnits = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
         const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
@@ -781,6 +781,11 @@ async function manageActiveTheses(state){
       thesis.tp1 = thesis.tp; thesis.tp2 = thesis.tp; thesis.partialTaken = true;
       console.log(`⚠️ ${thesis.symbol}: tesis con esquema viejo (sin tp1/tp2) migrada a cierre completo en $${thesis.tp}.`);
     }
+    // Migración defensiva para el nuevo esquema de 3 tramos (40/40/20): tesis confirmadas antes de
+    // este cambio no tienen `originalUnits` ni `tp3` — se las trata como si el 100% restante fuera
+    // "original" desde este momento, y si no tienen tp3, se cierran en 2 tramos como antes (sin romper
+    // operaciones que ya estaban en curso).
+    if(thesis.originalUnits==null) thesis.originalUnits = thesis.units;
 
     const sinceTs = thesis.lastCheckedAt || thesis.confirmedAt || thesis.detectedAt;
     const range = await fetchPriceRange(thesis.symbol, sinceTs);
@@ -839,27 +844,28 @@ async function manageActiveTheses(state){
       continue;
     }
 
-    // Etapa 1: todavía no tomó ganancia parcial -> vigila Stop y TP1 (con el rango real, no solo el precio actual)
+    // Etapa 1: todavía no tomó ninguna ganancia parcial -> vigila Stop y TP1 (con el rango real, no solo el precio actual)
     if(!thesis.partialTaken){
       let hitTP1=false, hitSL=false;
       if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitSL=true; else if(range.high>=thesis.tp1) hitTP1=true; }
       else { if(range.high>=thesis.stop) hitSL=true; else if(range.low<=thesis.tp1) hitTP1=true; }
 
       if(hitTP1){
-        const halfUnits = thesis.units/2;
-        const pnl = halfUnits * (thesis.tp1-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+        // 40% en TP1 (no 50% como antes) — deja más corriendo para TP2 y TP3, que ahora sí se usan.
+        const exitUnits = thesis.originalUnits*0.4;
+        const pnl = exitUnits * (thesis.tp1-thesis.entry) * (thesis.dir==='LONG'?1:-1);
         acc.capital = +(acc.capital+pnl).toFixed(4);
-        thesis.units = halfUnits; // queda el otro 50% corriendo
+        thesis.units = thesis.units - exitUnits; // queda el 60% corriendo
         thesis.partialTaken = true;
-        thesis.stop = thesis.entry; // mueve el stop al punto de entrada (breakeven), como pediste
-        journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 50% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 50% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}).`);
+        thesis.stop = thesis.entry; // mueve el stop al punto de entrada (breakeven)
+        journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 40% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 60% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}) y TP3 ($${thesis.tp3?.toFixed?.(6)??'—'}).`);
         thesis.partialPnl = pnl;
         sendPromises.push(sendTelegram(
           (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
-          `💰 <b>TheHaton tomó 50% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+          `💰 <b>TheHaton tomó 40% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
           `TP1 alcanzado: $${thesis.tp1.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
-          `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el 50% restante ya no puede terminar en pérdida.\n` +
-          `El resto sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}).\nCapital: ${acc.capital.toFixed(2)} USDT`
+          `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el resto ya no puede terminar en pérdida.\n` +
+          `El 60% restante sigue corriendo hacia TP2 (40%) y TP3 (20%).\nCapital: ${acc.capital.toFixed(2)} USDT`
         ));
         sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`));
         stillOpen.push(thesis);
@@ -880,25 +886,82 @@ async function manageActiveTheses(state){
       continue;
     }
 
-    // Etapa 2: ya tomó el 50% -> el resto corre hasta TP2 o vuelve a breakeven (con el rango real)
-    let hitTP2=false, hitBE=false;
-    if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE=true; else if(range.high>=thesis.tp2) hitTP2=true; }
-    else { if(range.high>=thesis.stop) hitBE=true; else if(range.low<=thesis.tp2) hitTP2=true; }
+    // Etapa 2: ya tomó el 40% en TP1 -> vigila TP2 (otro 40%) o vuelta a breakeven (con el rango real)
+    if(!thesis.secondPartialTaken){
+      let hitTP2=false, hitBE=false;
+      if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE=true; else if(range.high>=thesis.tp2) hitTP2=true; }
+      else { if(range.high>=thesis.stop) hitBE=true; else if(range.low<=thesis.tp2) hitTP2=true; }
 
-    if(hitTP2 || hitBE){
-      const exit = hitTP2 ? thesis.tp2 : thesis.stop;
+      if(hitBE){
+        // Sin tp3 (tesis viejas migradas) o sin TP2 tocado -> se cierra todo el resto acá, como antes.
+        const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+        acc.capital = +(acc.capital+pnl).toFixed(4);
+        const totalPnl = (thesis.partialPnl||0) + pnl;
+        journal(thesis, `Volvió a breakeven: se cierra el resto (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
+        acc.closedTrades.push({...thesis, exit:thesis.stop, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
+        sendPromises.push(sendTelegram(
+          (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
+          `⚖️ <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+          `Volvió al punto de entrada (breakeven en lo que quedaba)\n` +
+          `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
+        ));
+        sendPromises.push(sendPushToAll(`⚖️ Breakeven: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
+        continue;
+      }
+      if(hitTP2 && thesis.tp3!=null){
+        // Con TP3 disponible: 40% más acá, queda 20% corriendo hacia TP3.
+        const exitUnits = thesis.originalUnits*0.4;
+        const pnl = exitUnits * (thesis.tp2-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+        acc.capital = +(acc.capital+pnl).toFixed(4);
+        thesis.units = thesis.units - exitUnits;
+        thesis.secondPartialTaken = true;
+        thesis.partialPnl = (thesis.partialPnl||0) + pnl;
+        journal(thesis, `TP2 alcanzado ($${thesis.tp2.toFixed(6)}). Se tomó otro 40% (+${pnl.toFixed(2)} USDT). El 20% final sigue corriendo hacia TP3 ($${thesis.tp3.toFixed(6)}).`);
+        sendPromises.push(sendTelegram(
+          `💰 <b>TheHaton tomó otro 40% — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+          `TP2 alcanzado: $${thesis.tp2.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
+          `El 20% final sigue corriendo hacia TP3 ($${thesis.tp3.toFixed(6)}).\nCapital: ${acc.capital.toFixed(2)} USDT`
+        ));
+        sendPromises.push(sendPushToAll(`💰 TP2 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · 20% corriendo a TP3`));
+        stillOpen.push(thesis);
+        continue;
+      }
+      if(hitTP2){
+        // Sin tp3 (tesis vieja migrada) -> se cierra todo acá, como en el esquema de 2 tramos de antes.
+        const pnl = thesis.units * (thesis.tp2-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+        acc.capital = +(acc.capital+pnl).toFixed(4);
+        const totalPnl = (thesis.partialPnl||0) + pnl;
+        journal(thesis, `TP2 alcanzado: se cierra el resto (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
+        acc.closedTrades.push({...thesis, exit:thesis.tp2, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
+        sendPromises.push(sendTelegram(
+          `🚀 <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\nTP2 alcanzado ✅\nResultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
+        ));
+        sendPromises.push(sendPushToAll(`🚀 TP2 (cierre total): ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
+        continue;
+      }
+      stillOpen.push(thesis);
+      continue;
+    }
+
+    // Etapa 3: ya tomó 40%+40% -> el 20% final corre hacia TP3, o vuelve a breakeven.
+    let hitTP3=false, hitBE3=false;
+    if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE3=true; else if(range.high>=thesis.tp3) hitTP3=true; }
+    else { if(range.high>=thesis.stop) hitBE3=true; else if(range.low<=thesis.tp3) hitTP3=true; }
+
+    if(hitTP3 || hitBE3){
+      const exit = hitTP3 ? thesis.tp3 : thesis.stop;
       const pnl = thesis.units * (exit-thesis.entry) * (thesis.dir==='LONG'?1:-1);
       acc.capital = +(acc.capital+pnl).toFixed(4);
       const totalPnl = (thesis.partialPnl||0) + pnl;
-      journal(thesis, `${hitTP2?'TP2 alcanzado':'Volvió a breakeven'}: se cierra el 50% restante (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
+      journal(thesis, `${hitTP3?'TP3 alcanzado (objetivo final)':'Volvió a breakeven'}: se cierra el 20% final (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
       acc.closedTrades.push({...thesis, exit, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
       sendPromises.push(sendTelegram(
         (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
-        `${hitTP2?'🚀':'⚖️'} <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
-        `${hitTP2?'TP2 alcanzado ✅':'Volvió al punto de entrada (breakeven en el 50% restante)'}\n` +
+        `${hitTP3?'🎯':'⚖️'} <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+        `${hitTP3?'TP3 alcanzado ✅ (objetivo final)':'Volvió al punto de entrada (breakeven en el tramo final)'}\n` +
         `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
       ));
-      sendPromises.push(sendPushToAll(`${hitTP2?'🚀 TP2':'⚖️ Cierre'}: ${thesis.symbol}`, `Resultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
+      sendPromises.push(sendPushToAll(`${hitTP3?'🎯':'⚖️'} Cierre final: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
     } else {
       stillOpen.push(thesis);
     }
