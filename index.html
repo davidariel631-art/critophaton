@@ -2020,14 +2020,9 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
     candleSeries.setData(data.candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c })));
 
-    // Líneas de referencia (Equal Highs/Lows, OB, swings) — bien visibles, sin etiquetas de texto
-    // (esas ensuciaban el gráfico), pero con suficiente grosor y opacidad para que se noten de verdad.
-    const maxWeight = Math.max(...zones.map(z=>z.weight));
-    zones.forEach(z=>{
-      const intensity = 0.55 + (z.weight/maxWeight)*0.4;
-      const color = z.dir==='above' ? `rgba(239,68,68,${intensity})` : `rgba(16,185,129,${intensity})`;
-      candleSeries.createPriceLine({ price:z.price, color, lineWidth:2, lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible:false });
-    });
+    // Las líneas gruesas dentro del gráfico ahora salen directo de los niveles más fuertes del
+    // perfil de volumen (ver más abajo, después de calcular los bins) — no de una lista aparte de
+    // zonas. Así coinciden exactamente con las barras más largas del histograma de la derecha.
     liqChart.timeScale().fitContent();
 
     requestAnimationFrame(()=>{
@@ -2070,6 +2065,24 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           ctx.fillText(formatVol(bins[b]), cssW-barLen-4, yC+hC/2+3);
         }
       }
+
+      // Líneas gruesas DENTRO del gráfico (sobre las velas), una por cada uno de los niveles más
+      // fuertes del histograma — no una lista aparte de "zonas". Pocas líneas en total (las 6 más
+      // fuertes), con el grosor escalado según qué tan fuerte es cada una — exactamente coincidiendo
+      // con las barras más largas de la derecha, como pediste.
+      const topBins = bins.map((v,i)=>({v,i})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v).slice(0,6);
+      topBins.forEach(({v,i:b})=>{
+        const binPriceLow = minP + b*priceStep, binPriceHigh = binPriceLow+priceStep;
+        const binMid = (binPriceLow+binPriceHigh)/2;
+        const strength = v/maxBin; // 0..1, qué tan fuerte es este nivel comparado con el más fuerte de todos
+        const lineWidth = Math.max(1, Math.round(1 + strength*3)); // grosor 1 a 4, según fuerza real
+        const isPOC = (pocSell && b===pocSell.bin) || (pocBuy && b===pocBuy.bin);
+        const color = binMid > price ? '#ef4444' : '#10b981';
+        candleSeries.createPriceLine({
+          price: binMid, color, lineWidth: isPOC ? 4 : lineWidth,
+          lineStyle: LightweightCharts.LineStyle.Solid, axisLabelVisible:false,
+        });
+      });
 
       // Extensión de niveles hacia atrás: para los bins con más volumen, buscamos desde la vela más
       // reciente hacia atrás hasta encontrar dónde el precio ya "cruzó" ese nivel — la caja se dibuja
