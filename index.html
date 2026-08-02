@@ -653,6 +653,9 @@
           <canvas id="liqProfileCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
           <div id="liqChartInner" style="width:100%;height:100%;position:relative;z-index:2;"></div>
         </div>
+        <div id="liqStochContainer" style="width:100%;height:150px;margin-top:8px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
+          <canvas id="liqStochCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
         <input type="checkbox" id="liqAutoRefresh" style="width:16px;height:16px;">
@@ -2122,14 +2125,119 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         ctx.lineTo(rightEdge, yMid);
         ctx.stroke();
       });
+
+      // 4) Probabilidad Alcista/Bajista por Volumen (idea de David, basada en su script de Pine) —
+      // el cálculo en sí vive en el motor compartido (computeVolumeProbability), no acá, así el bot
+      // también puede usarlo el día de mañana. Acá solo se dibuja. Esta línea va de PUNTA A PUNTA de
+      // todo el gráfico (a diferencia de las de arriba, que van del final de las velas al borde).
+      const volProb = TheHatonEngine.computeVolumeProbability(data.candles, 20);
+      if(volProb){
+        const yCenter = candleSeries.priceToCoordinate(volProb.centerPrice);
+        if(yCenter!=null){
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4,3]);
+          ctx.beginPath();
+          ctx.moveTo(0, yCenter);
+          ctx.lineTo(cssW, yCenter);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = 'bold 11px Manrope'; ctx.textAlign = 'left';
+          ctx.fillStyle = '#10b981';
+          ctx.fillText(`↑ ${volProb.probUp.toFixed(1)}%`, 6, yCenter-6);
+          ctx.fillStyle = '#ef4444';
+          ctx.fillText(`↓ ${volProb.probDown.toFixed(1)}%`, 6, yCenter+14);
+        }
+      }
+    }
+
+    // ---- Panel de Estocástico (K/D), debajo del gráfico de Liquidez — usa el mismo cálculo
+    // compartido que ya usa el bot para confirmar entradas (TheHatonEngine.stochasticOscillator),
+    // no un cálculo aparte solo para la web.
+    function redrawStochasticPanel(){
+      const canvas = document.getElementById('liqStochCanvas');
+      const stochContainer = document.getElementById('liqStochContainer');
+      if(!canvas || !stochContainer) return;
+      const dpr = window.devicePixelRatio||1;
+      const cssW2 = stochContainer.clientWidth, cssH2 = 150;
+      canvas.style.width = cssW2+'px'; canvas.style.height = cssH2+'px';
+      canvas.width = cssW2*dpr; canvas.height = cssH2*dpr;
+      const sctx = canvas.getContext('2d'); sctx.scale(dpr,dpr); sctx.clearRect(0,0,cssW2,cssH2);
+
+      const { k, d } = TheHatonEngine.stochasticOscillator(data.candles);
+      const marginRight2 = 34;
+      const chartW2 = cssW2 - marginRight2;
+      const nCandles = Math.min(k.length, 150); // últimas 150 velas, para que no se vea apretado
+      const kSlice = k.slice(-nCandles), dSlice = d.slice(-nCandles);
+      const candleW2 = chartW2/nCandles;
+      const yFor2 = v => cssH2 - (v/100)*cssH2;
+
+      sctx.fillStyle = 'rgba(16,185,129,0.08)'; sctx.fillRect(0, yFor2(100), chartW2, yFor2(80)-yFor2(100));
+      sctx.fillStyle = 'rgba(239,68,68,0.08)'; sctx.fillRect(0, yFor2(20), chartW2, yFor2(0)-yFor2(20));
+
+      sctx.strokeStyle = 'rgba(136,145,163,0.35)'; sctx.setLineDash([2,3]); sctx.lineWidth=1;
+      [80,50,20].forEach(lvl=>{ sctx.beginPath(); sctx.moveTo(0,yFor2(lvl)); sctx.lineTo(chartW2,yFor2(lvl)); sctx.stroke(); });
+      sctx.setLineDash([]);
+      sctx.fillStyle='#8891a3'; sctx.font='9px Manrope'; sctx.textAlign='left';
+      sctx.fillText('80', chartW2+4, yFor2(80)+3); sctx.fillText('50', chartW2+4, yFor2(50)+3); sctx.fillText('20', chartW2+4, yFor2(20)+3);
+
+      kSlice.forEach((v,i)=>{
+        if(v==null) return;
+        sctx.fillStyle = v>50 ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)';
+        sctx.fillRect(i*candleW2, 0, candleW2+0.5, cssH2);
+      });
+
+      for(let i=0;i<kSlice.length;i++){
+        if(kSlice[i]==null||dSlice[i]==null) continue;
+        const hist = kSlice[i]-dSlice[i];
+        const x = i*candleW2+candleW2*0.15;
+        const yZero = yFor2(50);
+        const barH = hist*0.3*(cssH2/100);
+        sctx.fillStyle = hist>=0 ? 'rgba(38,166,154,0.5)' : 'rgba(239,83,80,0.5)';
+        sctx.fillRect(x, barH>=0?yZero-barH:yZero, candleW2*0.7, Math.abs(barH));
+      }
+
+      function drawStochLine(arr, otherArr){
+        sctx.lineWidth = 1.5;
+        let started = false;
+        for(let i=0;i<arr.length;i++){
+          const v = arr[i];
+          if(v==null || otherArr[i]==null){ started=false; continue; }
+          const color = v > otherArr[i] ? '#10b981' : '#ef4444';
+          const x = i*candleW2+candleW2/2, y = yFor2(v);
+          if(!started){ sctx.beginPath(); sctx.moveTo(x,y); started=true; }
+          else { sctx.lineTo(x,y); sctx.strokeStyle=color; sctx.stroke(); sctx.beginPath(); sctx.moveTo(x,y); }
+        }
+      }
+      drawStochLine(kSlice, dSlice);
+      drawStochLine(dSlice, kSlice);
+
+      for(let i=1;i<kSlice.length;i++){
+        if(kSlice[i]==null||dSlice[i]==null||kSlice[i-1]==null||dSlice[i-1]==null) continue;
+        const crossUp = kSlice[i-1]<=dSlice[i-1] && kSlice[i]>dSlice[i];
+        const crossDown = kSlice[i-1]>=dSlice[i-1] && kSlice[i]<dSlice[i];
+        if(crossUp || crossDown){
+          sctx.fillStyle = crossUp ? '#10b981' : '#ef4444';
+          sctx.beginPath(); sctx.arc(i*candleW2+candleW2/2, yFor2(kSlice[i]), 2.5, 0, Math.PI*2); sctx.fill();
+        }
+      }
+
+      const lastK = kSlice.at(-1), lastD = dSlice.at(-1);
+      if(lastK!=null && lastD!=null){
+        const trendColorNow = lastK>lastD ? '#10b981' : '#ef4444';
+        sctx.font='bold 11px Manrope'; sctx.textAlign='left';
+        sctx.fillStyle=trendColorNow; sctx.fillText(`%K ${lastK.toFixed(1)}`, 6, 14);
+        sctx.fillStyle=trendColorNow; sctx.fillText(`%D ${lastD.toFixed(1)}`, 70, 14);
+      }
     }
 
     redrawLiquidityOverlay();
+    redrawStochasticPanel();
     // Cada vez que el usuario hace zoom o mueve el gráfico, se vuelve a dibujar en la posición
     // correcta — así se comporta como un indicador de verdad, pegado al gráfico.
     liqChart.timeScale().subscribeVisibleTimeRangeChange(redrawLiquidityOverlay);
     window.addEventListener('resize', ()=>{
-      if(liqChart){ liqChart.applyOptions({ width: container.clientWidth }); redrawLiquidityOverlay(); }
+      if(liqChart){ liqChart.applyOptions({ width: container.clientWidth }); redrawLiquidityOverlay(); redrawStochasticPanel(); }
     });
   }catch(e){ status.textContent = 'No se pudo analizar: ' + e.message; }
 });
