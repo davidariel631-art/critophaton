@@ -333,7 +333,7 @@ function updateSharedMemory(state, displayName, recommendation){
 function argentinaHourNow(){ return (new Date().getUTCHours() - 3 + 24) % 24; }
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
-function computeDynamicRisk(acc, confidencePct, patternQuality, dir){
+function computeDynamicRisk(acc, confidencePct, patternQuality){
   acc.peakCapital = Math.max(acc.peakCapital, acc.capital);
   const drawdown = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
   const recent = acc.closedTrades.slice(-3);
@@ -344,18 +344,10 @@ function computeDynamicRisk(acc, confidencePct, patternQuality, dir){
   // Patrones "de manual" (BOS de estructura, Bear/Bull Trap confirmado) son entradas más limpias que una
   // confluencia genérica de indicadores — se les da un poco más de tamaño dentro del mismo rango permitido.
   if(patternQuality==='high' && risk < 0.015){ risk = Math.min(0.015, risk*1.2); reason += ' · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor'; }
-
-  // Riesgo correlacionado: varias posiciones abiertas en la MISMA dirección al mismo tiempo no son
-  // realmente 3-4 apuestas independientes — si el mercado se mueve fuerte para el otro lado (ej: BTC
-  // cae y arrastra todo), todas pierden juntas. En vez de darle a cada una el tamaño completo como si
-  // fueran independientes, se va reduciendo el tamaño a medida que se acumula exposición del mismo lado.
-  if(dir){
-    const mismaDireccion = (acc.theses||[]).filter(t=>t.status==='ACTIVE' && t.dir===dir).length;
-    if(mismaDireccion>=3){ risk = risk*0.5; reason += ` · riesgo correlacionado (ya hay ${mismaDireccion} posiciones ${dir} abiertas al mismo tiempo — se reduce a la mitad para no duplicar la misma apuesta)`; }
-    else if(mismaDireccion===2){ risk = risk*0.7; reason += ` · riesgo correlacionado (ya hay ${mismaDireccion} posiciones ${dir} abiertas — tamaño reducido)`; }
-  }
-
-  return { risk: Math.max(0.0025, Math.min(0.015, risk)), reason };
+  // Nota: se probó acá una reducción por "riesgo correlacionado" (varias posiciones abiertas en la
+  // misma dirección al mismo tiempo) — David decidió no usarla, se sacó. Si en el futuro se quiere
+  // retomar: reducía a 0.7x con 2 posiciones misma dirección, 0.5x con 3+.
+  return { risk: Math.max(0.005, Math.min(0.015, risk)), reason };
 }
 
 function journal(thesis, note){
@@ -633,8 +625,14 @@ async function confirmTheses(state, capitalFlow){
       // no es una regla fija para siempre, hay que vigilar si sigue aportando con el correr de los meses.
       const lastFunding = fundingTrendData?.values?.at(-1);
       const oiSubiendo = oiTrendData?.trend === 'RISING';
-      const longsAmontonados = lastFunding!=null && lastFunding > 0.03 && oiSubiendo;
-      const shortsAmontonados = lastFunding!=null && lastFunding < -0.02 && oiSubiendo;
+      // Umbrales recalibrados (antes: >0.03% / <-0.02%) — se comprobó con datos reales de octubre
+      // 2025 (93 registros, mes completo) que el funding NUNCA llegó a esos niveles ni una sola vez,
+      // ni siquiera durante el evento de liquidaciones más grande del año — el filtro estaba dormido
+      // todo el tiempo. Los nuevos umbrales salen de la distribución real de ese mes (percentil ~90
+      // del lado positivo, percentil ~95 del lado negativo), no de un número inventado — capturan
+      // el funding realmente extremo de hoy, no el de un mercado de 2021-2022 que ya no existe así.
+      const longsAmontonados = lastFunding!=null && lastFunding > 0.008 && oiSubiendo;
+      const shortsAmontonados = lastFunding!=null && lastFunding < -0.005 && oiSubiendo;
       const crowdingEnContra = (thesis.dir==='LONG' && longsAmontonados) || (thesis.dir==='SHORT' && shortsAmontonados);
       if(crowdingEnContra && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
         journal(thesis, `Todavía esperando confirmación: funding en ${lastFunding.toFixed(3)}% con Open Interest subiendo — ${thesis.dir==='LONG'?'longs':'shorts'} muy amontonados y apalancados, riesgo de que el mercado los purgue con una liquidación en cadena — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto.`);
