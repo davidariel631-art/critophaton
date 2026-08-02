@@ -601,6 +601,23 @@ function stochasticOscillator(candles, period=14, smoothK=3, smoothD=3){
 // Perfil de liquidez (mismo algoritmo que "Liquidity Pro Map [ChartPrime]", MPL 2.0, portado):
 // solo la parte matemática (dominancia + POC), sin dibujar nada — así el bot puede usar el mismo
 // cálculo que ya se ve en la pestaña Liquidez de la web, sin duplicar lógica.
+// Probabilidad Alcista/Bajista por Volumen (idea de David, basada en un script de Pine): compara
+// el volumen acumulado de velas verdes vs rojas en las últimas N velas — si el lado que sube trae
+// más volumen que el que baja, hay más probabilidad de continuación en esa dirección. Vive acá (no
+// solo en la web) para que el bot pueda usarlo como una señal más el día que haga falta, igual que
+// el perfil de liquidez de abajo.
+function computeVolumeProbability(candles, lookback=20){
+  if(!candles || candles.length<lookback) return null;
+  const recent = candles.slice(-lookback);
+  let volUp=0, volDown=0;
+  recent.forEach(c => { if(c.c>c.o) volUp+=c.v; else if(c.c<c.o) volDown+=c.v; });
+  const totalVol = volUp+volDown;
+  const probUp = totalVol>0 ? (volUp/totalVol)*100 : 50;
+  const window100 = candles.slice(-100);
+  const centerPrice = (Math.max(...window100.map(c=>c.h)) + Math.min(...window100.map(c=>c.l))) / 2;
+  return { probUp, probDown: 100-probUp, centerPrice };
+}
+
 function computeLiquidityProfile(candles, price, lookback=200){
   const recent = candles.slice(-Math.min(lookback, candles.length));
   const closes = candles.map(c=>c.c);
@@ -1760,7 +1777,7 @@ export {
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
-  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
+  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
