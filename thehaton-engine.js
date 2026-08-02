@@ -452,6 +452,10 @@ function confluenceScore15m(candles){
 
   const bullConfluence = [macdBull, stochBull, strongBullCandles>=2, volumeConfirms, adxStrong].filter(Boolean).length;
   const bearConfluence = [macdBear, stochBear, strongBearCandles>=2, volumeConfirms, adxStrong].filter(Boolean).length;
+  // Nota: se probó divergencia RSI acá (peso reducido, +0.5), con backtest real — dio EXACTAMENTE
+  // igual en los 3 períodos (nunca fue la diferencia entre confirmar o no una entrada). Se revirtió
+  // porque además es redundante con el Dios CVD, que ya detecta "el precio se mueve pero el volumen
+  // real no acompaña" de forma más directa (flujo de volumen, no un oscilador que lo aproxima).
 
   // ---- Entrada temprana de MACD (histograma "aclarándose") — arreglada con 2 filtros extra ----
   // La técnica original (Aspray, 1986): el histograma achicándose HACIA CERO anticipa el cruce real,
@@ -918,6 +922,60 @@ function detectLiquiditySweep(candles, lookback=30){
   return {sweptUp, sweptDown, strengthUp, strengthDown, compressed: rangePct < 0.018};
 }
 
+// Swing Failure Pattern (SFP): más riguroso que detectLiquiditySweep de arriba — ese mira "¿la vela
+// anterior nomás?", este mira si se barrió un nivel REAL (Equal High/Low, no cualquier mecha), con
+// volumen elevado de verdad (no solo una vela roja/verde), y si las velas siguientes ya muestran un
+// cambio de estructura a favor de la reversión (no solo "cerró adentro", sino "y después siguió").
+// Investigación: esto es el concepto SMC con mejor evidencia práctica (aunque de fuentes de traders,
+// no papers revisados por pares) para usar como GATILLO de entrada, no solo como filtro.
+function detectSFP(candles, eqHighs, eqLows, lookback=12){
+  const result = { bullish:false, bearish:false, bullishNote:null, bearishNote:null };
+  if(candles.length < lookback+25) return result;
+  const atrSeries = atr(candles, 14);
+  const atrVal = atrSeries?.at?.(-1);
+  if(!atrVal) return result;
+  const avgVolWindow = candles.slice(-(lookback+20), -lookback);
+  const avgVol = avgVolWindow.reduce((s,c)=>s+c.v,0) / Math.max(1,avgVolWindow.length);
+  const window = candles.slice(-lookback);
+
+  if(eqLows){
+    for(let i=0;i<window.length-1;i++){
+      const c = window[i];
+      const sweepDepth = eqLows - c.l; // cuánto se metió la mecha por debajo del nivel
+      const closedBackInside = c.c > eqLows;
+      const volOk = avgVol>0 && c.v >= avgVol*1.5;
+      if(sweepDepth >= atrVal*0.25 && closedBackInside && c.c > c.o && volOk){
+        // Confirmación: ¿las velas después ya vienen formando estructura alcista (siguen subiendo, no vuelven a caer bajo el nivel)?
+        const after = window.slice(i+1);
+        const siguioSubiendo = after.length>0 && after.every(a=>a.l > eqLows*0.997) && after.at(-1).c > c.c;
+        if(after.length===0 || siguioSubiendo){
+          result.bullish = true;
+          result.bullishNote = `Swing Failure Pattern alcista: mecha barrió Equal Lows (~$${fmt(eqLows)}) por ${((sweepDepth/atrVal)).toFixed(2)}x ATR, cerró adentro con volumen ${(c.v/avgVol).toFixed(1)}x el promedio, y la estructura siguió confirmando la reversión.`;
+          break;
+        }
+      }
+    }
+  }
+  if(eqHighs){
+    for(let i=0;i<window.length-1;i++){
+      const c = window[i];
+      const sweepDepth = c.h - eqHighs;
+      const closedBackInside = c.c < eqHighs;
+      const volOk = avgVol>0 && c.v >= avgVol*1.5;
+      if(sweepDepth >= atrVal*0.25 && closedBackInside && c.c < c.o && volOk){
+        const after = window.slice(i+1);
+        const siguioBajando = after.length>0 && after.every(a=>a.h < eqHighs*1.003) && after.at(-1).c < c.c;
+        if(after.length===0 || siguioBajando){
+          result.bearish = true;
+          result.bearishNote = `Swing Failure Pattern bajista: mecha barrió Equal Highs (~$${fmt(eqHighs)}) por ${((sweepDepth/atrVal)).toFixed(2)}x ATR, cerró adentro con volumen ${(c.v/avgVol).toFixed(1)}x el promedio, y la estructura siguió confirmando la reversión.`;
+          break;
+        }
+      }
+    }
+  }
+  return result;
+}
+
 function fibLevels(labeledPivots){
   const last = labeledPivots.slice(-2);
   if(last.length<2) return null;
@@ -1208,6 +1266,12 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const weights = macro
     ? {trend:0.21,momentum:0.16,deriv:0.13,structure:0.18,macro:0.22,market:0.10}
     : {trend:0.27,momentum:0.21,deriv:0.17,structure:0.23,macro:0,market:0.12};
+  // Nota: se probaron pesos adaptados por régimen (ADX) acá, con backtest real — empeoró el
+  // resultado en 2 de 3 períodos (2023-2025 y 2019 lateral), casi sin cambio en el otro (2022).
+  // Se revirtió a los pesos fijos, que ya están validados. Si en el futuro se quiere retomar la
+  // idea, hay que ajustar los multiplicadores/umbrales de ADX y volver a correr el backtest antes
+  // de subirlo — no alcanza con que la idea tenga buen respaldo teórico, tiene que dar mejor en la
+  // práctica también.
   let bullishness = trendSignal*weights.trend + momentumSignal*weights.momentum + derivSignal*weights.deriv + structureSignal*weights.structure + macroSignal*weights.macro + marketSignal*weights.market;
   const volumeQuality = volume/15;
   const volatQuality = volat>=10?1 : volat<=4?0.8 : 0.9;
@@ -1700,5 +1764,5 @@ export {
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
-  fmt, fmtPct
+  fmt, fmtPct, detectSFP
 };
