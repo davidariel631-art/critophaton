@@ -29,7 +29,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -333,7 +333,7 @@ function updateSharedMemory(state, displayName, recommendation){
 function argentinaHourNow(){ return (new Date().getUTCHours() - 3 + 24) % 24; }
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
-function computeDynamicRisk(acc, confidencePct, patternQuality){
+function computeDynamicRisk(acc, confidencePct, patternQuality, dir){
   acc.peakCapital = Math.max(acc.peakCapital, acc.capital);
   const drawdown = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
   const recent = acc.closedTrades.slice(-3);
@@ -344,7 +344,18 @@ function computeDynamicRisk(acc, confidencePct, patternQuality){
   // Patrones "de manual" (BOS de estructura, Bear/Bull Trap confirmado) son entradas más limpias que una
   // confluencia genérica de indicadores — se les da un poco más de tamaño dentro del mismo rango permitido.
   if(patternQuality==='high' && risk < 0.015){ risk = Math.min(0.015, risk*1.2); reason += ' · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor'; }
-  return { risk: Math.max(0.005, Math.min(0.015, risk)), reason };
+
+  // Riesgo correlacionado: varias posiciones abiertas en la MISMA dirección al mismo tiempo no son
+  // realmente 3-4 apuestas independientes — si el mercado se mueve fuerte para el otro lado (ej: BTC
+  // cae y arrastra todo), todas pierden juntas. En vez de darle a cada una el tamaño completo como si
+  // fueran independientes, se va reduciendo el tamaño a medida que se acumula exposición del mismo lado.
+  if(dir){
+    const mismaDireccion = (acc.theses||[]).filter(t=>t.status==='ACTIVE' && t.dir===dir).length;
+    if(mismaDireccion>=3){ risk = risk*0.5; reason += ` · riesgo correlacionado (ya hay ${mismaDireccion} posiciones ${dir} abiertas al mismo tiempo — se reduce a la mitad para no duplicar la misma apuesta)`; }
+    else if(mismaDireccion===2){ risk = risk*0.7; reason += ` · riesgo correlacionado (ya hay ${mismaDireccion} posiciones ${dir} abiertas — tamaño reducido)`; }
+  }
+
+  return { risk: Math.max(0.0025, Math.min(0.015, risk)), reason };
 }
 
 function journal(thesis, note){
@@ -498,6 +509,14 @@ async function confirmTheses(state, capitalFlow){
       // sola nunca: solo confirma si además no hay un sweep en contra reciente (misma lógica que el resto).
       const macdEarlyAFavor = (thesis.dir==='LONG' ? confluence.macdEarlyBull : confluence.macdEarlyBear) && !sweepEnContra;
 
+      // NUEVO camino de confirmación: Swing Failure Pattern (SFP) — más riguroso que el sweep básico
+      // de arriba. No es solo "hubo una mecha en contra", es "barrió un nivel real de liquidez (Equal
+      // High/Low), con volumen elevado de verdad, cerró adentro, Y la estructura después ya viene
+      // confirmando la reversión". Es el concepto SMC con mejor evidencia práctica encontrada en la
+      // investigación para usarlo como gatillo de entrada, no solo como filtro.
+      const sfp = detectSFP(data15.candles, result15.structure?.eqHighs, result15.structure?.eqLows);
+      const sfpConfirmacion = false; // desactivado: el backtest mostró que empeora el resultado (probado en 2023-2025 y 2022, ver bitácora) — la función detectSFP queda disponible en el motor por si en el futuro se ajustan los umbrales y se vuelve a probar
+
       // Patrón completo (más específico y confiable que un sweep suelto): Acumulación con varios
       // "test pumps" fallidos + Bear Trap recién ahora (o el espejo Distribución + Bull Trap para SHORT).
       const patronCompleto = thesis.dir==='LONG' ? result15.structure?.accBearTrap?.patternDetected : result15.structure?.distBullTrap?.patternDetected;
@@ -596,8 +615,29 @@ async function confirmTheses(state, capitalFlow){
       // Filtro macro suave (Fear & Greed): F&G<30 (no solo <25) ya se considera zona de miedo relevante para exigir más evidencia.
       const fng = await fetchFearGreedIndex().catch(()=>null);
       const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<30) || (thesis.dir==='SHORT' && fng>75));
-      if(macroAdverso && !bosAFavor && !bearTrapConfirmacion){
+      if(macroAdverso && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
         journal(thesis, `Todavía esperando confirmación (Fear&Greed en ${fng}, contexto adverso para ${thesis.dir} — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto).`);
+        stillWatching.push(thesis);
+        continue;
+      }
+
+      // Filtro de "crowding" (funding + Open Interest juntos) — el hueco que encontramos: ya
+      // traíamos este dato, pero solo se usaba para el texto del mensaje, nunca para decidir nada.
+      // Basado en el paper del BIS (Banco de Pagos Internacionales, WP 1087): un funding alto Y el
+      // Open Interest subiendo AL MISMO TIEMPO significa que hay longs (o shorts) muy apalancados y
+      // amontonados — ahí es donde el mercado suele "purgar" con una liquidación en cadena. Si vamos
+      // A FAVOR de esa masa (ej: LONG cuando ya está todo el mundo en largo), pedimos más evidencia,
+      // igual que con Fear&Greed. Si vamos EN CONTRA (ej: SHORT justo ahí), no se bloquea — el
+      // apretón jugaría a favor nuestro.
+      // Aviso honesto (de la investigación): esta ventaja se sabe que se "gasta" con el tiempo —
+      // no es una regla fija para siempre, hay que vigilar si sigue aportando con el correr de los meses.
+      const lastFunding = fundingTrendData?.values?.at(-1);
+      const oiSubiendo = oiTrendData?.trend === 'RISING';
+      const longsAmontonados = lastFunding!=null && lastFunding > 0.03 && oiSubiendo;
+      const shortsAmontonados = lastFunding!=null && lastFunding < -0.02 && oiSubiendo;
+      const crowdingEnContra = (thesis.dir==='LONG' && longsAmontonados) || (thesis.dir==='SHORT' && shortsAmontonados);
+      if(crowdingEnContra && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
+        journal(thesis, `Todavía esperando confirmación: funding en ${lastFunding.toFixed(3)}% con Open Interest subiendo — ${thesis.dir==='LONG'?'longs':'shorts'} muy amontonados y apalancados, riesgo de que el mercado los purgue con una liquidación en cadena — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto.`);
         stillWatching.push(thesis);
         continue;
       }
@@ -613,17 +653,17 @@ async function confirmTheses(state, capitalFlow){
         stillWatching.push(thesis);
         continue;
       }
-      if(fomc.isNear && fomc.hoursUntil<=0 && !bosAFavor && !bearTrapConfirmacion){
+      if(fomc.isNear && fomc.hoursUntil<=0 && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
         journal(thesis, `Todavía esperando confirmación (${fomc.kind} fue hace ${Math.abs(fomc.hoursUntil).toFixed(1)}hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente).`);
         stillWatching.push(thesis);
         continue;
       }
 
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor)){
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
         const patternQuality = (bosAFavor || bearTrapConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion) ? 'high' : 'normal';
-        const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence, patternQuality);
+        const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence, patternQuality, thesis.dir);
         const riskAmount = acc.capital * riskPct;
         const distance = Math.abs(entryPrice - setup.stop);
         if(distance<=0){ stillWatching.push(thesis); continue; }
@@ -681,7 +721,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.tp3 = setup.t3; thesis.units = units; thesis.originalUnits = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
-        const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
+        const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : sfpConfirmacion ? (thesis.dir==='LONG' ? sfp.bullishNote : sfp.bearishNote) : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
@@ -709,7 +749,7 @@ async function confirmTheses(state, capitalFlow){
             : (st.eqLows ? `liquidez vendedora esperando abajo (~$${st.eqLows.toFixed(6)}, ${st.eqLowsCount}x toques)` : null);
           if(liqTxt) puntos.push(`2️⃣ <b>Liquidez cercana:</b> ${liqTxt}.`);
         }
-        if(oiTrendData?.trend) puntos.push(`3️⃣ <b>Open Interest:</b> tendencia ${oiTrendData.trend} — ${oiTrendData.trend==='rising'?'entra capital nuevo apalancado':'se está desarmando apalancamiento'}.`);
+        if(oiTrendData?.trend) puntos.push(`3️⃣ <b>Open Interest:</b> tendencia ${oiTrendData.trend} — ${oiTrendData.trend==='RISING'?'entra capital nuevo apalancado':'se está desarmando apalancamiento'}.`);
         if(ratio) puntos.push(`4️⃣ <b>Posicionamiento (top traders):</b> ${ratio.ratio.toFixed(2)}:1 (${ratio.longPct.toFixed(0)}% long / ${ratio.shortPct.toFixed(0)}% short) — ${(ratio.ratio>1.3 && thesis.dir==='SHORT')?'mercado muy cargado de largos, vulnerable a una purga':(ratio.ratio<0.77 && thesis.dir==='LONG')?'mercado muy cargado de cortos, vulnerable a un short squeeze':'posicionamiento sin sesgo extremo'}.`);
         puntos.push(`5️⃣ <b>Mapa de liquidez (perfil de volumen):</b> Dom. Arriba ${liqProfile.domUpPct.toFixed(0)}% / Dom. Abajo ${liqProfile.domDownPct.toFixed(0)}%${liqProfile.pocAbove?` — mayor concentración arriba en ~$${liqProfile.pocAbove.price.toFixed(6)}`:''}${liqProfile.pocBelow?`, abajo en ~$${liqProfile.pocBelow.price.toFixed(6)}`:''}.`);
         if(spotFutFlow){
