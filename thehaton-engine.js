@@ -874,6 +874,24 @@ function detectOrderBlocks(candles, atrArr, lookback=60){
   return {bullishOB, bearishOB};
 }
 
+// Doble Techo / Doble Suelo (Mind Math Money): 2 toques cerca del mismo nivel, separados en el
+// tiempo. Probado con backtest real hoy: funciona bien A FAVOR de la tendencia dominante del
+// período (profit factor 1.4-1.7), y mal en contra (0.7-0.9) — por eso el motor lo usa como señal
+// de estructura nomás, y es el filtro de tendencia macro (EMA200) el que decide si pesa a favor o
+// se ignora, no esta función.
+function detectDoubleTopBottom(candles, tolerancia=0.015, lookback=40, minSeparacion=5){
+  if(candles.length<lookback+1) return {dobleTecho:false, dobleSuelo:false};
+  const window = candles.slice(-lookback-1, -1); // sin contar la última vela (todavía en formación)
+  const maxH = Math.max(...window.map(c=>c.h));
+  const minL = Math.min(...window.map(c=>c.l));
+  const toquesArriba = window.map((c,i)=>({i,ok:Math.abs(c.h-maxH)/maxH<tolerancia})).filter(x=>x.ok).map(x=>x.i);
+  const toquesAbajo = window.map((c,i)=>({i,ok:Math.abs(c.l-minL)/minL<tolerancia})).filter(x=>x.ok).map(x=>x.i);
+  const dobleTecho = toquesArriba.length>=2 && (toquesArriba.at(-1)-toquesArriba[0])>=minSeparacion;
+  const dobleSuelo = toquesAbajo.length>=2 && (toquesAbajo.at(-1)-toquesAbajo[0])>=minSeparacion;
+  return {dobleTecho, dobleSuelo, nivelTecho:maxH, nivelSuelo:minL};
+}
+
+
 function detectFVG(candles, lookback=60){
   const start = Math.max(2, candles.length-lookback);
   const gaps = [];
@@ -1089,6 +1107,7 @@ function computeStructure(candles, atrArr){
   const fib = fibLevels(pivots);
   const candlePattern = detectCandlePattern(candles);
   const liquiditySweep = detectLiquiditySweep(candles);
+  const doubleTopBottom = detectDoubleTopBottom(candles);
 
   let score=10, notes=[];
   const bias = events.trendStructure;
@@ -1155,7 +1174,7 @@ function computeStructure(candles, atrArr){
   }
 
   score = Math.max(0, Math.min(20, score));
-  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, resistanceTests, supportTests, accBearTrap, distBullTrap};
+  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, doubleTopBottom, resistanceTests, supportTests, accBearTrap, distBullTrap};
 }
 
 // ---------- Scoring ----------
@@ -1250,6 +1269,15 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
 
   // ---- Macro trend filter (4h EMA200): opera solo a favor de la tendencia mayor ----
   const macroSignal = macro? (macro.bias==='bull'?1:-1) : 0;
+  // Doble Techo/Suelo (Mind Math Money) — probado con backtest real: solo suma cuando va A FAVOR de
+  // la tendencia macro (EMA200). En contra de la tendencia, se ignora del todo (no resta, no suma) —
+  // el backtest mostró que en contra directamente no funciona, mejor no usarlo ahí que usarlo mal.
+  let dobleTechoSueloSignal = 0;
+  if(structure.doubleTopBottom && macro){
+    if(structure.doubleTopBottom.dobleTecho && macro.bias==='bear') dobleTechoSueloSignal = -0.4;
+    if(structure.doubleTopBottom.dobleSuelo && macro.bias==='bull') dobleTechoSueloSignal = 0.4;
+  }
+  structureSignal = Math.max(-1,Math.min(1, structureSignal + dobleTechoSueloSignal));
   const macroNote = macro ? `Tendencia macro (4h, EMA200): ${macro.bias==='bull'?'ALCISTA 🟢':'BAJISTA 🔴'} (precio ${macro.bias==='bull'?'por encima':'por debajo'} de EMA200 en 4h).` : 'Sin datos de tendencia macro (4h).';
 
   // ---- Contexto de Mercado (TOTAL2/TOTAL3, dominancia BTC, USD Strength proxy) ----
@@ -1779,7 +1807,7 @@ export {
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
-  detectOrderBlocks, detectFVG, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
+  detectOrderBlocks, detectFVG, detectDoubleTopBottom, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
   fmt, fmtPct, detectSFP
 };
