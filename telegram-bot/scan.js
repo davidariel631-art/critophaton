@@ -42,7 +42,7 @@ const MAX_TRADES_PER_DAY = 4;
 const KILL_SWITCH_DRAWDOWN = 0.30; // si el drawdown supera esto, se pausa la apertura de operaciones nuevas hasta revisión manual
 const WORK_HOUR_START = 4;
 const WORK_HOUR_END = 15;
-const RISK_PCT = 0.01;
+const RISK_PCT = 0.02; // subido de 1% a 2% — probado con backtest real: sube la ganancia proporcional, sube también el drawdown máximo (hasta 23% en los peores casos probados). David lo eligió sabiendo ese trade-off.
 
 // ---- Análisis de Wall Street (apertura/cierre) — solo informativo, NUNCA abre operaciones ----
 function isUSDST(date){
@@ -562,7 +562,21 @@ async function confirmTheses(state, capitalFlow){
       const trendFuerte = thesis.dir==='LONG'
         ? (priceNow>mt.lastE20 && mt.lastE20>mt.lastE50)
         : (priceNow<mt.lastE20 && mt.lastE20<mt.lastE50);
-      const pullbackConfirmacion = trendFuerte && (nearEMA20 || nearEMA50 || nearOB) && alineado && !sweepEnContra;
+      // Corrección probada con backtest real: antes entraba apenas tocaba la zona, sin esperar
+      // confirmación de que el rebote ya arrancó — eso estaba restando en 2023-2025. Ahora exige
+      // que el Estocástico cruce a favor (el gatillo exacto que enseña GRANMAGO) O que el MACD ya
+      // esté acelerando a favor (más rápido, para no llegar tarde en mercados veloces como 2022).
+      const kArrPull = stochasticOscillator(data15.candles).k;
+      const dArrPull = stochasticOscillator(data15.candles).d;
+      const kNowPull=kArrPull.at(-1), kPrevPull=kArrPull.at(-2), dNowPull=dArrPull.at(-1), dPrevPull=dArrPull.at(-2);
+      const estocCruceAFavor = kNowPull!=null && kPrevPull!=null && dNowPull!=null && dPrevPull!=null && (
+        thesis.dir==='LONG' ? (kPrevPull<=dPrevPull && kNowPull>dNowPull) : (kPrevPull>=dPrevPull && kNowPull<dNowPull)
+      );
+      const histMacdPull = macd(data15.candles.map(c=>c.c)).hist.filter(v=>v!=null);
+      const macdAFavorPull = histMacdPull.length>=3 && (
+        thesis.dir==='LONG' ? (histMacdPull.at(-1)>histMacdPull.at(-2)) : (histMacdPull.at(-1)<histMacdPull.at(-2))
+      );
+      const pullbackConfirmacion = trendFuerte && (nearEMA20 || nearEMA50 || nearOB) && alineado && !sweepEnContra && (estocCruceAFavor || macdAFavorPull);
 
       // "Imán de liquidez" multi-timeframe: si el marco MAYOR (1D) todavía tiene espacio (no está agotado
       // en la misma dirección) y el marco de confirmación está en un extremo local (pullback, no agotamiento
