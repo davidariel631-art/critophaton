@@ -1199,10 +1199,10 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const lastStochK = stochOsc.k.filter(v=>v!=null).at(-1);
 
   let trend=15, trendBias='neutral';
-  if(price>lastE20 && lastE20>lastE50 && lastE50>lastE200){ trend=30; trendBias='bull'; }
-  else if(price>lastE20 && lastE50<lastE200){ trend=21; trendBias='bull'; }
-  else if(price<lastE20 && lastE20<lastE50 && lastE50<lastE200){ trend=3; trendBias='bear'; }
-  else if(price<lastE20 && lastE50>lastE200){ trend=10; trendBias='bear'; }
+  if(price>lastE50 && lastE50>lastE200){ trend=30; trendBias='bull'; }
+  else if(price>lastE50 && lastE50<=lastE200){ trend=21; trendBias='bull'; }
+  else if(price<lastE50 && lastE50<lastE200){ trend=3; trendBias='bear'; }
+  else if(price<lastE50 && lastE50>=lastE200){ trend=10; trendBias='bear'; }
 
   // Momentum ahora basado en el Estocástico clásico (%K), no en RSI — el Estocástico reacciona más
   // rápido a cambios recientes de precio, que es lo que se pidió acá.
