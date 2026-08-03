@@ -259,6 +259,30 @@
 </style>
 </head>
 <body>
+  <!-- Splash de bienvenida: se muestra apenas abre, se desvanece solo -->
+  <div id="splashBienvenida" style="position:fixed;inset:0;z-index:99999;background:radial-gradient(ellipse at 50% 30%, #0d1420 0%, #05070a 55%, #020304 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.5s ease;">
+    <img src="icono-krax.png" alt="KRAX CAPITAL" style="width:110px;height:auto;margin-bottom:36px;filter:drop-shadow(0 0 20px rgba(255,255,255,0.08));">
+    <div style="display:flex;gap:9px;align-items:flex-end;height:34px;">
+      <div style="width:7px;height:16px;border-radius:2px;background:#ef4444;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0s;"></div>
+      <div style="width:7px;height:28px;border-radius:2px;background:#fff;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.15s;"></div>
+      <div style="width:7px;height:12px;border-radius:2px;background:#ef4444;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.3s;"></div>
+      <div style="width:7px;height:22px;border-radius:2px;background:#fff;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.45s;"></div>
+      <div style="width:7px;height:18px;border-radius:2px;background:#ef4444;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.6s;"></div>
+    </div>
+  </div>
+  <style>
+    @keyframes splashParpadeo{ 0%,100%{opacity:0.25;transform:scaleY(0.75);} 50%{opacity:1;transform:scaleY(1);} }
+  </style>
+  <script>
+    // Se saca solo después de 1.8s o apenas termine de cargar la página, lo que pase después
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        const s = document.getElementById('splashBienvenida');
+        if(s){ s.style.opacity='0'; setTimeout(()=>s.remove(), 500); }
+      }, 1800);
+    });
+  </script>
+
 <div class="wrap">
   <header>
     <div class="brand">
@@ -767,6 +791,14 @@
         <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">🏆 Rendimiento por Dios (memoria estadística)</h3>
         <div class="hint" style="margin-top:0;">Cuenta, de las veces que cada especialista votó en la misma dirección que terminó tomando la operación, cuántas ganaron. Solo cuenta a partir de las operaciones confirmadas con esta versión (las anteriores no tienen esta foto guardada).</div>
         <div id="thGodPerformance" class="subrow" style="margin-top:8px;">Sin datos suficientes todavía.</div>
+
+        <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">📊 Estadísticas desglosadas</h3>
+        <div class="indi-cols" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+          <div class="indi-col"><h3>Por tipo de setup</h3><div id="thStatsSetup" class="subrow">Sin datos todavía.</div></div>
+          <div class="indi-col"><h3>Por moneda</h3><div id="thStatsMoneda" class="subrow">Sin datos todavía.</div></div>
+          <div class="indi-col"><h3>Por horario (UTC)</h3><div id="thStatsHorario" class="subrow">Sin datos todavía.</div></div>
+        </div>
+
 
         <h3 style="font-family:var(--display);font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--sub);margin:18px 0 10px;">🧪 Modo Aprendizaje Pasivo: ¿el filtro de confirmación ayuda?</h3>
         <div class="hint" style="margin-top:0;">Compara el win rate real de las operaciones confirmadas contra el win rate simulado de las tesis que expiraron sin confirmar (si igual se hubiera entrado con el setup teórico de 4h).</div>
@@ -2735,6 +2767,20 @@ async function loadTheHaton(){
     const cls = g.winRate>=60?'up':g.winRate<40?'down':'';
     return `<div class="indi-line"><div class="il-k">${g.name}</div><div class="il-v ${cls}">${g.winRate}% (${g.agreedWins}G/${g.agreedLosses}P de ${g.agreedTotal})</div></div>`;
   }).join('') : 'Sin datos suficientes todavía (hacen falta operaciones cerradas con la versión nueva del bot).';
+
+  const statsDesglosadas = window.TheHatonEngine.computeStatsDesglosadas(trades);
+  function renderStatsGrupo(elId, grupo, formatearNombre){
+    const el = document.getElementById(elId);
+    if(!grupo.length){ el.innerHTML = 'Sin datos todavía.'; return; }
+    el.innerHTML = grupo.slice(0,8).map(g=>{
+      const cls = g.winRate>=60?'up':g.winRate<40?'down':'';
+      const nombre = formatearNombre ? formatearNombre(g.nombre) : g.nombre;
+      return `<div class="indi-line"><div class="il-k">${nombre}</div><div class="il-v ${cls}">${g.winRate}% (${g.ganadas}/${g.operaciones})</div></div>`;
+    }).join('');
+  }
+  renderStatsGrupo('thStatsSetup', statsDesglosadas.porTipoSetup);
+  renderStatsGrupo('thStatsMoneda', statsDesglosadas.porMoneda);
+  renderStatsGrupo('thStatsHorario', statsDesglosadas.porHorario, h => `${String(h).padStart(2,'0')}:00hs`);
 
   const filterEff = computeFilterEffectiveness(trades, acc.expiredTheses||[]);
   document.getElementById('thFilterEffectiveness').innerHTML = `

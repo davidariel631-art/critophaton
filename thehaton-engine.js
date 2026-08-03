@@ -1755,6 +1755,29 @@ function fmtPct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
 // Necesita que cada operación cerrada tenga guardado un `committeeSnapshot` (nombre+voto de cada
 // dios al momento de confirmar la entrada). Cuenta, de las veces que cada dios votó en la MISMA
 // dirección que terminó teniendo la operación, cuántas ganaron vs perdieron.
+// Estadísticas desglosadas: win rate por tipo de setup, por moneda, y por horario del día —
+// automatiza para los datos en vivo el mismo tipo de análisis que se hace a mano con backtests.
+function computeStatsDesglosadas(closedTrades){
+  function agrupar(campo){
+    const grupos = {};
+    for(const t of closedTrades){
+      const clave = t[campo] ?? 'Sin dato';
+      if(!grupos[clave]) grupos[clave] = {wins:0, total:0};
+      grupos[clave].total++;
+      if(t.result==='win') grupos[clave].wins++;
+    }
+    return Object.entries(grupos).map(([clave,v])=>({
+      nombre: clave, operaciones: v.total, ganadas: v.wins,
+      winRate: v.total>0 ? +(v.wins/v.total*100).toFixed(1) : 0
+    })).sort((a,b)=>b.operaciones-a.operaciones);
+  }
+  return {
+    porTipoSetup: agrupar('tipoSetup'),
+    porMoneda: agrupar('symbol'),
+    porHorario: agrupar('horaConfirmacion'),
+  };
+}
+
 function computeGodPerformance(closedTrades){
   const stats = {}; // { [godName]: {agreedWins, agreedLosses, agreedTotal} }
   for(const trade of (closedTrades||[])){
@@ -1799,7 +1822,7 @@ function computeFilterEffectiveness(closedTrades, expiredTheses){
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
-  computeGodPerformance, computeFilterEffectiveness,
+  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
