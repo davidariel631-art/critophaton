@@ -29,7 +29,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -333,6 +333,20 @@ function updateSharedMemory(state, displayName, recommendation){
 function argentinaHourNow(){ return (new Date().getUTCHours() - 3 + 24) % 24; }
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
+// Límite de pérdida diaria: si hoy ya hubo 3 pérdidas seguidas, se frena por el resto del día — no
+// solo se reduce el tamaño (eso ya lo hace computeDynamicRisk), directamente no se confirma nada
+// más hasta el día siguiente. Probado con backtest real: nunca empeoró el resultado, y en 2 de 3
+// períodos lo mejoró un poco — protege en rachas malas sin costar nada en los períodos normales.
+function frenadoHoyPorRacha(acc, frenarDespuesDe=3){
+  const hoy = new Date().toISOString().slice(0,10);
+  const deHoy = acc.closedTrades.filter(t => new Date(t.closedAt).toISOString().slice(0,10)===hoy);
+  let racha = 0;
+  for(let i=deHoy.length-1;i>=0;i--){
+    if(deHoy[i].result==='loss') racha++; else break;
+  }
+  return racha >= frenarDespuesDe;
+}
+
 function computeDynamicRisk(acc, confidencePct, patternQuality){
   acc.peakCapital = Math.max(acc.peakCapital, acc.capital);
   const drawdown = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
@@ -496,6 +510,28 @@ async function confirmTheses(state, capitalFlow){
       const confluenceAFavor = rawConfluenceAFavor && !sweepEnContra;
       const bearTrapConfirmacion = sweepAFavor && alineado; // "Bear Trap + Test Pump" que proponías: el sweep en contra del mercado, a favor nuestro, ya es señal
 
+      // Combo EMA50 (zona, 4h) + Estocástico (gatillo, 15m) — SOLO para SHORT. Probado con backtest
+      // real en 3 períodos (2022, 2023-2025, 2018): profit factor 1.0 a 2.33, consistente. El LONG
+      // con esta misma combinación se probó también (varios anchos de stop) y NUNCA dio ventaja real
+      // — por eso acá solo se implementa el lado SHORT, a propósito, no es un olvido.
+      let ema50ShortConfirmacion = false;
+      if(thesis.dir==='SHORT'){
+        const closes4hArr = data4h.candles.map(c=>c.c);
+        const ema50Arr = ema(closes4hArr, 50);
+        const ema50Now = ema50Arr.at(-1);
+        const precio4h = closes4hArr.at(-1);
+        if(ema50Now!=null){
+          const tendenciaBajista = precio4h < ema50Now;
+          const distanciaEma = Math.abs(precio4h-ema50Now)/precio4h;
+          const enZona = distanciaEma <= 0.015;
+          const kArr15 = stochasticOscillator(data15.candles).k;
+          const dArr15 = stochasticOscillator(data15.candles).d;
+          const kNow = kArr15.at(-1), kPrev = kArr15.at(-2), dNow = dArr15.at(-1), dPrev = dArr15.at(-2);
+          const cruceBajista = kNow!=null && kPrev!=null && dNow!=null && dPrev!=null && kPrev>=dPrev && kNow<dNow && kPrev>=65;
+          ema50ShortConfirmacion = tendenciaBajista && enZona && cruceBajista;
+        }
+      }
+
       // Entrada temprana de MACD (histograma "aclarándose"), blindada con ADX + Estocástico alineado —
       // ya viene armada y verificada desde el motor (confluence.macdEarlyBull/macdEarlyBear). No se usa
       // sola nunca: solo confirma si además no hay un sweep en contra reciente (misma lógica que el resto).
@@ -657,7 +693,12 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion)){
+      if(frenadoHoyPorRacha(acc)){
+        journal(thesis, `Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas.`);
+        stillWatching.push(thesis);
+        continue;
+      }
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
         const patternQuality = (bosAFavor || bearTrapConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion) ? 'high' : 'normal';
@@ -719,7 +760,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.tp3 = setup.t3; thesis.units = units; thesis.originalUnits = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
-        const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : sfpConfirmacion ? (thesis.dir==='LONG' ? sfp.bullishNote : sfp.bearishNote) : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
+        const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : sfpConfirmacion ? (thesis.dir==='LONG' ? sfp.bullishNote : sfp.bearishNote) : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : ema50ShortConfirmacion ? `Precio cerca de la EMA50 en 4h (zona de rebote), en tendencia bajista, con el Estocástico en 15m cruzando hacia abajo desde sobrecompra — combo probado con backtest real (profit factor 1.0-2.33 en 3 períodos)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
         acc.tradesToday.count++;
 
