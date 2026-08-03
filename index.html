@@ -259,27 +259,27 @@
 </style>
 </head>
 <body>
-  <!-- Splash de bienvenida: se muestra apenas abre, se desvanece solo -->
-  <div id="splashBienvenida" style="position:fixed;inset:0;z-index:99999;background:radial-gradient(ellipse at 50% 30%, #0d1420 0%, #05070a 55%, #020304 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity 0.5s ease;">
-    <img src="icons/icono-krax.png" alt="KRAX CAPITAL" style="width:110px;height:auto;margin-bottom:36px;filter:drop-shadow(0 0 20px rgba(255,255,255,0.08));">
-    <div style="display:flex;gap:9px;align-items:flex-end;height:34px;">
-      <div style="width:7px;height:16px;border-radius:2px;background:#ef4444;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0s;"></div>
-      <div style="width:7px;height:28px;border-radius:2px;background:#fff;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.15s;"></div>
-      <div style="width:7px;height:12px;border-radius:2px;background:#ef4444;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.3s;"></div>
-      <div style="width:7px;height:22px;border-radius:2px;background:#fff;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.45s;"></div>
-      <div style="width:7px;height:18px;border-radius:2px;background:#ef4444;animation:splashParpadeo 1.3s ease-in-out infinite;animation-delay:0.6s;"></div>
-    </div>
-  </div>
+  <!-- Splash de bienvenida: arranca con el MISMO color exacto que la pantalla del sistema (así la
+       transición es invisible), y solo se muestra en celular (no en PC). Se saca recién cuando la
+       app termina de cargar de verdad, no con un tiempo fijo. -->
   <style>
-    @keyframes splashParpadeo{ 0%,100%{opacity:0.25;transform:scaleY(0.75);} 50%{opacity:1;transform:scaleY(1);} }
+    #splashBienvenida{ position:fixed; inset:0; z-index:99999; background:#05070a; display:none; flex-direction:column; align-items:center; justify-content:center; transition:opacity 0.6s ease; }
+    @media (max-width: 820px){ #splashBienvenida{ display:flex; } }
+    #splashBienvenida img{ width:120px; height:auto; animation:splashRespirar 2.2s ease-in-out infinite; }
+    @keyframes splashRespirar{
+      0%,100%{ filter:drop-shadow(0 0 6px rgba(255,255,255,0.10)); transform:scale(1); }
+      50%{ filter:drop-shadow(0 0 26px rgba(41,182,246,0.35)); transform:scale(1.035); }
+    }
   </style>
+  <div id="splashBienvenida">
+    <img src="icons/icono-krax.png" alt="KRAX CAPITAL">
+  </div>
   <script>
-    // Se saca solo después de 1.8s o apenas termine de cargar la página, lo que pase después
+    // Se saca cuando la app REALMENTE terminó de cargar (window.load = todos los recursos listos),
+    // no con un tiempo inventado — así tarda lo que tenga que tardar, ni más ni menos.
     window.addEventListener('load', () => {
-      setTimeout(() => {
-        const s = document.getElementById('splashBienvenida');
-        if(s){ s.style.opacity='0'; setTimeout(()=>s.remove(), 500); }
-      }, 1800);
+      const s = document.getElementById('splashBienvenida');
+      if(s){ s.style.opacity='0'; setTimeout(()=>s.remove(), 600); }
     });
   </script>
 
