@@ -352,16 +352,19 @@ function computeDynamicRisk(acc, confidencePct, patternQuality){
   const drawdown = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
   const recent = acc.closedTrades.slice(-3);
   const recentLosses = recent.filter(t=>t.result==='loss').length;
-  let risk = RISK_PCT, reason = 'riesgo base (1%)';
-  if(drawdown>0.15 || recentLosses>=2){ risk=0.005; reason=`riesgo reducido a 0.5% (drawdown ${(drawdown*100).toFixed(0)}% o ${recentLosses} pérdidas seguidas)`; }
-  else if(confidencePct>=90 && recentLosses===0 && drawdown<0.05){ risk=0.015; reason=`riesgo aumentado a 1.5% (alta confianza, sin pérdidas recientes)`; }
+  // Todo proporcional a RISK_PCT (la base), no números fijos — así, si el día de mañana se cambia
+  // RISK_PCT de nuevo, este sistema entero se reajusta solo, en vez de quedar roto como pasó hoy
+  // (el bono de "alta confianza" terminaba siendo MENOR que la base nueva del 2%, sin querer).
+  let risk = RISK_PCT, reason = `riesgo base (${(RISK_PCT*100).toFixed(1)}%)`;
+  if(drawdown>0.15 || recentLosses>=2){ risk=RISK_PCT*0.5; reason=`riesgo reducido a ${(risk*100).toFixed(1)}% (drawdown ${(drawdown*100).toFixed(0)}% o ${recentLosses} pérdidas seguidas)`; }
+  else if(confidencePct>=90 && recentLosses===0 && drawdown<0.05){ risk=RISK_PCT*1.5; reason=`riesgo aumentado a ${(risk*100).toFixed(1)}% (alta confianza, sin pérdidas recientes)`; }
   // Patrones "de manual" (BOS de estructura, Bear/Bull Trap confirmado) son entradas más limpias que una
   // confluencia genérica de indicadores — se les da un poco más de tamaño dentro del mismo rango permitido.
-  if(patternQuality==='high' && risk < 0.015){ risk = Math.min(0.015, risk*1.2); reason += ' · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor'; }
+  if(patternQuality==='high' && risk < RISK_PCT*1.5){ risk = Math.min(RISK_PCT*1.5, risk*1.2); reason += ' · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor'; }
   // Nota: se probó acá una reducción por "riesgo correlacionado" (varias posiciones abiertas en la
   // misma dirección al mismo tiempo) — David decidió no usarla, se sacó. Si en el futuro se quiere
   // retomar: reducía a 0.7x con 2 posiciones misma dirección, 0.5x con 3+.
-  return { risk: Math.max(0.005, Math.min(0.015, risk)), reason };
+  return { risk: Math.max(RISK_PCT*0.5, Math.min(RISK_PCT*1.5, risk)), reason };
 }
 
 function journal(thesis, note){
@@ -773,6 +776,11 @@ async function confirmTheses(state, capitalFlow){
         thesis.status = 'ACTIVE';
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.tp3 = setup.t3; thesis.units = units; thesis.originalUnits = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
+        // Tipo de setup y hora del día, para poder desglosar estadísticas después (win rate por
+        // tipo de setup, por moneda, por horario) — se guarda acá y viaja solo a closedTrades
+        // porque los cierres usan {...thesis}.
+        thesis.tipoSetup = patronCompletoConfirmacion ? 'Patrón completo' : bosAFavor ? 'BOS' : sfpConfirmacion ? 'SFP' : bearTrapConfirmacion ? 'Bear/Bull Trap' : ema50ShortConfirmacion ? 'EMA50+Estocástico' : liquidityMagnetConfirmacion ? 'Imán de liquidez' : pullbackConfirmacion ? 'Pullback' : confluenceAFavor ? 'Confluencia' : macdEarlyAFavor ? 'MACD temprano' : 'Confianza subió';
+        thesis.horaConfirmacion = new Date(thesis.confirmedAt).getUTCHours();
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
         const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : sfpConfirmacion ? (thesis.dir==='LONG' ? sfp.bullishNote : sfp.bearishNote) : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : ema50ShortConfirmacion ? `Precio cerca de la EMA50 en 4h (zona de rebote), en tendencia bajista, con el Estocástico en 15m cruzando hacia abajo desde sobrecompra — combo probado con backtest real (profit factor 1.0-2.33 en 3 períodos)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
