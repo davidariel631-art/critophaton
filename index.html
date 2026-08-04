@@ -71,6 +71,10 @@
   .tf-btn.active{background:var(--amber);color:#12100a;}
   .addwatch{background:var(--panel2);border:1px solid var(--border);color:var(--sub);border-radius:8px;padding:9px 14px;cursor:pointer;font-size:12.5px;}
   .hint{color:var(--sub);font-size:12px;margin-top:8px;}
+  .info-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);color:var(--sub);font-size:12px;cursor:pointer;vertical-align:middle;margin-left:4px;}
+  .acc-tesis{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;background:var(--panel2);}
+  .acc-tesis summary::-webkit-details-marker{display:none;}
+  .acc-tesis[open] summary span:last-child{transform:rotate(180deg);display:inline-block;}
   #status{color:var(--sub);font-size:13px;margin:8px 2px 0;min-height:18px;}
   .watchlist{margin-top:18px;}
   .watch-table{width:100%;border-collapse:collapse;font-size:12.5px;}
@@ -274,6 +278,59 @@
   <div id="splashBienvenida">
     <img src="icons/icono-krax.png" alt="KRAX CAPITAL">
   </div>
+
+  <!-- Pantalla de bienvenida: solo se muestra la primera vez (se guarda en localStorage). "Crear
+       cuenta"/"Ya tengo cuenta" avisan que todavía no existe ese sistema (no hay backend de cuentas
+       hoy) — mejor decirlo claro que simular algo que no funciona. "Invitado" sí entra de verdad,
+       porque hoy la app entera ya funciona así, sin cuentas. -->
+  <style>
+    #pantallaBienvenida{ position:fixed; inset:0; z-index:9998; background:radial-gradient(ellipse at 50% 28%, #0f1826 0%, #000000 65%); display:none; flex-direction:column; align-items:center; justify-content:center; padding:0 32px; text-align:center; }
+    #pantallaBienvenida img{ width:130px; height:auto; margin-bottom:26px; }
+    #pantallaBienvenida .pb-nombre{ font-family:var(--display); font-size:24px; font-weight:800; letter-spacing:1.2px; margin-bottom:8px; color:var(--text); }
+    #pantallaBienvenida .pb-nombre span{ color:var(--amber); }
+    #pantallaBienvenida .pb-tagline{ font-size:12.5px; color:var(--sub); margin-bottom:44px; line-height:1.6; }
+    #pantallaBienvenida .pb-btn-primario{ width:100%; max-width:340px; background:linear-gradient(135deg,#00E5FF,#00A8CC); color:#000; font-weight:800; font-size:14px; padding:16px; border-radius:15px; border:none; margin-bottom:12px; font-family:var(--mono); }
+    #pantallaBienvenida .pb-btn-secundario{ width:100%; max-width:340px; background:var(--panel2); color:var(--text); font-weight:600; font-size:13px; padding:15px; border-radius:15px; border:1px solid var(--border); margin-bottom:18px; font-family:var(--mono); }
+    #pantallaBienvenida .pb-invitado{ color:var(--sub); font-size:12px; text-decoration:underline; cursor:pointer; }
+    #pantallaBienvenida .pb-aviso{ font-size:11px; color:var(--sub); margin-top:14px; min-height:14px; }
+  </style>
+  <div id="pantallaBienvenida">
+    <img src="icons/icono-krax.png" alt="KRAX CAPITAL">
+    <div class="pb-nombre">KRAX<span>·</span>CAPITAL</div>
+    <div class="pb-tagline">Análisis técnico y Smart Money,<br>con motor de trading automatizado</div>
+    <button class="pb-btn-primario" id="pbCrearCuenta">Crear cuenta</button>
+    <button class="pb-btn-secundario" id="pbYaTengo">Ya tengo cuenta</button>
+    <div class="pb-invitado" id="pbInvitado">Continuar como invitado</div>
+  </div>
+  <script>
+    (function(){
+      const pantalla = document.getElementById('pantallaBienvenida');
+      const yaVista = localStorage.getItem('krax_bienvenida_vista');
+      if(!yaVista){ pantalla.style.display = 'flex'; }
+
+      function ocultar(){
+        localStorage.setItem('krax_bienvenida_vista', '1');
+        pantalla.style.display = 'none';
+      }
+      // Si ya hay sesión real (Firebase), nunca mostrar la bienvenida — se oculta apenas se confirma.
+      window.addEventListener('fb-auth-changed', e=>{ if(e.detail.user) ocultar(); });
+
+      document.getElementById('pbInvitado').addEventListener('click', ocultar);
+      // "Crear cuenta" y "Ya tengo cuenta" usan el mismo sistema real de siempre (arriba a la
+      // derecha, el ícono de usuario) — acá solo lo abrimos directo, para no duplicar el login.
+      document.getElementById('pbCrearCuenta').addEventListener('click', ()=>{
+        ocultar();
+        document.getElementById('avatarDropdown').classList.add('open');
+        document.getElementById('authEmail')?.focus();
+      });
+      document.getElementById('pbYaTengo').addEventListener('click', ()=>{
+        ocultar();
+        document.getElementById('avatarDropdown').classList.add('open');
+        document.getElementById('authEmail')?.focus();
+      });
+    })();
+  </script>
+
   <script>
     // Se saca cuando la app REALMENTE terminó de cargar (window.load = todos los recursos listos),
     // no con un tiempo inventado — así tarda lo que tenga que tardar, ni más ni menos.
@@ -341,17 +398,9 @@
     <div class="t-item"><div class="t-k">Petróleo (USO)</div><div class="t-v" id="tOil">—</div></div>
   </div>
 
-  <div class="hint" style="margin-top:-10px;">*USD Strength es un proxy propio (EUR/GBP/JPY vs USD, datos del BCE vía Frankfurter.app) — no es el índice DXY real. S&P500/Nasdaq/Dow/Oro/Plata/Petróleo son sus ETFs más líquidos (SPY/QQQ/DIA/GLD/SLV/USO vía Twelve Data), no el índice o futuro puro — se actualizan cada 30 min.</div>
+  <div style="text-align:right;margin-top:-10px;margin-bottom:8px;"><span class="info-btn" data-info-titulo="Sobre estos datos" data-info-texto="USD Strength es un proxy propio (EUR/GBP/JPY vs USD, datos del BCE vía Frankfurter.app) — no es el índice DXY real. S&amp;P500/Nasdaq/Dow/Oro/Plata/Petróleo son sus ETFs más líquidos (SPY/QQQ/DIA/GLD/SLV/USO vía Twelve Data), no el índice o futuro puro — se actualizan cada 30 min.">ⓘ</span></div>
 
   <div class="subrow" id="greetingBanner" style="display:none;margin-bottom:14px;"></div>
-
-  <div class="card" style="margin-bottom:18px;">
-    <h2>🎯 Modo Cazador</h2>
-    <div class="hint" style="margin-top:0;margin-bottom:10px;">Escanea BTC, ETH, SOL, XRP, SUI, LINK, BNB, DOGE, ADA, AVAX, TON, DOT cada 5 minutos mientras esta pestaña esté abierta. Te avisa con una notificación si alguna saca score ≥8.5/10. No funciona con la pestaña cerrada.</div>
-    <button class="backtest-btn" id="huntToggleBtn">▶ Activar Modo Cazador</button>
-    <div class="subrow" id="huntStatus" style="margin-top:8px;">Desactivado.</div>
-    <div id="huntFound" style="margin-top:8px;"></div>
-  </div>
 
   <div class="tabnav" id="tabNav">
     <button class="tab-btn active" data-tab="analizar">Analizar</button>
@@ -374,6 +423,13 @@
 
   <div class="more-sheet" id="moreSheet">
     <div class="more-sheet-inner">
+      <div class="card" style="margin-bottom:14px; text-align:left;">
+        <h2>🎯 Modo Cazador</h2>
+        <div class="hint" style="margin-top:0;margin-bottom:10px;">Escanea BTC, ETH, SOL, XRP, SUI, LINK, BNB, DOGE, ADA, AVAX, TON, DOT cada 5 minutos mientras esta pestaña esté abierta. Te avisa con una notificación si alguna saca score ≥8.5/10. No funciona con la pestaña cerrada.</div>
+        <button class="backtest-btn" id="huntToggleBtn">▶ Activar Modo Cazador</button>
+        <div class="subrow" id="huntStatus" style="margin-top:8px;">Desactivado.</div>
+        <div id="huntFound" style="margin-top:8px;"></div>
+      </div>
       <button class="more-item" data-tab="wallet">Wallet</button>
       <button class="more-item" data-tab="dexnuevos">DEX Nuevos</button>
       <button class="more-item" data-tab="comparar">Comparar</button>
@@ -405,6 +461,18 @@
       <div style="text-align:center;font-size:38px;margin-bottom:4px;" id="notifResultIcon">✅</div>
       <div class="subrow" style="text-align:center;margin-bottom:6px;" id="notifResultText"></div>
       <button class="more-item" id="notifResultClose">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- Modal reusable de "info" — reemplaza los textos largos de aclaración que estaban siempre
+       a la vista. Un solo modal, el contenido cambia según qué ícono (i) se haya tocado. -->
+  <div class="more-sheet" id="infoModal">
+    <div class="more-sheet-inner">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="font-family:var(--display);font-size:15px;margin:0;" id="infoModalTitulo">Info</h3>
+        <span id="infoModalCerrar" style="color:var(--sub);font-size:20px;cursor:pointer;">✕</span>
+      </div>
+      <div class="subrow" id="infoModalTexto" style="line-height:1.6;"></div>
     </div>
   </div>
 
@@ -646,13 +714,7 @@
 
   <div class="tabpanel" id="panel-liquidez">
     <div class="card">
-      <h2>💧 Zonas de Liquidez (aproximación gratis)</h2>
-      <div class="hint" style="margin-top:0;">
-        ⚠️ <b>Esto NO es un heatmap de liquidaciones real</b> (ese dato es de CoinGlass y es pago, desde $29/mes).
-        Es una aproximación con datos 100% gratis: clusters de Equal Highs/Lows (donde el precio tocó
-        varias veces el mismo nivel), Order Blocks sin mitigar, y niveles psicológicos redondos —
-        zonas donde razonablemente puede haber liquidez esperando, sin ser el dato exacto de posiciones reales.
-      </div>
+      <h2>💧 Zonas de Liquidez <span class="info-btn" data-info-titulo="Sobre la liquidez" data-info-texto="Esto NO es un heatmap de liquidaciones real (ese dato es de CoinGlass y es pago, desde $29/mes). Es una aproximación con datos 100% gratis: clusters de Equal Highs/Lows (donde el precio tocó varias veces el mismo nivel), Order Blocks sin mitigar, y niveles psicológicos redondos — zonas donde razonablemente puede haber liquidez esperando, sin ser el dato exacto de posiciones reales.">ⓘ</span></h2>
       <div class="auth-row" style="margin-top:14px;">
         <input id="liqInput" type="text" placeholder="Símbolo (ej: BTC, SOL)" class="auth-input" style="flex:1;">
         <button class="backtest-btn" id="liqGoBtn">Buscar zonas</button>
@@ -1692,6 +1754,16 @@ document.getElementById('photoPreviewCancel').addEventListener('click', ()=>{
 })();
 
 // ================= TABS =================
+// Modo Cazador vive dentro de "Más" en el HTML (para no repetir el mismo bloque con los mismos IDs
+// dos veces), pero "Más" solo se puede abrir en modo app instalada (bottom-nav). Si se está viendo
+// desde el navegador normal (donde se usa el menú de arriba, tabnav), lo mudamos a un lugar visible
+// ahí mismo, para no dejarlo inaccesible en PC/navegador.
+if(!window.matchMedia('(display-mode: standalone)').matches){
+  const cazadorCard = document.querySelector('#moreSheet .card');
+  const tabNavEl = document.getElementById('tabNav');
+  if(cazadorCard && tabNavEl) tabNavEl.insertAdjacentElement('afterend', cazadorCard);
+}
+
 function switchTab(tabName){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
   document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
@@ -1735,6 +1807,20 @@ document.getElementById('moreSheet').addEventListener('click', e=>{
   if(e.target.id==='moreSheet' || e.target.id==='moreCloseBtn'){ document.getElementById('moreSheet').classList.remove('open'); return; }
   const item = e.target.closest('.more-item[data-tab]');
   if(item){ switchTab(item.dataset.tab); document.getElementById('moreSheet').classList.remove('open'); }
+});
+
+// Botones (i) de info — abren el modal compartido con el título/texto de ESE botón específico,
+// para no tener los textos largos de aclaración siempre a la vista en la pantalla principal.
+document.addEventListener('click', e=>{
+  const infoBtn = e.target.closest('.info-btn');
+  if(infoBtn){
+    document.getElementById('infoModalTitulo').textContent = infoBtn.dataset.infoTitulo || 'Info';
+    document.getElementById('infoModalTexto').innerHTML = infoBtn.dataset.infoTexto || '';
+    document.getElementById('infoModal').classList.add('open');
+  }
+});
+document.getElementById('infoModal').addEventListener('click', e=>{
+  if(e.target.id==='infoModal' || e.target.id==='infoModalCerrar') document.getElementById('infoModal').classList.remove('open');
 });
 
 // ================= TICKER (Fear&Greed + Dominance) =================
@@ -2789,15 +2875,33 @@ async function loadTheHaton(){
     <div class="subrow" style="margin-top:8px;">${filterEff.veredicto}</div>
   `;
 
+  function tiempoRelativo(ts){
+    const mins = Math.floor((Date.now()-ts)/60000);
+    if(mins<60) return `${mins}min`;
+    const horas = Math.floor(mins/60);
+    if(horas<24) return `${horas}h ${mins%60}min`;
+    return `${Math.floor(horas/24)}d`;
+  }
   function journalHtml(t){
     return (t.journal||[]).map(j=>`<div style="font-size:11px;color:var(--sub);padding:3px 0;">• ${new Date(j.ts).toLocaleString()} — ${j.note}</div>`).join('');
   }
 
-  document.getElementById('thWatching').innerHTML = watching.length ? watching.map(t=>`
-    <div class="hist-row" style="display:block;">
-      <div style="display:flex;justify-content:space-between;"><div>${t.symbol}${t.tag||''}</div><span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir} · observando</span></div>
+  document.getElementById('thWatching').innerHTML = watching.length ? watching.map(t=>{
+    const ultimoJournal = (t.journal||[])[t.journal.length-1];
+    const haceTiempo = ultimoJournal ? tiempoRelativo(ultimoJournal.ts) : '';
+    return `
+    <details class="acc-tesis">
+      <summary style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none;">
+        <div>${t.symbol}${t.tag||''}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir} · observando</span>
+          <span style="color:var(--sub);font-size:10px;">▾</span>
+        </div>
+      </summary>
+      <div style="font-size:10.5px;color:var(--sub);padding:4px 0 2px;">Esperando confirmación${haceTiempo?' · hace '+haceTiempo:''}</div>
       ${journalHtml(t)}
-    </div>`).join('') : 'Ninguna en este momento.';
+    </details>`;
+  }).join('') : 'Ninguna en este momento.';
 
   document.getElementById('thActive').innerHTML = active.length ? active.map(t=>`
     <div class="hist-row" style="display:block;">
