@@ -22,6 +22,7 @@ const TF_MAP = {
   '1h':  {binance:'1h',  okx:'1H',  bybit:'60', mexc:'60m', gate:'1h',  kucoin:'1hour', kucoinSec:3600, gecko:{timeframe:'hour',   aggregate:1}},
   '4h':  {binance:'4h',  okx:'4H',  bybit:'240', mexc:'4h', gate:'4h',  kucoin:'4hour', kucoinSec:14400, gecko:{timeframe:'hour',   aggregate:4}},
   '1d':  {binance:'1d',  okx:'1D',  bybit:'D',  mexc:'1d', gate:'1d',  kucoin:'1day',  kucoinSec:86400, gecko:{timeframe:'day',    aggregate:1}},
+  '1mo': {binance:'1M',  okx:'1M',  bybit:'M',  mexc:'1M', gate:'30d', kucoin:'1month', kucoinSec:2592000, gecko:{timeframe:'day',    aggregate:30}},
 };
 
 const CORS_PROXIES = [
@@ -72,7 +73,7 @@ async function tryBinance(symbolRaw, tf){
 
 // ---------- Market Context Matrix: OI + Precio + Funding, combinados (no aislados) ----------
 // Solo disponible para símbolos de Binance: es la única fuente gratis con historial de Open Interest.
-const OI_PERIOD_MAP = { '15m':'15m', '1h':'1h', '4h':'4h', '1d':'1d' };
+const OI_PERIOD_MAP = { '15m':'15m', '1h':'1h', '4h':'4h', '1d':'1d', '1mo':'1d' }; // Binance no tiene período nativo mensual para Open Interest — se usa 1d, el más grande disponible
 
 function classifyTrend(values, tolPct=2){
   if(!values || values.length<2) return null;
@@ -616,6 +617,21 @@ function computeVolumeProbability(candles, lookback=20){
   const window100 = candles.slice(-100);
   const centerPrice = (Math.max(...window100.map(c=>c.h)) + Math.min(...window100.map(c=>c.l))) / 2;
   return { probUp, probDown: 100-probUp, centerPrice };
+}
+
+// Detección de pico de volumen anómalo: solo describe lo que el número realmente dice (esta vela
+// tuvo X veces el volumen promedio de las anteriores) — sin interpretar "por qué" pasó, porque el
+// motivo real (ballenas, un exchange acumulando, alguien liquidando) no se puede saber con este dato solo.
+function detectVolumeSpike(candles, lookback=30, umbralMultiplo=5){
+  if(!candles || candles.length < lookback+1) return null;
+  const previas = candles.slice(-lookback-1, -1);
+  const actual = candles[candles.length-1];
+  const promedioPrevio = previas.reduce((s,c)=>s+c.v, 0) / previas.length;
+  if(promedioPrevio<=0) return null;
+  const multiplo = actual.v / promedioPrevio;
+  if(multiplo < umbralMultiplo) return null;
+  const movimientoPrecioPct = Math.abs(actual.c-actual.o)/actual.o*100;
+  return { multiplo, volumenActual: actual.v, promedioPrevio, movimientoPrecioPct, precioEstable: movimientoPrecioPct < 2 };
 }
 
 function computeLiquidityProfile(candles, price, lookback=200){
@@ -1828,7 +1844,7 @@ export {
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
-  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
+  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectDoubleTopBottom, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
