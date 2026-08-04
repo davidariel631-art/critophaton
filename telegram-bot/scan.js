@@ -776,13 +776,23 @@ async function confirmTheses(state, capitalFlow){
         const godPerf = computeGodPerformance(acc.closedTrades);
         const godsAFavor = (result15.committee||[]).filter(g=>g.vote===thesis.dir);
         const godsMaduros = godsAFavor.map(g=>godPerf.find(p=>p.name===g.name)).filter(p=>p && p.agreedTotal>=MIN_VOTOS_PARA_CONFIAR);
-        if(godsMaduros.length>0){
+        // Válvula de escape (12hs, más conservadora que la de F&G porque acá la protección se basa
+        // en evidencia real, no solo cautela): sin esto, si un Dios central (Tendencia, Macro) tiene
+        // mal historial, este filtro bloquea toda entrada nueva que dependa de él — y como nunca se
+        // generan operaciones nuevas, el historial nunca puede recalcularse ni mejorar. Es una trampa
+        // lógica cerrada sobre sí misma. Después de 12hs se libera UNA vez para permitir que la
+        // cuenta genere un dato fresco y el promedio pueda moverse de nuevo.
+        const escapeValvulaGods = horasEsperando >= 12;
+        if(godsMaduros.length>0 && !escapeValvulaGods){
           const avgWinRate = godsMaduros.reduce((s,g)=>s+g.winRate,0)/godsMaduros.length;
           if(avgWinRate < 30){
             journal(thesis, `Todavía esperando confirmación: los Dioses que votan a favor de esta entrada (${godsMaduros.map(g=>g.name).join(', ')}) tienen un historial real flojo (${avgWinRate.toFixed(0)}% de aciertos con ${godsMaduros.reduce((s,g)=>s+g.agreedTotal,0)} votos acumulados) — se pausa esta entrada hasta que mejore ese historial o aparezca otra confirmación más fuerte.`);
             stillWatching.push(thesis);
             continue;
           }
+        } else if(godsMaduros.length>0 && escapeValvulaGods){
+          const avgWinRate = godsMaduros.reduce((s,g)=>s+g.winRate,0)/godsMaduros.length;
+          if(avgWinRate < 30) journal(thesis, `Los Dioses a favor (${godsMaduros.map(g=>g.name).join(', ')}) siguen con historial flojo (${avgWinRate.toFixed(0)}%), pero ya lleva ${horasEsperando.toFixed(1)}hs esperando — se libera una vez para que la cuenta genere un dato fresco y el promedio pueda recalcularse.`);
         }
 
         thesis.status = 'ACTIVE';
