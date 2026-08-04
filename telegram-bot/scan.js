@@ -29,7 +29,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -431,16 +431,16 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
       // Mensaje de "en radar" — a propósito con formato bien distinto al de la SEÑAL confirmada
       // (más corto, sin la caja de "Configuración/Riesgo"), para que de un vistazo se note que
       // esto todavía NO es una entrada real, solo algo a seguir.
-      const razonesDeteccion = result.committee.filter(c=>c.vote===result.recommendation).slice(0,3).map(c=>`• ${c.name.replace(/^[^\s]+\s/,'')}`).join('\n');
+      const razonesDeteccion = result.committee.filter(c=>c.vote===result.recommendation).slice(0,3).map(c=>c.name.replace(/^[^\s]+\s/,'')).join(', ');
       const nivelClave = result.recommendation==='LONG' ? result.metrics.resistance : result.metrics.support;
       const nivelLabel = result.recommendation==='LONG' ? 'resistencia' : 'soporte';
       sendPromises.push(sendTelegram(
-        `🔭 <b>EN RADAR — $${symbol}${tag||''}</b> (posible ${result.recommendation==='LONG'?'COMPRA 🟢':'VENTA 🔴'}, todavía NO es entrada)\n\n` +
-        `<i>Por qué está en el radar:</i>\n${razonesDeteccion || '• Confluencia general del comité'}\n\n` +
-        `<i>Esperando:</i> ruptura de $${nivelClave?.toFixed(6)} (${nivelLabel} 4h) con BOS, o confluencia técnica, o un Bear/Bull Trap a favor.\n\n` +
-        `<i>Si confirma (estimado, puede cambiar):</i> Entrada ~$${result.metrics.price.toFixed(6)} · SL ~$${theoSetup.stop.toFixed(6)} · TP1 ~$${theoSetup.t1.toFixed(6)} · TP2 ~$${theoSetup.t2.toFixed(6)}\n\n` +
-        `Score ${best.toFixed(1)}/10 · ${result.confidence}% confianza\n` +
-        `<i>Avisamos aparte si se confirma de verdad.</i>`
+        `🔭 <b>$${symbol}${tag||''} — ojo con esto</b> (todavía NO es una entrada, solo algo que estamos siguiendo)\n\n` +
+        `Lo que llamó la atención acá fue ${razonesDeteccion || 'la confluencia general del comité'} — apuntando a un posible ${result.recommendation==='LONG'?'movimiento hacia arriba 🟢':'movimiento hacia abajo 🔴'}. ` +
+        `Ahora hay que esperar a que rompa $${nivelClave?.toFixed(6)} (${nivelLabel} en 4h) de forma clara, o que aparezca una confluencia técnica más fuerte, o un Bear/Bull Trap a favor — recién ahí se confirmaría de verdad.\n\n` +
+        `<i>Si eso pasa (estimado, puede cambiar):</i> entrada ~$${result.metrics.price.toFixed(6)} · stop ~$${theoSetup.stop.toFixed(6)} · TP1 ~$${theoSetup.t1.toFixed(6)} · TP2 ~$${theoSetup.t2.toFixed(6)}\n\n` +
+        `Score ${best.toFixed(1)}/10 · ${result.confidence}% de confianza\n` +
+        `<i>Te aviso aparte si esto termina confirmando.</i>`
       ));
     }catch(e){ console.error('Error escaneando', symbol, e.message); }
     await new Promise(res=>setTimeout(res, 300));
@@ -660,10 +660,22 @@ async function confirmTheses(state, capitalFlow){
       // Filtro macro suave (Fear & Greed): F&G<30 (no solo <25) ya se considera zona de miedo relevante para exigir más evidencia.
       const fng = await fetchFearGreedIndex().catch(()=>null);
       const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<30) || (thesis.dir==='SHORT' && fng>75));
-      if(macroAdverso && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
+      // Válvula de escape: si el Fear&Greed se queda extremo por mucho tiempo seguido (pasó en la
+      // práctica — 2 días seguidos sin que abriera ninguna operación, con decenas de tesis atascadas
+      // acá mismo hasta expirar a las 18hs sin nunca confirmar), este filtro puede bloquear TODO
+      // indefinidamente. Después de 8 horas atascada específicamente por este motivo, se libera y se
+      // deja confirmar con la confluencia normal — 8hs ya le dieron una chance real de mostrar un
+      // BOS o Bear/Bull Trap; seguir esperando después de eso es más probable que mate la tesis por
+      // expiración (a las 18hs) que protegerla de algo.
+      const horasEsperando = (Date.now()-thesis.detectedAt)/3600000;
+      const escapeValvulaTiempo = horasEsperando >= 8;
+      if(macroAdverso && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion && !escapeValvulaTiempo){
         journal(thesis, `Todavía esperando confirmación (Fear&Greed en ${fng}, contexto adverso para ${thesis.dir} — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto).`);
         stillWatching.push(thesis);
         continue;
+      }
+      if(macroAdverso && escapeValvulaTiempo && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
+        journal(thesis, `Fear&Greed sigue en ${fng} (adverso), pero ya lleva ${horasEsperando.toFixed(1)}hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad.`);
       }
 
       // Filtro de "crowding" (funding + Open Interest juntos) — el hueco que encontramos: ya
@@ -687,7 +699,7 @@ async function confirmTheses(state, capitalFlow){
       const longsAmontonados = lastFunding!=null && lastFunding > 0.008 && oiSubiendo;
       const shortsAmontonados = lastFunding!=null && lastFunding < -0.005 && oiSubiendo;
       const crowdingEnContra = (thesis.dir==='LONG' && longsAmontonados) || (thesis.dir==='SHORT' && shortsAmontonados);
-      if(crowdingEnContra && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
+      if(crowdingEnContra && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion && !escapeValvulaTiempo){
         journal(thesis, `Todavía esperando confirmación: funding en ${lastFunding.toFixed(3)}% con Open Interest subiendo — ${thesis.dir==='LONG'?'longs':'shorts'} muy amontonados y apalancados, riesgo de que el mercado los purgue con una liquidación en cadena — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto.`);
         stillWatching.push(thesis);
         continue;
@@ -704,7 +716,7 @@ async function confirmTheses(state, capitalFlow){
         stillWatching.push(thesis);
         continue;
       }
-      if(fomc.isNear && fomc.hoursUntil<=0 && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion){
+      if(fomc.isNear && fomc.hoursUntil<=0 && !bosAFavor && !bearTrapConfirmacion && !sfpConfirmacion && !escapeValvulaTiempo){
         journal(thesis, `Todavía esperando confirmación (${fomc.kind} fue hace ${Math.abs(fomc.hoursUntil).toFixed(1)}hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente).`);
         stillWatching.push(thesis);
         continue;
@@ -802,25 +814,63 @@ async function confirmTheses(state, capitalFlow){
         const st = result15.structure;
         const mt = result15.metrics;
 
-        const puntos = [];
-        puntos.push(`1️⃣ <b>Estructura y gráfico:</b> ${analystSummary(result15)}`);
-        if(st.eqHighs || st.eqLows){
-          const liqTxt = thesis.dir==='LONG'
-            ? (st.eqHighs ? `liquidez compradora esperando arriba (~$${st.eqHighs.toFixed(6)}, ${st.eqHighsCount}x toques)` : null)
-            : (st.eqLows ? `liquidez vendedora esperando abajo (~$${st.eqLows.toFixed(6)}, ${st.eqLowsCount}x toques)` : null);
-          if(liqTxt) puntos.push(`2️⃣ <b>Liquidez cercana:</b> ${liqTxt}.`);
+        // Mismo relato que armaba antes en una lista numerada (1️⃣2️⃣3️⃣...), ahora conectado como
+        // una historia — mismos datos, mismo respaldo real, pero contado como lo haría un analista
+        // explicando su lectura en voz alta, no como una lista de chequeo mecánica.
+        const dirTxt = thesis.dir==='LONG' ? 'para arriba' : 'para abajo';
+        const relato = [];
+        relato.push(analystSummary(result15));
+
+        // Pico de volumen real (no interpretado) — solo se menciona si el número mismo lo justifica
+        // (5x+ el promedio), describiendo el hecho tal cual es, sin inventar "por qué" pasó.
+        const volSpike = detectVolumeSpike(data15.candles);
+        if(volSpike){
+          relato.push(`📊 Ojo con esto: la última vela tuvo ${volSpike.multiplo.toFixed(1)}x el volumen promedio de las anteriores${volSpike.precioEstable ? ', mientras el precio se mantuvo bastante estable' : ''} — un volumen así de fuera de lo común suele preceder un movimiento más marcado, aunque no se puede saber con certeza para qué lado ni por qué exactamente pasó.`);
         }
-        if(oiTrendData?.trend) puntos.push(`3️⃣ <b>Open Interest:</b> tendencia ${oiTrendData.trend} — ${oiTrendData.trend==='RISING'?'entra capital nuevo apalancado':'se está desarmando apalancamiento'}.`);
-        if(ratio) puntos.push(`4️⃣ <b>Posicionamiento (top traders):</b> ${ratio.ratio.toFixed(2)}:1 (${ratio.longPct.toFixed(0)}% long / ${ratio.shortPct.toFixed(0)}% short) — ${(ratio.ratio>1.3 && thesis.dir==='SHORT')?'mercado muy cargado de largos, vulnerable a una purga':(ratio.ratio<0.77 && thesis.dir==='LONG')?'mercado muy cargado de cortos, vulnerable a un short squeeze':'posicionamiento sin sesgo extremo'}.`);
-        puntos.push(`5️⃣ <b>Mapa de liquidez (perfil de volumen):</b> Dom. Arriba ${liqProfile.domUpPct.toFixed(0)}% / Dom. Abajo ${liqProfile.domDownPct.toFixed(0)}%${liqProfile.pocAbove?` — mayor concentración arriba en ~$${liqProfile.pocAbove.price.toFixed(6)}`:''}${liqProfile.pocBelow?`, abajo en ~$${liqProfile.pocBelow.price.toFixed(6)}`:''}.`);
+
+        // Liquidez, con más detalle: los dos lados (no solo el de la dirección de la tesis), qué tan
+        // lejos está cada nivel del precio actual, y unido con el mapa de volumen (antes eran 2
+        // menciones sueltas y desconectadas).
+        const priceNow15 = result15.metrics.price;
+        const distPct = (nivel) => Math.abs(nivel-priceNow15)/priceNow15*100;
+        const liqPartes = [];
+        if(st.eqHighs){
+          const esObjetivo = thesis.dir==='LONG';
+          liqPartes.push(`arriba, a un ${distPct(st.eqHighs).toFixed(1)}% del precio actual (~$${st.eqHighs.toFixed(6)}), hay liquidez compradora acumulada — el precio ya tocó ese nivel ${st.eqHighsCount} veces sin romperlo del todo${esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como resistencia en el camino'}`);
+        }
+        if(st.eqLows){
+          const esObjetivo = thesis.dir==='SHORT';
+          liqPartes.push(`abajo, a un ${distPct(st.eqLows).toFixed(1)}% del precio actual (~$${st.eqLows.toFixed(6)}), hay liquidez vendedora acumulada (${st.eqLowsCount} toques previos)${esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como soporte en el camino'}`);
+        }
+        if(liqPartes.length){
+          relato.push(`En cuanto a liquidez: ${liqPartes.join('; y ')}. El mercado tiende a moverse hacia estas zonas antes de girar, porque ahí es donde se concentran los stops y las órdenes pendientes que el precio "atrae" como un imán.`);
+        }
+        relato.push(`Mirando el perfil de volumen completo, la concentración general está ${liqProfile.domUpPct>liqProfile.domDownPct?'más arriba':'más abajo'} del precio actual (${liqProfile.domUpPct.toFixed(0)}% arriba / ${liqProfile.domDownPct.toFixed(0)}% abajo)${liqProfile.pocAbove?`, con el bloque de mayor volumen negociado cerca de $${liqProfile.pocAbove.price.toFixed(6)}`:''}${liqProfile.pocBelow?`${liqProfile.pocAbove?' y otro bloque grande':', con un bloque grande'} cerca de $${liqProfile.pocBelow.price.toFixed(6)}`:''} — son zonas donde ya se negoció mucho volumen antes, así que el precio suele reaccionar (rebotar o frenarse) al volver a pasar por ahí.`);
+        if(oiTrendData?.trend){
+          relato.push(oiTrendData.trend==='RISING'
+            ? 'Mientras tanto, está entrando capital nuevo apalancado (el Open Interest viene subiendo) — hay convicción real detrás del movimiento, no es solo ruido'
+            : 'El Open Interest viene bajando, o sea que se está desarmando apalancamiento — el mercado se está \"limpiando\" antes de definir rumbo');
+        }
+        if(ratio){
+          const posTxt = (ratio.ratio>1.3 && thesis.dir==='SHORT')
+            ? `y el mercado está muy cargado de largos (${ratio.longPct.toFixed(0)}% long) — eso lo hace vulnerable a una purga justo en la dirección que buscamos`
+            : (ratio.ratio<0.77 && thesis.dir==='LONG')
+            ? `y el mercado está muy cargado de cortos (${ratio.shortPct.toFixed(0)}% short) — vulnerable a un short squeeze que empuje justo para donde apuntamos`
+            : `aunque el posicionamiento de los traders grandes no muestra un sesgo extremo (${ratio.ratio.toFixed(2)}:1)`;
+          relato.push(posTxt.charAt(0).toUpperCase()+posTxt.slice(1) + '.');
+        }
         if(spotFutFlow){
-          const flowTxt = spotFutFlow.leverageDriven
-            ? `futuros +${spotFutFlow.futChangePct.toFixed(0)}% vs spot ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% — el movimiento viene de apalancamiento, no de demanda/oferta real.`
-            : `spot ${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}% y futuros ${spotFutFlow.futChangePct>=0?'+':''}${spotFutFlow.futChangePct.toFixed(0)}% acompañando parejo — no hay señal clara de apalancamiento excesivo.`;
-          puntos.push(`6️⃣ <b>Flujo spot vs futuros:</b> ${flowTxt}`);
+          relato.push(spotFutFlow.leverageDriven
+            ? `Ojo con esto: el movimiento viene más de apalancamiento en futuros (+${spotFutFlow.futChangePct.toFixed(0)}%) que de compra/venta real en spot (${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}%) — no es demanda genuina todavía`
+            : `El spot (${spotFutFlow.spotChangePct>=0?'+':''}${spotFutFlow.spotChangePct.toFixed(0)}%) y los futuros (${spotFutFlow.futChangePct>=0?'+':''}${spotFutFlow.futChangePct.toFixed(0)}%) vienen acompañando parejo, sin señal de apalancamiento excesivo`);
         }
         const fomcCheck = getFOMCWindow(24);
-        if(fomcCheck.isNear) puntos.push(`7️⃣ <b>Contexto macro:</b> ${fomcCheck.hoursUntil>0?`anuncio de la Fed en ${fomcCheck.hoursUntil.toFixed(0)}hs`:`la Fed anunció hace ${Math.abs(fomcCheck.hoursUntil).toFixed(0)}hs`} — puede agregar volatilidad extra fuera de lo técnico.`);
+        if(fomcCheck.isNear){
+          relato.push(fomcCheck.hoursUntil>0
+            ? `Un detalle más para tener en cuenta: la Fed anuncia algo en ${fomcCheck.hoursUntil.toFixed(0)}hs, así que puede haber volatilidad extra fuera de lo puramente técnico`
+            : `La Fed anunció hace ${Math.abs(fomcCheck.hoursUntil).toFixed(0)}hs, así que todavía puede haber volatilidad extra asentándose`);
+        }
+        const relatoCompleto = relato.join(' ');
 
         // Gráfico con los niveles marcados, antes del mensaje de texto con el detalle completo.
         const chartUrl = await buildChartUrl(data15.candles, entryPrice, setup.stop, setup.t1, setup.t2, thesis.dir, thesis.symbol);
@@ -829,17 +879,20 @@ async function confirmTheses(state, capitalFlow){
         }
 
         sendPromises.push(sendTelegram(
-          `📈 <b>SEÑAL: $${thesis.symbol}${thesis.tag||''} ${thesis.dir==='LONG'?'COMPRA 🟢':'VENTA 🔴'}</b>\n\n` +
-          puntos.join('\n\n') + '\n\n' +
-          `🎯 <b>Conclusión: ${thesis.dir==='LONG'?'COMPRA':'VENTA'} — Confianza ${result15.confidence}/100</b>\n\n` +
-          `📌 Entrada: $${entryPrice.toFixed(6)}\n` +
-          `🛑 Stop Loss: $${setup.stop.toFixed(6)}\n` +
-          `🎯 TP1: $${setup.t1.toFixed(6)} (R:R ≈ ${rrTp1}:1)\n` +
-          `🎯 TP2: $${setup.t2.toFixed(6)} (R:R ≈ ${rrTp2}:1)\n` +
-          `🚀 TP Final: $${setup.t3.toFixed(6)} (R:R ≈ ${rrTp3}:1)\n\n` +
-          `🛠️ <b>Gestión del riesgo:</b> Apalancamiento máx. ${setup.leverage} (aislado, no cruzado), riesgo ${(riskPct*100).toFixed(1)}% del capital (${reason}), TheHaton toma 50% en TP1 y mueve el Stop a Break Even, resto corre a TP2/TP3.\n` +
-          `❌ Se invalida si: ${invalidacion}\n\n` +
-          `Capital de la cuenta: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})\n\n` +
+          `📈 <b>$${thesis.symbol}${thesis.tag||''} — parece que va ${dirTxt}</b>\n\n` +
+          relatoCompleto + '\n\n' +
+          `${thesis.dir==='LONG'?'🟢':'🔴'} <b>${thesis.dir==='LONG'?'COMPRA':'VENTA'} · ${result15.confidence}/100 de confianza</b>\n` +
+          `━━━━━━━━━━━━━━\n\n` +
+          `📊 <b>Configuración de la operación</b>\n` +
+          `📌 Entrada: <code>$${entryPrice.toFixed(6)}</code>\n` +
+          `🛑 Stop: <code>$${setup.stop.toFixed(6)}</code>\n` +
+          `🎯 TP1: <code>$${setup.t1.toFixed(6)}</code> (R:R ≈ ${rrTp1}:1)\n` +
+          `🎯 TP2: <code>$${setup.t2.toFixed(6)}</code> (R:R ≈ ${rrTp2}:1)\n` +
+          `🚀 TP Final: <code>$${setup.t3.toFixed(6)}</code> (R:R ≈ ${rrTp3}:1)\n\n` +
+          `🛠️ Apalancamiento máx. ${setup.leverage} (aislado), arriesgando ${(riskPct*100).toFixed(1)}% del capital (${reason}). Al tocar TP1 se toma el 50% y el stop pasa al punto de entrada — el resto corre hacia TP2/TP3.\n` +
+          `❌ Esto se cae si: ${invalidacion}\n\n` +
+          `━━━━━━━━━━━━━━\n` +
+          `💰 Capital de la cuenta: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})\n\n` +
           `⚠️ Solo con fines educativos. DYOR y gestioná tu riesgo. 🛡️`
         ));
         sendPromises.push(sendPushToAll(
