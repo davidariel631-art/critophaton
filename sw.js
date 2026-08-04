@@ -37,6 +37,10 @@ self.addEventListener('message', (event) => {
 });
 
 // ---- Notificaciones push de verdad (llegan aunque la app esté cerrada) ----
+// El sistema operativo controla el color/estilo visual de la notificación en sí (eso no se puede
+// tocar desde acá, es una limitación real de las notificaciones web) — pero sí se puede mejorar
+// todo lo que SÍ está bajo control: vibración, botón de acción directo, y que se agrupen bien
+// las notificaciones de una misma moneda en vez de amontonarse todas sueltas.
 self.addEventListener('push', (event) => {
   let data = { title: 'KRAX Capital', body: 'Tenés una novedad.' };
   try{ if(event.data) data = event.data.json(); }catch(e){}
@@ -45,6 +49,12 @@ self.addEventListener('push', (event) => {
       body: data.body || '',
       icon: 'icons/icon-192.png',
       badge: 'icons/icon-192.png',
+      image: data.image || undefined,
+      vibrate: [120, 60, 120],
+      tag: data.tag || 'krax-general',
+      renotify: true,
+      requireInteraction: !!data.important,
+      actions: [{ action: 'ver', title: '👁️ Ver' }],
       data: { url: data.url || './index.html' },
     })
   );
