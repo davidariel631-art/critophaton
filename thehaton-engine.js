@@ -336,10 +336,14 @@ async function fetchMacroTrend(query){
     const d = await fetchTokenData(query, '4h');
     if(!d.candles || d.candles.length < 60) return null;
     const closesArr = d.candles.map(c=>c.c);
-    const e200arr = ema(closesArr, Math.min(200, closesArr.length-1));
+    const periodoUsado = Math.min(200, closesArr.length-1);
+    const e200arr = ema(closesArr, periodoUsado);
     const e200 = e200arr.at(-1);
     const price = closesArr.at(-1);
-    return { bias: price>e200 ? 'bull':'bear', price, e200 };
+    // Si la moneda no tiene 200 velas de historia, este "e200" en realidad es una EMA más corta
+    // (a veces EMA60) — sigue siendo útil como referencia de tendencia, pero no es lo mismo que una
+    // EMA200 real, así que se marca para que quien lo use sepa que hay menos confianza acá.
+    return { bias: price>e200 ? 'bull':'bear', price, e200, confiable: periodoUsado>=200 };
   }catch(e){ return null; }
 }
 
@@ -1200,6 +1204,13 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const price = closes.at(-1);
   const e20=ema(closes,20), e50=ema(closes,50), e200=ema(closes,200);
   const lastE20=e20.at(-1), lastE50=e50.at(-1), lastE200=e200.at(-1);
+  // Con menos de 200 velas de historia, la EMA200 matemáticamente no tiene tiempo de converger —
+  // devuelve un número, pero ese número no representa una tendencia de largo plazo real (encontrado
+  // investigando por qué "Dios de Tendencia" y "Dios Macro" tenían solo 13% de acierto real en
+  // monedas chicas: son justo las que menos historia suelen tener). Con menos datos, se usa una
+  // referencia más corta (EMA100, o lo que haya) en vez de fingir una EMA200 que no es confiable.
+  const datosSuficientesPara200 = closes.length >= 200;
+  const lastE200Confiable = datosSuficientesPara200 ? lastE200 : ema(closes, Math.min(100, Math.max(20,closes.length-1))).at(-1);
   const rsiArr = rsi(closes,14);
   const lastRSI = rsiArr.filter(v=>v!=null).at(-1);
   const m = macd(closes);
@@ -1215,10 +1226,20 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   const lastStochK = stochOsc.k.filter(v=>v!=null).at(-1);
 
   let trend=15, trendBias='neutral';
-  if(price>lastE50 && lastE50>lastE200){ trend=30; trendBias='bull'; }
-  else if(price>lastE50 && lastE50<=lastE200){ trend=21; trendBias='bull'; }
-  else if(price<lastE50 && lastE50<lastE200){ trend=3; trendBias='bear'; }
-  else if(price<lastE50 && lastE50>=lastE200){ trend=10; trendBias='bear'; }
+  if(datosSuficientesPara200){
+    if(price>lastE50 && lastE50>lastE200Confiable){ trend=30; trendBias='bull'; }
+    else if(price>lastE50 && lastE50<=lastE200Confiable){ trend=21; trendBias='bull'; }
+    else if(price<lastE50 && lastE50<lastE200Confiable){ trend=3; trendBias='bear'; }
+    else if(price<lastE50 && lastE50>=lastE200Confiable){ trend=10; trendBias='bear'; }
+  } else {
+    // Sin historia suficiente para una EMA200 real: mismo criterio direccional, pero con el voto
+    // más cerca del centro (menos extremo) — refleja honestamente que hay menos confianza en la
+    // lectura de "tendencia de largo plazo" cuando la moneda es demasiado nueva para tenerla.
+    if(price>lastE50 && lastE50>lastE200Confiable){ trend=24; trendBias='bull'; }
+    else if(price>lastE50 && lastE50<=lastE200Confiable){ trend=19; trendBias='bull'; }
+    else if(price<lastE50 && lastE50<lastE200Confiable){ trend=9; trendBias='bear'; }
+    else if(price<lastE50 && lastE50>=lastE200Confiable){ trend=13; trendBias='bear'; }
+  }
 
   // Momentum ahora basado en el Estocástico clásico (%K), no en RSI — el Estocástico reacciona más
   // rápido a cambios recientes de precio, que es lo que se pidió acá.
@@ -1284,7 +1305,7 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   structureSignal = Math.max(-1,Math.min(1,structureSignal));
 
   // ---- Macro trend filter (4h EMA200): opera solo a favor de la tendencia mayor ----
-  const macroSignal = macro? (macro.bias==='bull'?1:-1) : 0;
+  const macroSignal = macro? (macro.bias==='bull'?1:-1) * (macro.confiable===false ? 0.7 : 1) : 0;
   // Doble Techo/Suelo (Mind Math Money) — probado con backtest real: solo suma cuando va A FAVOR de
   // la tendencia macro (EMA200). En contra de la tendencia, se ignora del todo (no resta, no suma) —
   // el backtest mostró que en contra directamente no funciona, mejor no usarlo ahí que usarlo mal.
