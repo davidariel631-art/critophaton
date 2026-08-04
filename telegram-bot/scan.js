@@ -158,15 +158,18 @@ async function runMarketPulse(state, capitalFlow){
     const contexto = type==='open' ? 'perspectiva de las próximas horas' : 'de cara al día de mañana';
 
     sendPromises.push(sendTelegram(
-      `${label} — Análisis de BTC/USDT (solo informativo, no abre operaciones)\n\n` +
-      `💰 $${price.toFixed(0)} | ${contexto}\n\n` +
+      `${label}\n` +
+      `<i>Análisis de BTC/USDT — solo informativo, no abre operaciones</i>\n\n` +
+      `💰 <code>$${price.toFixed(0)}</code> · ${contexto}\n\n` +
       `${parrafo}\n\n` +
-      `📊 Marcos: 1h ${results['1h'].recommendation} · 4h ${results['4h'].recommendation} · 1D ${results['1d'].recommendation} → ${lean}\n\n` +
-      `📍 Soporte 4h: $${(m4h.support||0).toFixed(0)} · Resistencia 4h: $${(m4h.resistance||0).toFixed(0)}\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `📊 <b>Marcos</b>: 1h ${results['1h'].recommendation} · 4h ${results['4h'].recommendation} · 1D ${results['1d'].recommendation} → ${lean}\n` +
+      `📍 Soporte 4h: <code>$${(m4h.support||0).toFixed(0)}</code> · Resistencia 4h: <code>$${(m4h.resistance||0).toFixed(0)}</code>\n` +
       `💧 Liquidez arriba: ${eqHighsTxt}\n` +
       `💧 Liquidez abajo: ${eqLowsTxt}\n` +
       `⚖️ Long/Short (top traders, 1h): ${ratioTxt}\n` +
-      `\n📈 Tesis: ${tesis}\n\n` +
+      `━━━━━━━━━━━━━━\n\n` +
+      `📈 <b>Tesis:</b> ${tesis}\n\n` +
       `⚠️ Esto es solo un pulso informativo del mercado, no una señal de entrada.`
     ));
     state.lastMarketPulse = { date: todayKey2, type };
@@ -435,11 +438,18 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
       const nivelClave = result.recommendation==='LONG' ? result.metrics.resistance : result.metrics.support;
       const nivelLabel = result.recommendation==='LONG' ? 'resistencia' : 'soporte';
       sendPromises.push(sendTelegram(
-        `🔭 <b>$${symbol}${tag||''} — ojo con esto</b> (todavía NO es una entrada, solo algo que estamos siguiendo)\n\n` +
+        `🔭 <b>$${symbol}${tag||''} — ojo con esto</b>\n` +
+        `<i>(todavía NO es una entrada, solo algo que estamos siguiendo)</i>\n\n` +
         `Lo que llamó la atención acá fue ${razonesDeteccion || 'la confluencia general del comité'} — apuntando a un posible ${result.recommendation==='LONG'?'movimiento hacia arriba 🟢':'movimiento hacia abajo 🔴'}. ` +
-        `Ahora hay que esperar a que rompa $${nivelClave?.toFixed(6)} (${nivelLabel} en 4h) de forma clara, o que aparezca una confluencia técnica más fuerte, o un Bear/Bull Trap a favor — recién ahí se confirmaría de verdad.\n\n` +
-        `<i>Si eso pasa (estimado, puede cambiar):</i> entrada ~$${result.metrics.price.toFixed(6)} · stop ~$${theoSetup.stop.toFixed(6)} · TP1 ~$${theoSetup.t1.toFixed(6)} · TP2 ~$${theoSetup.t2.toFixed(6)}\n\n` +
-        `Score ${best.toFixed(1)}/10 · ${result.confidence}% de confianza\n` +
+        `Ahora hay que esperar a que rompa <code>$${nivelClave?.toFixed(6)}</code> (${nivelLabel} en 4h) de forma clara, o que aparezca una confluencia técnica más fuerte, o un Bear/Bull Trap a favor — recién ahí se confirmaría de verdad.\n\n` +
+        `━━━━━━━━━━━━━━\n` +
+        `📐 <b>Si eso pasa</b> <i>(estimado, puede cambiar)</i>\n` +
+        `📌 Entrada: <code>$${result.metrics.price.toFixed(6)}</code>\n` +
+        `🛑 Stop: <code>$${theoSetup.stop.toFixed(6)}</code>\n` +
+        `🎯 TP1: <code>$${theoSetup.t1.toFixed(6)}</code>\n` +
+        `🎯 TP2: <code>$${theoSetup.t2.toFixed(6)}</code>\n` +
+        `━━━━━━━━━━━━━━\n\n` +
+        `📊 Score ${best.toFixed(1)}/10 · ${result.confidence}% de confianza\n` +
         `<i>Te aviso aparte si esto termina confirmando.</i>`
       ));
     }catch(e){ console.error('Error escaneando', symbol, e.message); }
