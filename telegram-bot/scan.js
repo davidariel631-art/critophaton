@@ -29,7 +29,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -667,6 +667,23 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
+      // Filtro de coherencia con el perfil de volumen (encontrado analizando la operación real de
+      // OPEN): el bot reportaba "87% del volumen está ABAJO" y abría un LONG igual. El perfil de
+      // volumen es un imán — si la concentración está mayormente del lado contrario a la operación,
+      // el precio tiende a ir hacia allá, no hacia donde apunta la tesis. Se exige que la dominancia
+      // no contradiga fuertemente la dirección (más de 70/30 en contra es contradicción seria).
+      const liqCoherencia = computeLiquidityProfile(data15.candles, result15.metrics.price, 200);
+      if(liqCoherencia){
+        const dominanciaEnContra = thesis.dir==='LONG'
+          ? liqCoherencia.domDownPct >= 70
+          : liqCoherencia.domUpPct >= 70;
+        if(dominanciaEnContra && !bosAFavor && !bearTrapConfirmacion){
+          journal(thesis, `Todavía esperando confirmación: el perfil de volumen contradice la dirección — ${thesis.dir==='LONG' ? liqCoherencia.domDownPct.toFixed(0)+'% del volumen está ABAJO del precio en una tesis LONG' : liqCoherencia.domUpPct.toFixed(0)+'% del volumen está ARRIBA del precio en una tesis SHORT'}. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura.`);
+          stillWatching.push(thesis);
+          continue;
+        }
+      }
+
       // Filtro macro suave (Fear & Greed): F&G<30 (no solo <25) ya se considera zona de miedo relevante para exigir más evidencia.
       const fng = await fetchFearGreedIndex().catch(()=>null);
       const macroAdverso = fng!=null && ((thesis.dir==='LONG' && fng<30) || (thesis.dir==='SHORT' && fng>75));
@@ -740,6 +757,31 @@ async function confirmTheses(state, capitalFlow){
       if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion)){
         const setup = buildSetup(data15, result15, 'balanced');
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
+
+        // VALIDACIÓN CRÍTICA (encontrada analizando una operación real de ZEST que perdió sí o sí):
+        // buildSetup calcula los niveles según la dirección que ve el análisis de 15m, pero la tesis
+        // tiene su dirección fijada desde el análisis de 4h. Si las dos no coinciden, los niveles
+        // salen INVERTIDOS — un LONG con el stop arriba y el TP abajo, condenado a perder pase lo
+        // que pase. Acá se chequea que cada nivel esté del lado correcto antes de abrir nada.
+        const nivelesCoherentes = thesis.dir==='LONG'
+          ? (setup.stop < entryPrice && setup.t1 > entryPrice && setup.t2 > setup.t1)
+          : (setup.stop > entryPrice && setup.t1 < entryPrice && setup.t2 < setup.t1);
+        if(!nivelesCoherentes){
+          journal(thesis, `Confirmación descartada: los niveles calculados no son coherentes con la dirección ${thesis.dir} (entrada $${entryPrice.toFixed(6)}, stop $${setup.stop.toFixed(6)}, TP1 $${setup.t1.toFixed(6)}). Probablemente el análisis de 15m cambió de dirección respecto a la tesis de 4h — se descarta en vez de abrir una operación con stop y objetivo invertidos.`);
+          stillWatching.push(thesis);
+          continue;
+        }
+
+        // Stop demasiado pegado al precio: si está a menos de 0.15% de la entrada, cualquier
+        // movimiento normal del mercado lo toca al instante (ZEST tenía el stop a 0.04% — imposible
+        // de sostener). Se exige una distancia mínima realista.
+        const distanciaStopPct = Math.abs(entryPrice-setup.stop)/entryPrice*100;
+        if(distanciaStopPct < 0.15){
+          journal(thesis, `Confirmación descartada: el stop quedó a solo ${distanciaStopPct.toFixed(3)}% del precio de entrada — demasiado pegado, cualquier movimiento normal lo tocaría al instante. Se sigue observando.`);
+          stillWatching.push(thesis);
+          continue;
+        }
+
         const patternQuality = (bosAFavor || bearTrapConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion) ? 'high' : 'normal';
         const {risk: riskPct, reason} = computeDynamicRisk(acc, result15.confidence, patternQuality, thesis.dir);
         const riskAmount = acc.capital * riskPct;
@@ -765,6 +807,32 @@ async function confirmTheses(state, capitalFlow){
           journal(thesis, `Todavía esperando confirmación: hay una concentración fuerte de liquidez muy cerca (~$${nearestPOC.price.toFixed(6)}, ${thesis.dir==='LONG'?'Dom. Arriba':'Dom. Abajo'} ${(thesis.dir==='LONG'?liqProfilePre.domUpPct:liqProfilePre.domDownPct).toFixed(0)}%) — parece más una caza de liquidez que una entrada real, se espera a que la barra o se aleje.`);
           stillWatching.push(thesis);
           continue;
+        }
+
+        // Ajuste de TP1 por barrera de liquidez (encontrado en la operación real de OPEN): el bot
+        // reportaba "hay liquidez a $0.195053, el precio ya la tocó 3 veces sin romperla" y ponía el
+        // TP1 en $0.198682, o sea DETRÁS de esa barrera. Para llegar al objetivo el precio tenía que
+        // atravesar el nivel que ya lo había rechazado 3 veces. Si hay una barrera confirmada (2+
+        // toques) entre la entrada y el TP1, el objetivo se mueve justo antes de ella.
+        const barrera = thesis.dir==='LONG' ? result15.structure?.eqHighs : result15.structure?.eqLows;
+        const toquesBarrera = thesis.dir==='LONG' ? (result15.structure?.eqHighsCount||0) : (result15.structure?.eqLowsCount||0);
+        if(barrera!=null && toquesBarrera >= 2){
+          const barreraEnElCamino = thesis.dir==='LONG'
+            ? (barrera > entryPrice && barrera < setup.t1)
+            : (barrera < entryPrice && barrera > setup.t1);
+          if(barreraEnElCamino){
+            const margen = thesis.dir==='LONG' ? 0.998 : 1.002; // apenas antes del nivel
+            const tp1Ajustado = barrera * margen;
+            const rrAjustado = Math.abs(tp1Ajustado-entryPrice)/distance;
+            if(rrAjustado >= 1.0){
+              journal(thesis, `TP1 ajustado de $${setup.t1.toFixed(6)} a $${tp1Ajustado.toFixed(6)}: hay una barrera de liquidez en $${barrera.toFixed(6)} (${toquesBarrera} toques previos sin romper) en el camino. Es más realista tomar ganancia antes de ese nivel que esperar que lo atraviese.`);
+              setup.t1 = tp1Ajustado;
+            } else {
+              journal(thesis, `Confirmación descartada: el TP1 quedaría detrás de una barrera de liquidez ($${barrera.toFixed(6)}, ${toquesBarrera} toques) y ajustarlo antes de esa barrera daría un R:R de solo ${rrAjustado.toFixed(2)}:1. No vale la pena la operación.`);
+              stillWatching.push(thesis);
+              continue;
+            }
+          }
         }
 
         // Filtro de CVD (flujo de compra/venta aproximado): si vamos a COMPRAR pero el CVD muestra
@@ -846,6 +914,19 @@ async function confirmTheses(state, capitalFlow){
         const volSpike = detectVolumeSpike(data15.candles);
         if(volSpike){
           relato.push(`📊 Ojo con esto: la última vela tuvo ${volSpike.multiplo.toFixed(1)}x el volumen promedio de las anteriores${volSpike.precioEstable ? ', mientras el precio se mantuvo bastante estable' : ''} — un volumen así de fuera de lo común suele preceder un movimiento más marcado, aunque no se puede saber con certeza para qué lado ni por qué exactamente pasó.`);
+        }
+
+        // Divergencia RSI+MACD y triángulo de compresión, calculados sobre las velas de 15m que sí
+        // están disponibles acá (en este punto del código no hay acceso al análisis de 4h).
+        const divergencia15 = detectDivergencia(data15.candles);
+        if(divergencia15){
+          const aFavor = (divergencia15.tipo==='alcista' && thesis.dir==='LONG') || (divergencia15.tipo==='bajista' && thesis.dir==='SHORT');
+          relato.push(`📐 Hay una divergencia ${divergencia15.tipo}: ${divergencia15.descripcion}${aFavor ? ' — y apunta a favor de esta operación' : ', que va en contra de esta operación, así que es algo a tener en cuenta'}.`);
+        }
+        const triangulo15 = detectTrianguloCompresion(data15.candles);
+        if(triangulo15){
+          const ruptura = analizarRupturaCompresion(data15.candles, triangulo15);
+          relato.push(`📊 Se está formando un ${triangulo15.descripcion}.${ruptura ? ` Mirando hacia dónde puede romper: ${ruptura.resumen}` : ''}`);
         }
 
         // Liquidez, con más detalle: los dos lados (no solo el de la dirección de la tesis), qué tan
