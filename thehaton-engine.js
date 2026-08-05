@@ -739,6 +739,69 @@ function detectDivergencia(candles, lookback=60){
 // Detecta triángulos de compresión: el precio se va apretando entre máximos que bajan y mínimos
 // que suben (o uno de los dos plano). Es una señal de que se acumula energía antes de una ruptura,
 // sin decir para qué lado va a romper — eso lo define el resto del análisis.
+// LIQUIDEZ CERCANA vs DE TEMPORALIDAD MAYOR.
+// La liquidez cercana (equal highs/lows recientes, swings locales, bordes de rango chico) es la
+// que el precio busca PRIMERO — provoca las reacciones de corto plazo. Una vez consumida, el
+// precio suele ir a buscar la liquidez de temporalidad mayor, que está más lejos y mueve más.
+// Distinguir entre las dos importa: apuntar a liquidez ya barrida es apuntar a nada.
+function detectLiquidezPorHorizonte(candles, lookbackCercano=40, lookbackLejano=200){
+  if(!candles || candles.length < 50) return null;
+  const precio = candles.at(-1).c;
+  const tol = 0.004; // 0,4% de tolerancia para considerar dos niveles "iguales"
+
+  function buscarNiveles(v){
+    const arriba = [], abajo = [];
+    const maximos = [], minimos = [];
+    for(let i=3; i<v.length-3; i++){
+      let esMax = true, esMin = true;
+      for(let j=i-3; j<=i+3; j++){
+        if(j===i) continue;
+        if(v[j].h > v[i].h) esMax = false;
+        if(v[j].l < v[i].l) esMin = false;
+      }
+      if(esMax) maximos.push({ precio: v[i].h, idx: i });
+      if(esMin) minimos.push({ precio: v[i].l, idx: i });
+    }
+    // Agrupo niveles parecidos: cuantas más veces se tocó, más liquidez acumulada hay ahí
+    function agrupar(lista){
+      const grupos = [];
+      for(const n of lista){
+        const g = grupos.find(x => Math.abs(x.precio - n.precio)/n.precio < tol);
+        if(g){ g.toques++; g.ultimoIdx = Math.max(g.ultimoIdx, n.idx); }
+        else grupos.push({ precio: n.precio, toques: 1, ultimoIdx: n.idx });
+      }
+      return grupos.filter(g => g.toques >= 2);
+    }
+    agrupar(maximos).forEach(g => { if(g.precio > precio) arriba.push(g); });
+    agrupar(minimos).forEach(g => { if(g.precio < precio) abajo.push(g); });
+    return { arriba, abajo };
+  }
+
+  const cercana = buscarNiveles(candles.slice(-lookbackCercano));
+  const lejana  = buscarNiveles(candles.slice(-Math.min(lookbackLejano, candles.length)));
+
+  // La liquidez cercana se considera CONSUMIDA si el precio ya la atravesó recientemente
+  const ultimas10 = candles.slice(-10);
+  const maxReciente = Math.max(...ultimas10.map(c=>c.h));
+  const minReciente = Math.min(...ultimas10.map(c=>c.l));
+
+  const masCercana = (arr, esArriba) => arr.length
+    ? arr.reduce((a,b) => Math.abs(b.precio-precio) < Math.abs(a.precio-precio) ? b : a)
+    : null;
+
+  const cercanaArriba = masCercana(cercana.arriba, true);
+  const cercanaAbajo  = masCercana(cercana.abajo, false);
+  const lejanaArriba  = masCercana(lejana.arriba.filter(g => !cercana.arriba.some(c => Math.abs(c.precio-g.precio)/g.precio < tol)), true);
+  const lejanaAbajo   = masCercana(lejana.abajo.filter(g => !cercana.abajo.some(c => Math.abs(c.precio-g.precio)/g.precio < tol)), false);
+
+  return {
+    cercanaArriba: cercanaArriba ? { ...cercanaArriba, consumida: maxReciente >= cercanaArriba.precio, distPct: (cercanaArriba.precio-precio)/precio*100 } : null,
+    cercanaAbajo:  cercanaAbajo  ? { ...cercanaAbajo,  consumida: minReciente <= cercanaAbajo.precio,  distPct: (precio-cercanaAbajo.precio)/precio*100 } : null,
+    lejanaArriba:  lejanaArriba  ? { ...lejanaArriba,  distPct: (lejanaArriba.precio-precio)/precio*100 } : null,
+    lejanaAbajo:   lejanaAbajo   ? { ...lejanaAbajo,   distPct: (precio-lejanaAbajo.precio)/precio*100 } : null,
+  };
+}
+
 // ZONAS DE OFERTA / DEMANDA (la "caja gris"): el rango de precios desde donde el mercado ya
 // reaccionó con fuerza antes. No es un nivel fino sino una ZONA — el precio suele volver a
 // reaccionar al entrar ahí. Se detectan por velas de rechazo fuerte (mecha larga contra el cuerpo)
@@ -1354,14 +1417,28 @@ function detectSFP(candles, eqHighs, eqLows, lookback=12){
 }
 
 function fibLevels(labeledPivots){
-  const last = labeledPivots.slice(-2);
-  if(last.length<2) return null;
-  const [a,b] = last;
-  const hi = Math.max(a.price,b.price), lo = Math.min(a.price,b.price);
-  const range = hi-lo;
-  const up = b.price>a.price;
+  if(!labeledPivots || labeledPivots.length < 2) return null;
+  // ANTES tomaba los ÚLTIMOS DOS pivotes sin más (slice(-2)), y eso ponía el Fibonacci sobre
+  // cualquier movimiento insignificante — por eso quedaba mal ubicado. Ahora se busca el swing
+  // REAL: el máximo más alto y el mínimo más bajo del tramo reciente, que es sobre lo que un
+  // analista traza el Fibonacci de verdad.
+  const recientes = labeledPivots.slice(-12);
+  let maxPiv = recientes[0], minPiv = recientes[0];
+  for(const p of recientes){
+    if(p.price > maxPiv.price) maxPiv = p;
+    if(p.price < minPiv.price) minPiv = p;
+  }
+  if(maxPiv === minPiv) return null;
+  const hi = maxPiv.price, lo = minPiv.price;
+  const range = hi - lo;
+  if(range <= 0) return null;
+  // La dirección la marca cuál de los dos extremos ocurrió DESPUÉS: si el máximo es más reciente
+  // que el mínimo, el swing fue alcista y los retrocesos se miden desde arriba.
+  const idxMax = recientes.indexOf(maxPiv), idxMin = recientes.indexOf(minPiv);
+  const up = idxMax > idxMin;
   return {
     dir: up?'bull':'bear',
+    swingHigh: hi, swingLow: lo,
     l236: up? hi-range*0.236 : lo+range*0.236,
     l382: up? hi-range*0.382 : lo+range*0.382,
     l500: up? hi-range*0.5   : lo+range*0.5,
@@ -1531,6 +1608,56 @@ function computeStructure(candles, atrArr){
   // Conectarlo al score bajó la ganancia de +196% a +88% en el backtest completo, empeorando en
   // los 4 períodos. Por eso la dominancia se sigue REPORTANDO en el mensaje (es información útil
   // para leer el contexto) pero NO decide la dirección de la tesis.
+
+  // ═══ ÍNDICE DE FUERZA CON PESO REAL EN EL SCORE ═══
+  // Es la misma medida que la línea naranja de la sección Liquidez: qué porcentaje del volumen
+  // reciente viene de velas alcistas vs bajistas. Pedido explícito de David para que pese de verdad.
+  const fuerzaVolumen = candles.length>=30 ? computeVolumeProbability(candles, 20) : null;
+  if(fuerzaVolumen){
+    const p = fuerzaVolumen.probUp;
+    // Escalón por intensidad: cuanto más desbalanceado el volumen, más pesa.
+    if(p >= 70){ score += 3; notes.push(`⚡ Fuerza compradora dominante: el ${p.toFixed(0)}% del volumen reciente viene de velas alcistas.`); }
+    else if(p >= 60){ score += 2; notes.push(`⚡ Fuerza compradora clara (${p.toFixed(0)}% del volumen).`); }
+    else if(p >= 55){ score += 1; notes.push(`⚡ Leve ventaja compradora (${p.toFixed(0)}% del volumen).`); }
+    else if(p <= 30){ score -= 3; notes.push(`⚡ Fuerza vendedora dominante: el ${(100-p).toFixed(0)}% del volumen reciente viene de velas bajistas.`); }
+    else if(p <= 40){ score -= 2; notes.push(`⚡ Fuerza vendedora clara (${(100-p).toFixed(0)}% del volumen).`); }
+    else if(p <= 45){ score -= 1; notes.push(`⚡ Leve ventaja vendedora (${(100-p).toFixed(0)}% del volumen).`); }
+  }
+
+  // ═══ LIQUIDEZ CERCANA vs LEJANA CON PESO REAL ═══
+  // El precio busca primero la liquidez cercana. Si está muy cerca de un lado y lejos del otro,
+  // ese desbalance inclina hacia dónde es más probable que vaya a buscarla primero.
+  const liqHorizonte = candles.length>=50 ? detectLiquidezPorHorizonte(candles) : null;
+  if(liqHorizonte){
+    const cArr = liqHorizonte.cercanaArriba, cAba = liqHorizonte.cercanaAbajo;
+    // Solo cuenta la liquidez que TODAVÍA NO fue consumida — apuntar a liquidez ya barrida no sirve.
+    const arribaViva = cArr && !cArr.consumida ? cArr : null;
+    const abajoViva  = cAba && !cAba.consumida ? cAba : null;
+
+    if(arribaViva && abajoViva){
+      // Las dos vivas: gana la que esté claramente más cerca
+      const ratio = abajoViva.distPct / (arribaViva.distPct || 0.01);
+      if(ratio > 2){ score += 2; notes.push(`💧 Liquidez cercana ARRIBA a ${arribaViva.distPct.toFixed(1)}% (${arribaViva.toques} toques), mucho más cerca que la de abajo (${abajoViva.distPct.toFixed(1)}%) — el precio suele ir a buscar la más próxima primero.`); }
+      else if(ratio < 0.5){ score -= 2; notes.push(`💧 Liquidez cercana ABAJO a ${abajoViva.distPct.toFixed(1)}% (${abajoViva.toques} toques), mucho más cerca que la de arriba (${arribaViva.distPct.toFixed(1)}%) — el precio suele ir a buscar la más próxima primero.`); }
+      else notes.push(`💧 Liquidez cercana pareja: arriba a ${arribaViva.distPct.toFixed(1)}%, abajo a ${abajoViva.distPct.toFixed(1)}%.`);
+    } else if(arribaViva){
+      score += 2;
+      notes.push(`💧 Solo hay liquidez cercana sin barrer ARRIBA, a ${arribaViva.distPct.toFixed(1)}% (${arribaViva.toques} toques). La de abajo ya fue consumida.`);
+    } else if(abajoViva){
+      score -= 2;
+      notes.push(`💧 Solo hay liquidez cercana sin barrer ABAJO, a ${abajoViva.distPct.toFixed(1)}% (${abajoViva.toques} toques). La de arriba ya fue consumida.`);
+    }
+
+    // La liquidez de temporalidad mayor se informa: es hacia donde va el precio DESPUÉS de barrer
+    // la cercana. Pesa menos porque está más lejos en el tiempo.
+    const lArr = liqHorizonte.lejanaArriba, lAba = liqHorizonte.lejanaAbajo;
+    if(lArr || lAba){
+      const partes = [];
+      if(lArr) partes.push(`arriba a ${lArr.distPct.toFixed(1)}% ($${fmt(lArr.precio)})`);
+      if(lAba) partes.push(`abajo a ${lAba.distPct.toFixed(1)}% ($${fmt(lAba.precio)})`);
+      notes.push(`🌊 Liquidez de mayor plazo: ${partes.join(' y ')} — es hacia donde tiende a ir el precio una vez que barre la cercana.`);
+    }
+  }
 
   // LIQUIDEZ + ESTOCÁSTICO EN EXTREMO (pedido de David, agosto 2026).
   // Aclaración honesta: la liquidez SOLA se midió y no predice (50,8% en 1.829 casos). Pero acá
@@ -2362,7 +2489,7 @@ export {
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, fetchUnlockRisk, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
-  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
+  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, detectLiquidezPorHorizonte, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectDoubleTopBottom, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
