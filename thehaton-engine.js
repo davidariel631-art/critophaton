@@ -739,6 +739,70 @@ function detectDivergencia(candles, lookback=60){
 // Detecta triángulos de compresión: el precio se va apretando entre máximos que bajan y mínimos
 // que suben (o uno de los dos plano). Es una señal de que se acumula energía antes de una ruptura,
 // sin decir para qué lado va a romper — eso lo define el resto del análisis.
+// ZONAS DE OFERTA / DEMANDA (la "caja gris"): el rango de precios desde donde el mercado ya
+// reaccionó con fuerza antes. No es un nivel fino sino una ZONA — el precio suele volver a
+// reaccionar al entrar ahí. Se detectan por velas de rechazo fuerte (mecha larga contra el cuerpo)
+// seguidas de un movimiento decidido en la dirección contraria.
+function detectZonasOfertaDemanda(candles, lookback=100, maxZonas=2){
+  if(!candles || candles.length < 30) return { oferta: [], demanda: [] };
+  const v = candles.slice(-Math.min(lookback, candles.length));
+  const precioActual = candles.at(-1).c;
+  const oferta = [], demanda = [];
+
+  for(let i = 3; i < v.length - 3; i++){
+    const c = v[i];
+    const cuerpo = Math.abs(c.c - c.o);
+    const rango = c.h - c.l;
+    if(rango <= 0) continue;
+    const mechaArriba = c.h - Math.max(c.o, c.c);
+    const mechaAbajo = Math.min(c.o, c.c) - c.l;
+
+    // OFERTA: subió hasta acá, fue rechazado con fuerza y cayó. Zona = mecha de rechazo.
+    if(mechaArriba > cuerpo*1.2 && mechaArriba/rango > 0.35 && v[i+1].c < c.l && v[i+2].c < c.l){
+      const piso = Math.max(c.o, c.c);
+      if(piso > precioActual) oferta.push({ techo: c.h, piso, fuerza: mechaArriba/rango });
+    }
+    // DEMANDA: bajó hasta acá, fue comprado con fuerza y subió.
+    if(mechaAbajo > cuerpo*1.2 && mechaAbajo/rango > 0.35 && v[i+1].c > c.h && v[i+2].c > c.h){
+      const techo = Math.min(c.o, c.c);
+      if(techo < precioActual) demanda.push({ techo, piso: c.l, fuerza: mechaAbajo/rango });
+    }
+  }
+  const cercanas = (arr, ref) => arr
+    .sort((a,b) => Math.abs(a[ref]-precioActual) - Math.abs(b[ref]-precioActual))
+    .slice(0, maxZonas);
+  return { oferta: cercanas(oferta,'piso'), demanda: cercanas(demanda,'techo') };
+}
+
+// Máximos y mínimos estructurales. El MÁS IMPORTANTE no es el último sino el más extremo: ahí es
+// donde hay más stops acumulados, y si el precio lo barre y revierte, esa operación pesa más que
+// una ruptura cualquiera.
+function detectNivelesEstructurales(candles, lookback=120){
+  if(!candles || candles.length < 30) return { maximos: [], minimos: [], maxImportante: null, minImportante: null };
+  const v = candles.slice(-Math.min(lookback, candles.length));
+  const pivotes = (arr, tipo, ventana=5) => {
+    const out = [];
+    for(let i=ventana; i<arr.length-ventana; i++){
+      let ok = true;
+      for(let j=i-ventana; j<=i+ventana; j++){
+        if(j===i) continue;
+        if(tipo==='max' && arr[j] > arr[i]){ ok=false; break; }
+        if(tipo==='min' && arr[j] < arr[i]){ ok=false; break; }
+      }
+      if(ok) out.push({ valor: arr[i], idx: i });
+    }
+    return out;
+  };
+  const maximos = pivotes(v.map(c=>c.h), 'max');
+  const minimos = pivotes(v.map(c=>c.l), 'min');
+  return {
+    maximos: maximos.slice(-4),
+    minimos: minimos.slice(-4),
+    maxImportante: maximos.length ? maximos.reduce((a,b)=> b.valor>a.valor?b:a) : null,
+    minImportante: minimos.length ? minimos.reduce((a,b)=> b.valor<a.valor?b:a) : null,
+  };
+}
+
 function detectTrianguloCompresion(candles, lookback=50){
   if(!candles || candles.length < lookback) return null;
   const ventana = candles.slice(-lookback);
@@ -1457,6 +1521,60 @@ function computeStructure(candles, atrArr){
     else { score-=1; notes.push('Rango comprimido (baja volatilidad reciente): posible antesala de una ruptura, dirección todavía sin definir.'); }
   }
 
+  // NOTA SOBRE EL IMÁN DE LIQUIDEZ (probado y descartado, agosto 2026):
+  // Se probó conectar la dominancia del perfil de volumen al score, con la lógica de que el precio
+  // va a buscar la liquidez acumulada. Suena razonable y es lo que dice la teoría de Smart Money,
+  // pero MEDIDO en 1.829 casos reales de BTC no se sostiene:
+  //   - Liquidez concentrada ARRIBA -> el precio subió el 51,6% de las veces
+  //   - Liquidez concentrada ABAJO  -> el precio bajó el 50,2% de las veces
+  //   - Global: 50,8%, o sea azar puro.
+  // Conectarlo al score bajó la ganancia de +196% a +88% en el backtest completo, empeorando en
+  // los 4 períodos. Por eso la dominancia se sigue REPORTANDO en el mensaje (es información útil
+  // para leer el contexto) pero NO decide la dirección de la tesis.
+
+  // LIQUIDEZ + ESTOCÁSTICO EN EXTREMO (pedido de David, agosto 2026).
+  // Aclaración honesta: la liquidez SOLA se midió y no predice (50,8% en 1.829 casos). Pero acá
+  // no va sola — va combinada con que el Estocástico esté en un extremo Y dando la vuelta, que es
+  // como la usa David: "si hay más liquidez abajo y el Estocástico está sobrecomprado dando vuelta,
+  // eso es un short con fundamento". La combinación es distinta de cada señal por separado.
+  const liqDireccional = candles.length>=50 ? computeLiquidityProfile(candles, candles.at(-1).c, 150) : null;
+  if(liqDireccional){
+    const stochArr = stochasticOscillator(candles);
+    const kNow = stochArr.k.at(-1), kPrev = stochArr.k.at(-2);
+    const dNow = stochArr.d.at(-1), dPrev = stochArr.d.at(-2);
+    const diff = liqDireccional.domUpPct - liqDireccional.domDownPct;
+
+    if(kNow!=null && kPrev!=null && dNow!=null && dPrev!=null){
+      // SHORT con fundamento: liquidez abajo + Estocástico sobrecomprado girando a la baja
+      const liquidezAbajo = diff <= -15;
+      const estocGirandoAbajo = kPrev >= 70 && kPrev >= dPrev && kNow < dNow;
+      if(liquidezAbajo && estocGirandoAbajo){
+        score -= 3;
+        notes.push(`🎯 SHORT con fundamento: el ${liqDireccional.domDownPct.toFixed(0)}% de la liquidez está ABAJO (objetivo del movimiento) y el Estocástico viene de sobrecompra (${kPrev.toFixed(0)}) cruzando a la baja — el precio tiene hacia dónde caer y el momentum acaba de darse vuelta.`);
+      }
+      // LONG con fundamento: liquidez arriba + Estocástico sobrevendido girando al alza
+      const liquidezArriba = diff >= 15;
+      const estocGirandoArriba = kPrev <= 30 && kPrev <= dPrev && kNow > dNow;
+      if(liquidezArriba && estocGirandoArriba){
+        score += 3;
+        notes.push(`🎯 LONG con fundamento: el ${liqDireccional.domUpPct.toFixed(0)}% de la liquidez está ARRIBA (objetivo del movimiento) y el Estocástico viene de sobreventa (${kPrev.toFixed(0)}) cruzando al alza — el precio tiene hacia dónde subir y el momentum acaba de darse vuelta.`);
+      }
+    }
+
+    // ÍNDICE DE FUERZA / línea del medio del perfil: el POC es el nivel donde más se negoció, o sea
+    // donde el precio históricamente rebota o se frena más seguido. Se reporta siempre para que se
+    // vea en el mensaje, y se penaliza levemente abrir justo contra él (comprar debajo de un POC
+    // que actúa como techo, o vender encima de uno que actúa como piso).
+    if(liqDireccional.poc){
+      const distPocPct = (liqDireccional.poc - candles.at(-1).c)/candles.at(-1).c*100;
+      if(Math.abs(distPocPct) < 1.5){
+        notes.push(`⚖️ El precio está pegado al POC ($${fmt(liqDireccional.poc)}), el nivel de mayor volumen negociado — es donde el precio más suele frenarse o rebotar. Conviene esperar a ver de qué lado sale.`);
+      } else {
+        notes.push(`⚖️ POC (mayor volumen) en $${fmt(liqDireccional.poc)}, a un ${Math.abs(distPocPct).toFixed(1)}% ${distPocPct>0?'por encima':'por debajo'}. Área de valor: $${fmt(liqDireccional.val)} – $${fmt(liqDireccional.vah)} (${liqDireccional.posicionRelativa}).`);
+      }
+    }
+  }
+
   // Predicción de ruptura de compresión — conectada al puntaje porque es la señal mejor medida que
   // tenemos: 52-57% de acierto consistente en las 4 temporalidades (15m, 1h, 4h, 1D), probada contra
   // datos históricos reales. Pesa poco (±2) porque 55% es una ventaja real pero modesta: sirve para
@@ -2009,21 +2127,31 @@ ${errorComun}`;
   return {explanation, checklist, passCount, totalVotes, invalidation, riesgos, confirmacion, alternativo, mejorEntrada, errorComun};
 }
 
-function buildSetup(data, result, riskProfile){
+function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
   const {price, support, resistance, lastATR} = result.metrics;
   const structure = result.structure || {};
+  // El STOP se calcula con el marco MAYOR (4h) cuando está disponible, no con el de entrada (15m).
+  // Motivo: la tesis se detecta en 4h, así que la operación "vive" en ese marco. Un stop basado en
+  // los niveles chicos de 15m lo saca el ruido normal de una vela de 4h que todavía va bien —
+  // salta el stop en una operación que en su propio marco seguía siendo válida.
+  // El ATR de 4h es naturalmente más ancho, que es exactamente lo que corresponde acá.
+  const atrParaStop = (dataHTF?.candles?.length >= 20)
+    ? (() => { const a = atr(dataHTF.candles, 14).filter(v=>v!=null).at(-1); return a!=null ? a : lastATR; })()
+    : lastATR;
+  const structureHTF = dataHTF?.candles?.length >= 30 ? computeStructure(dataHTF.candles, atr(dataHTF.candles,14)) : null;
   // Stop loss: antes era SOLO 2x ATR (un número matemático, sin mirar si hay algo real ahí abajo).
   // Ahora se prefiere un nivel estructural real (Order Block o soporte/resistencia) cuando existe a
   // una distancia razonable — así el stop queda "detrás de algo" (como pondría un trader de verdad),
   // no en el aire. El ATR sigue de piso mínimo y de resguardo si no hay ningún nivel cercano sensato.
-  const risk = lastATR*2;
+  const risk = lastATR*2; // ATR de 15m: probado con ATR de 4h y empeoró (ver nota en el piso mínimo)
   let entryLow, entryHigh, stop, t1,t2,t3, dir;
   const dirSource = result.recommendation || result.bias; // usa el score dual (Long/Short) como fuente de verdad
   const liqProfileForStop = data?.candles?.length>=30 ? computeLiquidityProfile(data.candles, price) : null;
   if(dirSource==='LONG'){
     dir='LONG'; entryLow=price*0.995; entryHigh=price*1.005;
     const atrStop = price - risk;
-    const structuralLevels = [structure.bullishOB?.bottom, support].filter(v=>v!=null && v<price);
+    // Se prefieren los niveles del marco MAYOR (4h): son los que de verdad sostienen la operación.
+    const structuralLevels = [structureHTF?.bullishOB?.bottom, structure.bullishOB?.bottom, support].filter(v=>v!=null && v<price);
     const nearestStructural = structuralLevels.length ? Math.max(...structuralLevels) : null;
     const distToStructural = nearestStructural!=null ? price-nearestStructural : null;
     // "Razonable" = ni pegado al precio (ruido lo saca fácil) ni tan lejos que el R:R deje de tener sentido.
@@ -2042,11 +2170,33 @@ function buildSetup(data, result, riskProfile){
     // el stop demasiado cerca, se empuja a una distancia mínima — pero esa distancia mínima ahora se
     // ADAPTA a qué tan volátil es la moneda (1.5x el ATR% reciente), con un piso de 1% y techo de 2% —
     // una moneda chica y movida necesita más aire que una más calma, no el mismo número fijo para todas.
+    // El piso usa el ATR del marco MAYOR (4h), no el de 15m: la operación vive en 4h, así que el
+    // stop tiene que aguantar el movimiento normal de una vela de 4h. Con el ATR de 15m el stop
+    // quedaba a ~1-1,6% del precio y en monedas de cap chico eso es ruido normal — saltaba al toque
+    // (casos reales: OPEN 1,60%, LISTA 1,00%, CROSS 2,14%, las tres cerradas por stop enseguida).
+    // El techo sube a 4% para que una moneda muy volátil pueda tener el aire que necesita.
+    // PROBADO Y REVERTIDO (agosto 2026): se intentó ensanchar el stop usando el ATR de 4h con
+    // techo 4%, porque los stops de 15m saltaban rápido en monedas de cap chico. El backtest lo
+    // desmintió: la ganancia bajó de +196% a +78% y el drawdown SUBIÓ de 26% a 37%.
+    // El motivo: el bot arriesga un % fijo del capital, así que un stop más lejos obliga a una
+    // posición más chica — y las operaciones ganadoras rinden la mitad. El win rate casi no
+    // cambió, pero cada acierto vale menos. Por eso se mantiene el ATR de 15m con techo 2%.
     const atrPct = lastATR/price;
-    const MIN_STOP_PCT = Math.max(0.01, Math.min(0.02, atrPct*1.5));
+    // MODO CAP CHICO (memecoins y monedas de baja capitalización): estas monedas se mueven 5-10%
+    // como movimiento normal, así que un stop de 1-2% lo toca el ruido antes de que la idea tenga
+    // chance de funcionar (casos reales: OPEN, LISTA y CROSS cerradas por stop enseguida).
+    // Acá el stop va entre 10% y 15%, y el apalancamiento baja a 5x para compensar — el riesgo en
+    // dólares se mantiene parecido, pero la operación tiene aire para respirar.
+    const MIN_STOP_PCT = esCapChico
+      ? Math.max(0.10, Math.min(0.15, atrPct*3))
+      : Math.max(0.01, Math.min(0.02, atrPct*1.5));
     if((price-stop)/price < MIN_STOP_PCT) stop = price*(1-MIN_STOP_PCT);
     const R = price-stop;
-    t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5);
+    // En cap chico el stop es ancho (10-15%), así que un TP1 a 1,5R quedaría a +15/22% del precio,
+    // demasiado lejos para tomar ganancia parcial. Se usan múltiplos más chicos: el R:R baja pero
+    // el objetivo se vuelve alcanzable, que es lo que importa para asegurar parte de la ganancia.
+    if(esCapChico){ t1=price+R*0.6; t2=price+R*1.2; t3=Math.max(resistance, price+R*2); }
+    else { t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5); }
     // Los TP también buscan liquidez real, no solo un múltiplo matemático — si hay una zona de
     // liquidez real (POC) en el camino hacia arriba, a una distancia sensata, el objetivo más cercano
     // a esa zona se ajusta para apuntar ahí — porque el mercado se mueve buscando esa liquidez, no
@@ -2065,7 +2215,7 @@ function buildSetup(data, result, riskProfile){
   } else if(dirSource==='SHORT'){
     dir='SHORT'; entryLow=price*0.995; entryHigh=price*1.005;
     const atrStop = price + risk;
-    const structuralLevels = [structure.bearishOB?.top, resistance].filter(v=>v!=null && v>price);
+    const structuralLevels = [structureHTF?.bearishOB?.top, structure.bearishOB?.top, resistance].filter(v=>v!=null && v>price);
     const nearestStructural = structuralLevels.length ? Math.min(...structuralLevels) : null;
     const distToStructural = nearestStructural!=null ? nearestStructural-price : null;
     const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*4;
@@ -2074,12 +2224,15 @@ function buildSetup(data, result, riskProfile){
       stop = Math.max(stop, liqProfileForStop.pocAbove.price*1.005);
     }
     // Mismo piso mínimo de seguridad, mirado hacia arriba.
-    // Mismo piso mínimo adaptativo, mirado hacia arriba.
+    // Mismo piso mínimo adaptativo, mirado hacia arriba (ATR del marco mayor, techo 4%).
     const atrPctShort = lastATR/price;
-    const MIN_STOP_PCT_SHORT = Math.max(0.01, Math.min(0.02, atrPctShort*1.5));
+    const MIN_STOP_PCT_SHORT = esCapChico
+      ? Math.max(0.10, Math.min(0.15, atrPctShort*3))
+      : Math.max(0.01, Math.min(0.02, atrPctShort*1.5));
     if((stop-price)/price < MIN_STOP_PCT_SHORT) stop = price*(1+MIN_STOP_PCT_SHORT);
     const R = stop-price;
-    t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5);
+    if(esCapChico){ t1=price-R*0.6; t2=price-R*1.2; t3=Math.min(support, price-R*2); }
+    else { t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5); }
     // Mismo criterio que en LONG, mirado hacia abajo: si hay una zona real de liquidez a distancia
     // sensata, el objetivo más cercano se ajusta para apuntar ahí en vez de un múltiplo matemático.
     if(liqProfileForStop?.pocBelow){
@@ -2113,7 +2266,10 @@ function buildSetup(data, result, riskProfile){
     else if(volPct<5) leverage='3x - 4x';
     else leverage='2x - 3x';
   }
-  return {dir, entryLow, entryHigh, stop, t1,t2,t3, leverage, volPct, atrMultiple:2, riskProfile:profile};
+  // En cap chico el apalancamiento se fija en 5x: el stop es mucho más ancho, así que un
+  // apalancamiento alto multiplicaría demasiado la pérdida cuando salta.
+  if(esCapChico) leverage = '5x (aislado, cap chico con stop ancho)';
+  return {dir, entryLow, entryHigh, stop, t1,t2,t3, leverage, volPct, atrMultiple:2, riskProfile:profile, esCapChico:!!esCapChico};
 }
 
 
@@ -2206,7 +2362,7 @@ export {
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, fetchUnlockRisk, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
-  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
+  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectDoubleTopBottom, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
