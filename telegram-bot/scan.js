@@ -29,7 +29,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -266,6 +266,21 @@ async function buildChartUrl(candles, entry, stop, tp1, tp2, dir, symbol, extras
       );
     }
 
+    // Línea central del índice de fuerza (la naranja de la sección Liquidez): marca el punto medio
+    // del rango donde el precio reacciona más seguido.
+    if(extras?.fuerza?.centerPrice){
+      anotaciones.push({ type:'line', mode:'horizontal', scaleID:'y-axis-0', value:extras.fuerza.centerPrice,
+        borderColor:'#f59e0b', borderWidth:1.5 });
+    }
+
+    // Zona dorada de Fibonacci (0,5–0,618): donde suelen frenar los retrocesos.
+    const fibX = extras?.fib;
+    if(fibX?.l500 && fibX?.l618){
+      anotaciones.push({ type:'box', xScaleID:'x-axis-0', yScaleID:'y-axis-0',
+        yMin: Math.min(fibX.l500, fibX.l618), yMax: Math.max(fibX.l500, fibX.l618),
+        backgroundColor:'rgba(250,204,21,0.10)', borderColor:'rgba(250,204,21,0.4)', borderWidth:1 });
+    }
+
     const config = {
       type:'candlestick',
       data:{
@@ -279,11 +294,12 @@ async function buildChartUrl(candles, entry, stop, tp1, tp2, dir, symbol, extras
         ]
       },
       options:{
-        title:{ display:true, text:`${symbol}  ·  ${esLong?'COMPRA':'VENTA'}`, fontColor:'#eef3f8', fontSize:15 },
-        legend:{ display:true, position:'top', labels:{ fontColor:'#8b98a8', fontSize:10, boxWidth:14, usePointStyle:false } },
+        title:{ display:true, text:`${symbol}  ·  ${esLong?'COMPRA':'VENTA'}`, fontColor:'#eef3f8', fontSize:16 },
+        // Leyenda desactivada: ocupaba espacio arriba y las EMAs ya se distinguen por color.
+        legend:{ display:false },
         scales:{
           xAxes:[{ type:'linear', gridLines:{ color:'rgba(255,255,255,0.04)' }, ticks:{ display:false } }],
-          yAxes:[{ position:'right', gridLines:{ color:'rgba(255,255,255,0.04)' }, ticks:{ fontColor:'#8b98a8', fontSize:10 } }]
+          yAxes:[{ position:'right', gridLines:{ color:'rgba(255,255,255,0.04)' }, ticks:{ fontColor:'#8b98a8', fontSize:11 } }]
         },
         annotation:{ annotations: anotaciones }
       }
@@ -619,6 +635,38 @@ async function confirmTheses(state, capitalFlow){
         }
       }
 
+      // ENTRADA POR FIBONACCI EN LA MITAD DEL SWING, CONFIRMADA CON LIQUIDEZ.
+      // La zona 0,5–0,618 es donde el precio suele frenar el retroceso y retomar la dirección del
+      // swing. Sola no alcanza (cualquier precio pasa por ahí en algún momento), así que se exige
+      // que además haya liquidez a favor: o el precio está tocando una zona de demanda/oferta sin
+      // mitigar, o el índice de fuerza del volumen apunta al mismo lado.
+      let fibConLiquidez = false, fibNota = '';
+      {
+        const fib = result15.structure?.fib;
+        if(fib && fib.l500 && fib.l618){
+          const zonaAlta = Math.max(fib.l500, fib.l618);
+          const zonaBaja = Math.min(fib.l500, fib.l618);
+          const enZonaDorada = priceNow >= zonaBaja && priceNow <= zonaAlta;
+          if(enZonaDorada){
+            // Liquidez a favor: zona de oferta/demanda sin mitigar tocando el precio
+            const zonasFib = detectZonasOfertaDemanda(data15.candles);
+            const enDemanda = zonasFib.demanda.some(z => priceNow >= z.piso*0.995 && priceNow <= z.techo*1.005);
+            const enOferta = zonasFib.oferta.some(z => priceNow >= z.piso*0.995 && priceNow <= z.techo*1.005);
+            // Índice de fuerza del volumen (la línea naranja de la sección Liquidez)
+            const fuerza = computeVolumeProbability(data15.candles, 20);
+            const fuerzaAFavor = fuerza && (thesis.dir==='LONG' ? fuerza.probUp >= 55 : fuerza.probDown >= 55);
+            const liquidezAFavor = thesis.dir==='LONG' ? (enDemanda || fuerzaAFavor) : (enOferta || fuerzaAFavor);
+            if(liquidezAFavor){
+              fibConLiquidez = true;
+              const motivo = thesis.dir==='LONG'
+                ? (enDemanda ? 'sobre una zona de demanda sin mitigar' : `con la fuerza del volumen del lado comprador (${fuerza.probUp.toFixed(0)}%)`)
+                : (enOferta ? 'sobre una zona de oferta sin mitigar' : `con la fuerza del volumen del lado vendedor (${fuerza.probDown.toFixed(0)}%)`);
+              fibNota = `el precio retrocedió justo a la mitad del swing (zona Fibonacci 0,5–0,618, entre $${zonaBaja.toFixed(6)} y $${zonaAlta.toFixed(6)}) y llegó ahí ${motivo}`;
+            }
+          }
+        }
+      }
+
       // GATILLO PROFESIONAL DE ESTOCÁSTICO (uso de GRANMAGO y de la bibliografía clásica):
       // el bot históricamente usa el estocástico como FILTRO — bloquea cuando está en extremo.
       // El uso profesional es al revés: el extremo es la OPORTUNIDAD, siempre que venga acompañado
@@ -879,7 +927,7 @@ async function confirmTheses(state, capitalFlow){
         stillWatching.push(thesis);
         continue;
       }
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion || gatilloEstocastico)){
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion || gatilloEstocastico || fibConLiquidez)){
         // Las monedas de cap chico llevan el tag ' (cap chico)' — se les aplica stop ancho (10-15%)
         // y apalancamiento fijo 5x, porque se mueven mucho más que las grandes y un stop de 1-2%
         // lo toca el ruido normal antes de que la idea tenga chance.
@@ -1049,7 +1097,40 @@ async function confirmTheses(state, capitalFlow){
           relato.push(`📊 Ojo con esto: la última vela tuvo ${volSpike.multiplo.toFixed(1)}x el volumen promedio de las anteriores${volSpike.precioEstable ? ', mientras el precio se mantuvo bastante estable' : ''} — un volumen así de fuera de lo común suele preceder un movimiento más marcado, aunque no se puede saber con certeza para qué lado ni por qué exactamente pasó.`);
         }
 
-        // Desbloqueo de tokens cercano: para un SHORT es viento a favor (oferta programada entrando),
+        // Liquidez cercana vs de mayor plazo: la cercana es la que el precio busca primero.
+        const liqHor = detectLiquidezPorHorizonte(data15.candles);
+        if(liqHor){
+          const partes = [];
+          const cA = liqHor.cercanaArriba, cB = liqHor.cercanaAbajo;
+          if(cA) partes.push(`arriba a ${cA.distPct.toFixed(1)}% (${cA.toques} toques${cA.consumida ? ', YA BARRIDA' : ', sin barrer'})`);
+          if(cB) partes.push(`abajo a ${cB.distPct.toFixed(1)}% (${cB.toques} toques${cB.consumida ? ', YA BARRIDA' : ', sin barrer'})`);
+          if(partes.length){
+            relato.push(`💧 Liquidez cercana: ${partes.join(' y ')}. La que todavía no fue barrida es la que el precio suele ir a buscar primero.`);
+          }
+          const lA = liqHor.lejanaArriba, lB = liqHor.lejanaAbajo;
+          if(lA || lB){
+            const pl = [];
+            if(lA) pl.push(`arriba a ${lA.distPct.toFixed(1)}%`);
+            if(lB) pl.push(`abajo a ${lB.distPct.toFixed(1)}%`);
+            relato.push(`🌊 Después, la liquidez de mayor plazo está ${pl.join(' y ')} — ese es el objetivo más grande una vez que se consume la cercana.`);
+          }
+        }
+
+        // Índice de fuerza del volumen — es la misma línea naranja que ya se dibuja en la sección
+        // Liquidez de la web: mide qué porcentaje del volumen reciente vino de velas alcistas vs
+        // bajistas. La línea central marca el punto medio del rango donde el precio suele reaccionar.
+        const fuerzaVol = computeVolumeProbability(data15.candles, 20);
+        if(fuerzaVol){
+          const dominante = fuerzaVol.probUp >= fuerzaVol.probDown ? 'compradora' : 'vendedora';
+          const pct = Math.max(fuerzaVol.probUp, fuerzaVol.probDown);
+          const aFavor = (thesis.dir==='LONG' && fuerzaVol.probUp > fuerzaVol.probDown) || (thesis.dir==='SHORT' && fuerzaVol.probDown > fuerzaVol.probUp);
+          relato.push(`⚡ Índice de fuerza: el ${pct.toFixed(0)}% del volumen reciente es de presión ${dominante}${aFavor ? ', o sea a favor de esta operación' : ', que va en contra de esta operación'}. La línea central del rango está en $${fuerzaVol.centerPrice.toFixed(6)} — ahí es donde el precio suele reaccionar más seguido.`);
+        }
+
+        // Fibonacci: si la entrada salió de la zona 0,5–0,618 confirmada con liquidez, se explica.
+        if(fibConLiquidez && fibNota){
+          relato.push(`📐 Sobre el Fibonacci: ${fibNota}. Esa es la zona donde los retrocesos suelen frenar y el precio retoma la dirección del swing.`);
+        }
         // para un LONG ya lo habría bloqueado el filtro, pero puede haber uno chico que igual conviene mencionar.
         if(unlockRisk){
           relato.push(`🔓 Dato de oferta: hay un ${unlockRisk.descripcion}.${thesis.dir==='SHORT' ? ' Eso juega a favor de esta operación — es oferta nueva entrando al mercado.' : ' Es algo a tener en cuenta, aunque no llega al umbral de riesgo alto.'}`);
@@ -1130,6 +1211,8 @@ async function confirmTheses(state, capitalFlow){
           zonas: detectZonasOfertaDemanda(data15.candles),
           niveles: detectNivelesEstructurales(data15.candles),
           triangulo: triangulo15,
+          fuerza: computeVolumeProbability(data15.candles, 20),
+          fib: result15.structure?.fib,
         });
         if(chartUrl){
           sendPromises.push(sendTelegramPhoto(chartUrl, `📈 ${thesis.symbol}${thesis.tag||''} ${thesis.dir} — Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`));
