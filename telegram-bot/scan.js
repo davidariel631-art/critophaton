@@ -29,7 +29,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -197,33 +197,102 @@ async function sendTelegram(text){
 // Genera una imagen del gráfico (vía QuickChart.io, gratis, sin key) con las velas recientes y
 // los niveles de entrada/stop/TP1/TP2 marcados como líneas horizontales. Devuelve una URL corta
 // que Telegram puede usar directo como foto. Si falla, devuelve null (el mensaje de texto sigue andando igual).
-async function buildChartUrl(candles, entry, stop, tp1, tp2, dir, symbol){
+async function buildChartUrl(candles, entry, stop, tp1, tp2, dir, symbol, extras){
   try{
-    const recent = candles.slice(-40);
-    const labels = recent.map((c,i)=> i%5===0 ? new Date(c.t).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'}) : '');
+    const N = 60; // más velas que antes (40) para que se vea el contexto
+    const recent = candles.slice(-N);
     const closes = recent.map(c=>c.c);
-    const lineColor = dir==='LONG' ? '#10b981' : '#ef4444';
+    const closesFull = candles.map(c=>c.c);
+
+    // Velas japonesas de verdad, en vez de una línea
+    const ohlc = recent.map((c,i)=>({ x:i, o:c.o, h:c.h, l:c.l, c:c.c }));
+
+    // Medias móviles: se calculan con TODO el histórico y después se recortan, para que los
+    // primeros valores no salgan distorsionados por falta de datos previos.
+    const cortar = arr => arr.slice(-N);
+    const e20 = cortar(ema(closesFull, 20));
+    const e50 = cortar(ema(closesFull, 50));
+    const e200 = cortar(ema(closesFull, 200));
+
+    const esLong = dir === 'LONG';
+    const anotaciones = [];
+
+    // --- Zonas de oferta/demanda: las "cajas" donde el precio suele reaccionar ---
+    const zonas = extras?.zonas;
+    if(zonas){
+      zonas.oferta?.forEach(z => anotaciones.push({
+        type:'box', xScaleID:'x-axis-0', yScaleID:'y-axis-0',
+        yMin:z.piso, yMax:z.techo,
+        backgroundColor:'rgba(239,68,68,0.13)', borderColor:'rgba(239,68,68,0.45)', borderWidth:1,
+      }));
+      zonas.demanda?.forEach(z => anotaciones.push({
+        type:'box', xScaleID:'x-axis-0', yScaleID:'y-axis-0',
+        yMin:z.piso, yMax:z.techo,
+        backgroundColor:'rgba(16,185,129,0.13)', borderColor:'rgba(16,185,129,0.45)', borderWidth:1,
+      }));
+    }
+
+    // --- Máximo y mínimo estructurales importantes (donde está la liquidez acumulada) ---
+    const niveles = extras?.niveles;
+    if(niveles?.maxImportante){
+      anotaciones.push({ type:'line', mode:'horizontal', scaleID:'y-axis-0', value:niveles.maxImportante.valor,
+        borderColor:'rgba(255,255,255,0.35)', borderWidth:1, borderDash:[6,4],
+        label:{ enabled:true, content:'Máx. clave', backgroundColor:'rgba(0,0,0,0.6)', fontColor:'#cfd6e0', fontSize:9, position:'right' } });
+    }
+    if(niveles?.minImportante){
+      anotaciones.push({ type:'line', mode:'horizontal', scaleID:'y-axis-0', value:niveles.minImportante.valor,
+        borderColor:'rgba(255,255,255,0.35)', borderWidth:1, borderDash:[6,4],
+        label:{ enabled:true, content:'Mín. clave', backgroundColor:'rgba(0,0,0,0.6)', fontColor:'#cfd6e0', fontSize:9, position:'right' } });
+    }
+
+    // --- Niveles de la operación: etiquetas cortas y alternadas para que no se amontonen ---
+    anotaciones.push(
+      { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:entry, borderColor:'#00d9ff', borderWidth:2,
+        label:{ enabled:true, content:'ENTRADA', backgroundColor:'#00d9ff', fontColor:'#00131a', fontSize:10, position:'left' } },
+      { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:stop, borderColor:'#ef4444', borderWidth:2,
+        label:{ enabled:true, content:'STOP', backgroundColor:'#ef4444', fontSize:10, position:'left' } },
+      { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tp1, borderColor:'#10b981', borderWidth:2,
+        label:{ enabled:true, content:'TP1', backgroundColor:'#10b981', fontSize:10, position:'right' } },
+      { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tp2, borderColor:'#10b981', borderWidth:1, borderDash:[4,3],
+        label:{ enabled:true, content:'TP2', backgroundColor:'#10b981', fontSize:10, position:'right' } },
+    );
+
+    // --- Triángulo de compresión, si lo hay ---
+    const tri = extras?.triangulo;
+    if(tri){
+      anotaciones.push(
+        { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tri.techo, borderColor:'rgba(250,204,21,0.6)', borderWidth:1, borderDash:[3,3] },
+        { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tri.piso, borderColor:'rgba(250,204,21,0.6)', borderWidth:1, borderDash:[3,3] },
+      );
+    }
+
     const config = {
-      type:'line',
-      data:{ labels, datasets:[{ label:symbol, data:closes, fill:false, borderColor:lineColor, borderWidth:2, pointRadius:0, tension:0.15 }] },
+      type:'candlestick',
+      data:{
+        datasets:[
+          { label:symbol, data:ohlc, type:'candlestick',
+            color:{ up:'#10b981', down:'#ef4444', unchanged:'#8b98a8' },
+            borderColor:{ up:'#10b981', down:'#ef4444', unchanged:'#8b98a8' } },
+          { label:'EMA20', data:e20.map((y,x)=>({x,y})), type:'line', fill:false, borderColor:'#facc15', borderWidth:1.2, pointRadius:0 },
+          { label:'EMA50', data:e50.map((y,x)=>({x,y})), type:'line', fill:false, borderColor:'#60a5fa', borderWidth:1.4, pointRadius:0 },
+          { label:'EMA200', data:e200.map((y,x)=>({x,y})), type:'line', fill:false, borderColor:'#c084fc', borderWidth:1.6, pointRadius:0 },
+        ]
+      },
       options:{
-        title:{ display:true, text:`${symbol} — ${dir}`, fontColor:'#eef3f8' },
-        legend:{ display:false },
+        title:{ display:true, text:`${symbol}  ·  ${esLong?'COMPRA':'VENTA'}`, fontColor:'#eef3f8', fontSize:15 },
+        legend:{ display:true, position:'top', labels:{ fontColor:'#8b98a8', fontSize:10, boxWidth:14, usePointStyle:false } },
         scales:{
-          xAxes:[{ gridLines:{ color:'#242c38' }, ticks:{ fontColor:'#8b98a8' } }],
-          yAxes:[{ gridLines:{ color:'#242c38' }, ticks:{ fontColor:'#8b98a8' } }]
+          xAxes:[{ type:'linear', gridLines:{ color:'rgba(255,255,255,0.04)' }, ticks:{ display:false } }],
+          yAxes:[{ position:'right', gridLines:{ color:'rgba(255,255,255,0.04)' }, ticks:{ fontColor:'#8b98a8', fontSize:10 } }]
         },
-        annotation:{ annotations:[
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:entry, borderColor:'#00d9ff', borderWidth:2, label:{ enabled:true, content:'Entrada', backgroundColor:'#00d9ff', position:'left' } },
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:stop, borderColor:'#ef4444', borderWidth:2, label:{ enabled:true, content:'Stop', backgroundColor:'#ef4444', position:'left' } },
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tp1, borderColor:'#10b981', borderWidth:2, label:{ enabled:true, content:'TP1', backgroundColor:'#10b981', position:'left' } },
-          { type:'line', mode:'horizontal', scaleID:'y-axis-0', value:tp2, borderColor:'#10b981', borderWidth:2, label:{ enabled:true, content:'TP2', backgroundColor:'#10b981', position:'left' } },
-        ]}
+        annotation:{ annotations: anotaciones }
       }
     };
+
     const res = await fetch('https://quickchart.io/chart/create', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ width:700, height:450, backgroundColor:'#0b0e14', version:'2', chart: config })
+      // Más grande que antes (era 700x450) para que se lea bien en el celular
+      body: JSON.stringify({ width:1000, height:620, backgroundColor:'#000000', version:'2', chart: config })
     });
     if(!res.ok) return null;
     const data = await res.json();
@@ -528,7 +597,12 @@ async function confirmTheses(state, capitalFlow){
       // con esta misma combinación se probó también (varios anchos de stop) y NUNCA dio ventaja real
       // — por eso acá solo se implementa el lado SHORT, a propósito, no es un olvido.
       let ema50ShortConfirmacion = false;
-      if(thesis.dir==='SHORT'){
+      // data4h se carga acá arriba (antes se usaba sin estar definido y este camino crasheaba
+      // siempre que la tesis era SHORT — bug que existía desde antes). También lo usan el filtro
+      // de salud de momentum y buildSetup para calcular el stop con el marco mayor.
+      let data4h = null;
+      try{ data4h = await fetchTokenData(thesis.symbol, '4h'); }catch(e){ data4h = null; }
+      if(thesis.dir==='SHORT' && data4h?.candles?.length){
         const closes4hArr = data4h.candles.map(c=>c.c);
         const ema50Arr = ema(closes4hArr, 50);
         const ema50Now = ema50Arr.at(-1);
@@ -542,6 +616,28 @@ async function confirmTheses(state, capitalFlow){
           const kNow = kArr15.at(-1), kPrev = kArr15.at(-2), dNow = dArr15.at(-1), dPrev = dArr15.at(-2);
           const cruceBajista = kNow!=null && kPrev!=null && dNow!=null && dPrev!=null && kPrev>=dPrev && kNow<dNow && kPrev>=65;
           ema50ShortConfirmacion = tendenciaBajista && enZona && cruceBajista;
+        }
+      }
+
+      // GATILLO PROFESIONAL DE ESTOCÁSTICO (uso de GRANMAGO y de la bibliografía clásica):
+      // el bot históricamente usa el estocástico como FILTRO — bloquea cuando está en extremo.
+      // El uso profesional es al revés: el extremo es la OPORTUNIDAD, siempre que venga acompañado
+      // del cruce de K sobre D (o al revés). El extremo solo avisa que hay agotamiento; el cruce
+      // confirma que el giro empezó. Sin cruce no hay entrada, con cruce sí.
+      // Se agrega como camino ADICIONAL (no reemplaza a los otros) para no romper lo que ya funciona.
+      let gatilloEstocastico = false;
+      {
+        const kArrG = stochasticOscillator(data15.candles).k;
+        const dArrG = stochasticOscillator(data15.candles).d;
+        const kG = kArrG.at(-1), kPg = kArrG.at(-2), dG = dArrG.at(-1), dPg = dArrG.at(-2);
+        if(kG!=null && kPg!=null && dG!=null && dPg!=null){
+          if(thesis.dir==='LONG'){
+            // Venía de sobreventa (<=25) Y K cruzó hacia arriba sobre D
+            gatilloEstocastico = kPg <= 25 && kPg <= dPg && kG > dG;
+          } else {
+            // Venía de sobrecompra (>=75) Y K cruzó hacia abajo bajo D
+            gatilloEstocastico = kPg >= 75 && kPg >= dPg && kG < dG;
+          }
         }
       }
 
@@ -599,7 +695,6 @@ async function confirmTheses(state, capitalFlow){
       let momentumHealthOk = true, momentumHealthNote = '';
       try{
         const data1d = await fetchTokenData(thesis.symbol, '1d');
-        const data4h = await fetchTokenData(thesis.symbol, '4h');
         if(data1d?.candles?.length>=30){
           const rsi1d = rsi(data1d.candles.map(c=>c.c), 14).filter(v=>v!=null).at(-1);
           const rsiLTF = result15.metrics.lastRSI;
@@ -616,11 +711,23 @@ async function confirmTheses(state, capitalFlow){
           // antes de girar (exactamente lo que puede pasar si el precio primero va a buscar liquidez
           // cercana, como un cluster de Equal Highs/Lows fuerte, y ahí revierte).
           const problems = [];
+          // BLOQUEO DURO por Estocástico 4h en extremo CONTRA la dirección de la tesis.
+          // Antes esto era solo "un problema más" y hacían falta dos para frenar, con umbral 85.
+          // El resultado era abrir LONGs con el Estocástico 4h arriba de 80 (caso real: OPEN a 80,59),
+          // que es comprar justo donde el movimiento ya se agotó. Ahora alcanza por sí solo y el
+          // umbral baja a 80/20, que es la definición clásica de sobrecompra/sobreventa.
+          let stochHTFBloquea = false, stochHTFNota = '';
           if(data4h?.candles?.length>=20){
             const stoch4h = stochasticOscillator(data4h.candles).k.filter(v=>v!=null).at(-1);
             if(stoch4h!=null){
-              if(thesis.dir==='LONG' && stoch4h>=85) problems.push(`Estocástico 4h ya en ${stoch4h.toFixed(0)} (muy extendido, poco espacio para seguir subiendo)`);
-              if(thesis.dir==='SHORT' && stoch4h<=15) problems.push(`Estocástico 4h ya en ${stoch4h.toFixed(0)} (muy extendido, poco espacio para seguir bajando)`);
+              if(thesis.dir==='LONG' && stoch4h>=80){
+                stochHTFBloquea = true;
+                stochHTFNota = `Estocástico 4h en ${stoch4h.toFixed(0)} (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento`;
+              }
+              if(thesis.dir==='SHORT' && stoch4h<=20){
+                stochHTFBloquea = true;
+                stochHTFNota = `Estocástico 4h en ${stoch4h.toFixed(0)} (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento`;
+              }
             }
             const macd4h = macd(data4h.candles.map(c=>c.c));
             const hist4h = macd4h.hist.filter(v=>v!=null);
@@ -637,7 +744,10 @@ async function confirmTheses(state, capitalFlow){
             if(thesis.dir==='LONG' && stoch1d>=85) problems.push(`Estocástico 1D ya en ${stoch1d.toFixed(0)} (sin espacio en el marco mayor)`);
             if(thesis.dir==='SHORT' && stoch1d<=15) problems.push(`Estocástico 1D ya en ${stoch1d.toFixed(0)} (sin espacio en el marco mayor)`);
           }
-          if(problems.length>=2){ // exigimos al menos 2 señales de "sin espacio" antes de bloquear, para no ser demasiado estricto
+          if(stochHTFBloquea){
+            momentumHealthOk = false;
+            momentumHealthNote = stochHTFNota + '.';
+          } else if(problems.length>=2){ // el resto de señales sí exige 2, para no ser demasiado estricto
             momentumHealthOk = false;
             momentumHealthNote = problems.join('; ') + '.';
           }
@@ -661,7 +771,11 @@ async function confirmTheses(state, capitalFlow){
       //   EMA20/50 dentro de la tendencia) hagan su trabajo sin este filtro peleando en contra.
       const stochK = result15.metrics.lastStochK;
       const enRegimenDeTendencia = confluence.adxStrong; // ADX>=20, mismo umbral que ya usa el motor
-      if(stochK!=null && !enRegimenDeTendencia && (stochK>=80 || stochK<=20)){
+      // El gatillo profesional busca EXACTAMENTE el extremo + cruce, así que este filtro no debe
+      // vetarlo — si lo bloqueara, el camino nuevo nunca podría dispararse. Son dos lecturas
+      // opuestas del mismo dato: el filtro dice "extremo = peligro", el gatillo dice "extremo +
+      // cruce = oportunidad". El cruce confirmado es lo que decide cuál de las dos aplica.
+      if(stochK!=null && !enRegimenDeTendencia && !gatilloEstocastico && (stochK>=80 || stochK<=20)){
         journal(thesis, `Todavía esperando confirmación (Estocástico en ${stochK.toFixed(0)}, zona de ${stochK>=80?'sobrecompra':'sobreventa'} en un mercado LATERAL, ADX ${confluence.adxVal?.toFixed(0)} — acá sí es agotamiento real, no se abren operaciones nuevas en el extremo).`);
         stillWatching.push(thesis);
         continue;
@@ -765,8 +879,12 @@ async function confirmTheses(state, capitalFlow){
         stillWatching.push(thesis);
         continue;
       }
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion)){
-        const setup = buildSetup(data15, result15, 'balanced');
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion || gatilloEstocastico)){
+        // Las monedas de cap chico llevan el tag ' (cap chico)' — se les aplica stop ancho (10-15%)
+        // y apalancamiento fijo 5x, porque se mueven mucho más que las grandes y un stop de 1-2%
+        // lo toca el ruido normal antes de que la idea tenga chance.
+        const esCapChico = (thesis.tag||'').includes('cap chico');
+        const setup = buildSetup(data15, result15, 'balanced', data4h, esCapChico);
         const entryPrice = result15.metrics.price; // mismo precio que usó buildSetup para calcular stop/TP, evita descalces
 
         // VALIDACIÓN CRÍTICA (encontrada analizando una operación real de ZEST que perdió sí o sí):
@@ -799,8 +917,12 @@ async function confirmTheses(state, capitalFlow){
         const distance = Math.abs(entryPrice - setup.stop);
         if(distance<=0){ stillWatching.push(thesis); continue; }
         const rrToTp1 = Math.abs(setup.t1-entryPrice)/distance;
-        if(rrToTp1 < 1.5){
-          journal(thesis, `Confirmación técnica presente pero R:R a TP1 es solo ${rrToTp1.toFixed(2)}:1 (mínimo exigido 1.5:1). Se sigue observando en vez de forzar una entrada con mala relación riesgo/beneficio.`);
+        // En cap chico el TP1 usa un múltiplo más chico (0,6R) para que sea alcanzable con el stop
+        // ancho, así que el mínimo exigido baja a 0,5:1. La ganancia real viene de TP2 y TP3, que
+        // sí conservan buena relación — TP1 acá cumple la función de asegurar parte de la posición.
+        const rrMinimo = esCapChico ? 0.5 : 1.5;
+        if(rrToTp1 < rrMinimo){
+          journal(thesis, `Confirmación técnica presente pero R:R a TP1 es solo ${rrToTp1.toFixed(2)}:1 (mínimo exigido ${rrMinimo}:1). Se sigue observando en vez de forzar una entrada con mala relación riesgo/beneficio.`);
           stillWatching.push(thesis);
           continue;
         }
@@ -952,13 +1074,26 @@ async function confirmTheses(state, capitalFlow){
         const priceNow15 = result15.metrics.price;
         const distPct = (nivel) => Math.abs(nivel-priceNow15)/priceNow15*100;
         const liqPartes = [];
+        // Se mira dónde está el nivel DE VERDAD respecto al precio. Antes se asumía que eqHighs
+        // estaba siempre arriba y eqLows siempre abajo, pero si el precio ya superó ese nivel queda
+        // del otro lado — y el mensaje decía "arriba" sobre un nivel que estaba abajo (pasó real en
+        // LISTA y CROSS: el bot informaba liquidez "arriba, a 0,6%" cuando el número era menor que
+        // la entrada). Eso confunde la lectura y hace que el nivel no se tenga en cuenta como debe.
         if(st.eqHighs){
-          const esObjetivo = thesis.dir==='LONG';
-          liqPartes.push(`arriba, a un ${distPct(st.eqHighs).toFixed(1)}% del precio actual (~$${st.eqHighs.toFixed(6)}), hay liquidez compradora acumulada — el precio ya tocó ese nivel ${st.eqHighsCount} veces sin romperlo del todo${esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como resistencia en el camino'}`);
+          const estaArriba = st.eqHighs > priceNow15;
+          const esObjetivo = thesis.dir==='LONG' && estaArriba;
+          const rol = estaArriba
+            ? (esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como resistencia en el camino')
+            : ' — el precio ya lo superó, así que ahora funciona como soporte por debajo';
+          liqPartes.push(`${estaArriba?'arriba':'abajo'}, a un ${distPct(st.eqHighs).toFixed(1)}% del precio actual (~$${st.eqHighs.toFixed(6)}), hay liquidez compradora acumulada — el precio ya tocó ese nivel ${st.eqHighsCount} veces sin romperlo del todo${rol}`);
         }
         if(st.eqLows){
-          const esObjetivo = thesis.dir==='SHORT';
-          liqPartes.push(`abajo, a un ${distPct(st.eqLows).toFixed(1)}% del precio actual (~$${st.eqLows.toFixed(6)}), hay liquidez vendedora acumulada (${st.eqLowsCount} toques previos)${esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como soporte en el camino'}`);
+          const estaAbajo = st.eqLows < priceNow15;
+          const esObjetivo = thesis.dir==='SHORT' && estaAbajo;
+          const rol = estaAbajo
+            ? (esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como soporte en el camino')
+            : ' — el precio ya lo perforó, así que ahora funciona como resistencia por encima';
+          liqPartes.push(`${estaAbajo?'abajo':'arriba'}, a un ${distPct(st.eqLows).toFixed(1)}% del precio actual (~$${st.eqLows.toFixed(6)}), hay liquidez vendedora acumulada (${st.eqLowsCount} toques previos)${rol}`);
         }
         if(liqPartes.length){
           relato.push(`En cuanto a liquidez: ${liqPartes.join('; y ')}. El mercado tiende a moverse hacia estas zonas antes de girar, porque ahí es donde se concentran los stops y las órdenes pendientes que el precio "atrae" como un imán.`);
@@ -991,7 +1126,11 @@ async function confirmTheses(state, capitalFlow){
         const relatoCompleto = relato.join(' ');
 
         // Gráfico con los niveles marcados, antes del mensaje de texto con el detalle completo.
-        const chartUrl = await buildChartUrl(data15.candles, entryPrice, setup.stop, setup.t1, setup.t2, thesis.dir, thesis.symbol);
+        const chartUrl = await buildChartUrl(data15.candles, entryPrice, setup.stop, setup.t1, setup.t2, thesis.dir, thesis.symbol, {
+          zonas: detectZonasOfertaDemanda(data15.candles),
+          niveles: detectNivelesEstructurales(data15.candles),
+          triangulo: triangulo15,
+        });
         if(chartUrl){
           sendPromises.push(sendTelegramPhoto(chartUrl, `📈 ${thesis.symbol}${thesis.tag||''} ${thesis.dir} — Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`));
         }
