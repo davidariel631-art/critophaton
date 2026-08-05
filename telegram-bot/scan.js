@@ -27,7 +27,7 @@ import fs from 'fs';
 import webpush from 'web-push';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
-  fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference,
+  fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
   computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion
 } from '../thehaton-engine.js';
@@ -667,6 +667,17 @@ async function confirmTheses(state, capitalFlow){
         continue;
       }
 
+      // Filtro de desbloqueo de tokens (el catalizador que usa David en sus señales de BEAT y UB):
+      // cuando se libera un lote grande de tokens (vesting de equipo/inversores), entra oferta
+      // programada al mercado. No es análisis técnico — es saber que viene una avalancha de supply.
+      // Bloquea LONGs antes de un desbloqueo grande; para SHORTs es viento a favor, no se bloquea.
+      const unlockRisk = await fetchUnlockRisk(thesis.symbol).catch(()=>null);
+      if(unlockRisk?.riesgoAlto && thesis.dir==='LONG'){
+        journal(thesis, `Todavía esperando confirmación: hay un ${unlockRisk.descripcion}. Un desbloqueo grande mete oferta nueva al mercado y suele presionar el precio a la baja — no se abre un LONG justo antes de eso.`);
+        stillWatching.push(thesis);
+        continue;
+      }
+
       // Filtro de coherencia con el perfil de volumen (encontrado analizando la operación real de
       // OPEN): el bot reportaba "87% del volumen está ABAJO" y abría un LONG igual. El perfil de
       // volumen es un imán — si la concentración está mayormente del lado contrario a la operación,
@@ -914,6 +925,12 @@ async function confirmTheses(state, capitalFlow){
         const volSpike = detectVolumeSpike(data15.candles);
         if(volSpike){
           relato.push(`📊 Ojo con esto: la última vela tuvo ${volSpike.multiplo.toFixed(1)}x el volumen promedio de las anteriores${volSpike.precioEstable ? ', mientras el precio se mantuvo bastante estable' : ''} — un volumen así de fuera de lo común suele preceder un movimiento más marcado, aunque no se puede saber con certeza para qué lado ni por qué exactamente pasó.`);
+        }
+
+        // Desbloqueo de tokens cercano: para un SHORT es viento a favor (oferta programada entrando),
+        // para un LONG ya lo habría bloqueado el filtro, pero puede haber uno chico que igual conviene mencionar.
+        if(unlockRisk){
+          relato.push(`🔓 Dato de oferta: hay un ${unlockRisk.descripcion}.${thesis.dir==='SHORT' ? ' Eso juega a favor de esta operación — es oferta nueva entrando al mercado.' : ' Es algo a tener en cuenta, aunque no llega al umbral de riesgo alto.'}`);
         }
 
         // Divergencia RSI+MACD y triángulo de compresión, calculados sobre las velas de 15m que sí
