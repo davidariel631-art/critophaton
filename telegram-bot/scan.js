@@ -635,6 +635,51 @@ async function confirmTheses(state, capitalFlow){
         }
       }
 
+      // ═══ ENTRADA ANTICIPADA EN LA ZONA (arregla el problema de entrar tarde) ═══
+      // Los otros caminos exigen que el movimiento YA haya arrancado: BOS = la estructura ya se
+      // rompió, pullback = ya rebotó, patrón completo = el trap ya se confirmó. Para cuando
+      // confirman, buena parte del recorrido ya pasó.
+      // Acá se entra EN la zona de reacción, sin esperar la vela de confirmación: el precio está
+      // tocando una zona de oferta/demanda sin mitigar, o un nivel de liquidez sin barrer, y el
+      // Estocástico acompaña. Es entrar donde el precio va a reaccionar, no después de que reaccionó.
+      let entradaEnZona = false, zonaNota = '';
+      {
+        const zonasE = detectZonasOfertaDemanda(data15.candles);
+        const liqE = detectLiquidezPorHorizonte(data15.candles);
+        const kArrE = stochasticOscillator(data15.candles).k;
+        const kE = kArrE.at(-1), kPe = kArrE.at(-2);
+
+        if(kE!=null && kPe!=null){
+          if(thesis.dir==='LONG'){
+            // El precio entró en una zona de demanda sin mitigar
+            const enDemanda = zonasE.demanda.find(z => priceNow <= z.techo*1.005 && priceNow >= z.piso*0.99);
+            // O está tocando liquidez de abajo que todavía no fue barrida
+            const liqAbajo = liqE?.cercanaAbajo;
+            const tocandoLiq = liqAbajo && !liqAbajo.consumida && Math.abs(priceNow - liqAbajo.precio)/priceNow < 0.008;
+            // El Estocástico no tiene que estar todavía subiendo — alcanza con que esté bajo y
+            // dejando de caer, que es justo antes del giro.
+            const estocBajoYFrenando = kE <= 40 && kE >= kPe;
+            if((enDemanda || tocandoLiq) && estocBajoYFrenando){
+              entradaEnZona = true;
+              zonaNota = enDemanda
+                ? `el precio entró en una zona de demanda sin mitigar ($${enDemanda.piso.toFixed(6)}–$${enDemanda.techo.toFixed(6)}) con el Estocástico en ${kE.toFixed(0)} dejando de caer`
+                : `el precio está tocando liquidez sin barrer en $${liqAbajo.precio.toFixed(6)} (${liqAbajo.toques} toques) con el Estocástico en ${kE.toFixed(0)} frenando`;
+            }
+          } else {
+            const enOferta = zonasE.oferta.find(z => priceNow >= z.piso*0.995 && priceNow <= z.techo*1.01);
+            const liqArriba = liqE?.cercanaArriba;
+            const tocandoLiq = liqArriba && !liqArriba.consumida && Math.abs(priceNow - liqArriba.precio)/priceNow < 0.008;
+            const estocAltoYFrenando = kE >= 60 && kE <= kPe;
+            if((enOferta || tocandoLiq) && estocAltoYFrenando){
+              entradaEnZona = true;
+              zonaNota = enOferta
+                ? `el precio entró en una zona de oferta sin mitigar ($${enOferta.piso.toFixed(6)}–$${enOferta.techo.toFixed(6)}) con el Estocástico en ${kE.toFixed(0)} dejando de subir`
+                : `el precio está tocando liquidez sin barrer en $${liqArriba.precio.toFixed(6)} (${liqArriba.toques} toques) con el Estocástico en ${kE.toFixed(0)} frenando`;
+            }
+          }
+        }
+      }
+
       // ENTRADA POR FIBONACCI EN LA MITAD DEL SWING, CONFIRMADA CON LIQUIDEZ.
       // La zona 0,5–0,618 es donde el precio suele frenar el retroceso y retomar la dirección del
       // swing. Sola no alcanza (cualquier precio pasa por ahí en algún momento), así que se exige
@@ -927,7 +972,7 @@ async function confirmTheses(state, capitalFlow){
         stillWatching.push(thesis);
         continue;
       }
-      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion || gatilloEstocastico || fibConLiquidez)){
+      if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion || gatilloEstocastico || fibConLiquidez || entradaEnZona)){
         // Las monedas de cap chico llevan el tag ' (cap chico)' — se les aplica stop ancho (10-15%)
         // y apalancamiento fijo 5x, porque se mueven mucho más que las grandes y un stop de 1-2%
         // lo toca el ruido normal antes de que la idea tenga chance.
@@ -974,6 +1019,29 @@ async function confirmTheses(state, capitalFlow){
           stillWatching.push(thesis);
           continue;
         }
+        // ═══ TP APUNTANDO A LA LIQUIDEZ REAL ═══
+        // Los TP por múltiplos de R son un número matemático, no un lugar donde el precio realmente
+        // vaya. La liquidez sí es un destino real: ahí están las órdenes que atraen al precio.
+        // Se busca el nivel de liquidez más importante en la dirección de la operación y se usa
+        // como objetivo, siempre que quede más cerca que el TP calculado (nunca más lejos).
+        const liqObjetivo = detectLiquidezPorHorizonte(data15.candles);
+        if(liqObjetivo){
+          const candidatosTP = thesis.dir==='LONG'
+            ? [liqObjetivo.cercanaArriba, liqObjetivo.lejanaArriba].filter(l => l && l.precio > entryPrice)
+            : [liqObjetivo.cercanaAbajo, liqObjetivo.lejanaAbajo].filter(l => l && l.precio < entryPrice);
+          if(candidatosTP.length){
+            // El más importante = el que más toques tiene (más liquidez acumulada ahí)
+            const objetivo = candidatosTP.reduce((a,b) => (b.toques||0) > (a.toques||0) ? b : a);
+            const masCercaQueTP2 = thesis.dir==='LONG'
+              ? (objetivo.precio < setup.t2 && objetivo.precio > setup.t1)
+              : (objetivo.precio > setup.t2 && objetivo.precio < setup.t1);
+            if(masCercaQueTP2){
+              journal(thesis, `TP2 ajustado a $${objetivo.precio.toFixed(6)}: ahí hay liquidez acumulada (${objetivo.toques} toques previos), que es un objetivo real hacia donde el precio tiende a ir — más realista que el múltiplo de R calculado.`);
+              setup.t2 = objetivo.precio;
+            }
+          }
+        }
+
         const units = riskAmount / distance;
 
         // Filtro de "caza de liquidez": si justo arriba (para un LONG) o abajo (para un SHORT) hay
@@ -1125,6 +1193,14 @@ async function confirmTheses(state, capitalFlow){
           const pct = Math.max(fuerzaVol.probUp, fuerzaVol.probDown);
           const aFavor = (thesis.dir==='LONG' && fuerzaVol.probUp > fuerzaVol.probDown) || (thesis.dir==='SHORT' && fuerzaVol.probDown > fuerzaVol.probUp);
           relato.push(`⚡ Índice de fuerza: el ${pct.toFixed(0)}% del volumen reciente es de presión ${dominante}${aFavor ? ', o sea a favor de esta operación' : ', que va en contra de esta operación'}. La línea central del rango está en $${fuerzaVol.centerPrice.toFixed(6)} — ahí es donde el precio suele reaccionar más seguido.`);
+        }
+
+        // Modo reversión / lateral: explica por qué se opera contra la tendencia aparente.
+        if(result15.reversionNota) relato.push(result15.reversionNota);
+
+        // Entrada anticipada en zona: se entra donde el precio va a reaccionar, no después.
+        if(entradaEnZona && zonaNota){
+          relato.push(`🎯 Entrada anticipada: ${zonaNota}. En vez de esperar la vela de confirmación (que llega cuando parte del movimiento ya pasó), se entra en la zona donde el precio debería reaccionar.`);
         }
 
         // Fibonacci: si la entrada salió de la zona 0,5–0,618 confirmada con liquidez, se explica.
