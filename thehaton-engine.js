@@ -1866,7 +1866,74 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   else if(score10<=4) bias='SHORT';
 
   // ---- Dual Long/Short score (signed bullishness index, transparent formula) ----
-  const trendSignal = trend===30?1: trend===21?0.6: trend===15?0: trend===10?-0.6: trend===3?-1:0;
+  let trendSignal = trend===30?1: trend===21?0.6: trend===15?0: trend===10?-0.6: trend===3?-1:0;
+
+  // ═══ MODO REVERSIÓN: comprar abajo y vender arriba ═══
+  // PROBLEMA QUE RESUELVE: la señal de Tendencia es puramente "¿el precio está arriba o abajo de
+  // las medias?". Con 21-27% del peso, eso hace que el bot SOLO pueda abrir LONG cuando el precio
+  // ya subió, y SOLO SHORT cuando ya cayó — persigue el movimiento y entra tarde. No sabe comprar
+  // una caída ni vender un rebote, que es donde está el mejor precio.
+  // SOLUCIÓN: si el precio está en contra de la tendencia PERO llegó a una zona real de reacción
+  // (demanda/soporte con sobreventa, u oferta/resistencia con sobrecompra) y encima barrió la
+  // liquidez de ese lado, la penalización de tendencia se neutraliza o se da vuelta.
+  // No es ignorar la tendencia: es reconocer que dentro de una tendencia hay retrocesos, y que el
+  // borde del retroceso es mejor entrada que el medio del impulso.
+  const stochRev = stochasticOscillator(data.candles);
+  const kRev = stochRev.k.at(-1), kRevPrev = stochRev.k.at(-2);
+  const zonasRev = detectZonasOfertaDemanda(data.candles);
+  const liqRev = detectLiquidezPorHorizonte(data.candles);
+  let reversionNota = null;
+
+  if(kRev!=null && kRevPrev!=null){
+    // COMPRAR LA CAÍDA: precio abajo de las medias (trendSignal negativo) pero en zona de demanda
+    // con el Estocástico en sobreventa y frenando.
+    if(trendSignal < 0){
+      const enDemandaRev = zonasRev.demanda.some(z => price <= z.techo*1.01 && price >= z.piso*0.99);
+      const cercaSoporte = support && Math.abs(price-support)/price < 0.015;
+      const liqBarridaAbajo = liqRev?.cercanaAbajo?.consumida;
+      const sobreventaFrenando = kRev <= 30 && kRev >= kRevPrev;
+      if((enDemandaRev || cercaSoporte) && sobreventaFrenando){
+        // Se neutraliza la penalización; si además barrió liquidez abajo, se da vuelta a favor.
+        trendSignal = liqBarridaAbajo ? 0.4 : 0;
+        reversionNota = `🔄 Reversión: el precio viene cayendo pero llegó a ${enDemandaRev?'una zona de demanda':'un soporte'} con el Estocástico en ${kRev.toFixed(0)} dejando de bajar${liqBarridaAbajo?' y ya barrió la liquidez de abajo':''}. Es mejor precio comprar acá que esperar a que suba.`;
+      }
+    }
+    // VENDER EL REBOTE: precio arriba de las medias pero en zona de oferta con sobrecompra.
+    if(trendSignal > 0){
+      const enOfertaRev = zonasRev.oferta.some(z => price >= z.piso*0.99 && price <= z.techo*1.01);
+      const cercaResistencia = resistance && Math.abs(price-resistance)/price < 0.015;
+      const liqBarridaArriba = liqRev?.cercanaArriba?.consumida;
+      const sobrecompraFrenando = kRev >= 70 && kRev <= kRevPrev;
+      if((enOfertaRev || cercaResistencia) && sobrecompraFrenando){
+        trendSignal = liqBarridaArriba ? -0.4 : 0;
+        reversionNota = `🔄 Reversión: el precio viene subiendo pero llegó a ${enOfertaRev?'una zona de oferta':'una resistencia'} con el Estocástico en ${kRev.toFixed(0)} dejando de subir${liqBarridaArriba?' y ya barrió la liquidez de arriba':''}. Es mejor precio vender acá que esperar a que caiga.`;
+      }
+    }
+  }
+
+  // ═══ MERCADO LATERAL: operar los bordes del rango ═══
+  // En lateral el bot no hacía NADA: el score se quedaba cerca de 5 y nunca llegaba al umbral.
+  // Pero un rango tiene bordes operables — comprar el piso y vender el techo es justamente lo que
+  // se hace en lateral.
+  // OJO: la condición anterior era trend===15, que es INALCANZABLE (solo se da si el precio es
+  // exactamente igual a la EMA50). Ahora se detecta con ADX bajo, que es la medida real de
+  // "sin tendencia definida".
+  const adxLateral = adx(data.candles);
+  const esLateral = adxLateral!=null && adxLateral < 20;
+  if(esLateral && support && resistance && resistance>support){
+    const anchoRango = (resistance-support)/support;
+    if(anchoRango > 0.02){ // rango con recorrido suficiente para que valga la pena
+      const posEnRango = (price-support)/(resistance-support); // 0 = piso, 1 = techo
+      if(posEnRango <= 0.25 && kRev!=null && kRev <= 45){
+        trendSignal = 0.5;
+        reversionNota = `📊 Mercado lateral: el precio está en la parte baja del rango ($${fmt(support)}–$${fmt(resistance)}) con el Estocástico en ${kRev.toFixed(0)}. En un rango, el piso es zona de compra.`;
+      } else if(posEnRango >= 0.75 && kRev!=null && kRev >= 55){
+        trendSignal = -0.5;
+        reversionNota = `📊 Mercado lateral: el precio está en la parte alta del rango ($${fmt(support)}–$${fmt(resistance)}) con el Estocástico en ${kRev.toFixed(0)}. En un rango, el techo es zona de venta.`;
+      }
+    }
+  }
+
   const momentumSignalBase = Math.max(-1,Math.min(1,(momentum-12.5)/12.5));
   // Divergencia RSI+MACD como señal de APOYO (no disparador principal): el backtest en 4 períodos
   // de BTC dio Profit Factor 1.07-1.43 sin perder en ninguno, pero con pocas señales — sirve para
@@ -2132,7 +2199,7 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
     longScore, shortScore, confidence, stars, recommendation,
     breakdown:[{label:'Tendencia',val:Math.round(trendR),max:25},{label:'Momentum',val:Math.round(momentumR),max:20},{label:'Volumen',val:Math.round(volumeR),max:12},{label:'Volatilidad',val:Math.round(volatR),max:8},{label:'Derivados',val:Math.round(derivR),max:15},{label:'Estructura SMC',val:Math.round(structure.score),max:20}],
     metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastStochK,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct,vwap:vwapData,divergencia,triangulo:detectTrianguloCompresion(data.candles)},
-    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality, cvd:cvdData,
+    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality, cvd:cvdData, reversionNota,
     series:{closes,e20,e50,e200,rsiArr,macd:m,bb}
   };
 }
@@ -2318,6 +2385,28 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
       ? Math.max(0.10, Math.min(0.15, atrPct*3))
       : Math.max(0.01, Math.min(0.02, atrPct*1.5));
     if((price-stop)/price < MIN_STOP_PCT) stop = price*(1-MIN_STOP_PCT);
+
+    // ═══ STOP MÁS ALLÁ DE LA LIQUIDEZ ═══
+    // Si el stop queda JUSTO ANTES de un nivel con liquidez acumulada, el precio va a barrer esa
+    // zona (ahí están los stops de todos) y recién después girar — te saca justo antes del
+    // movimiento que esperabas. Por eso el stop se corre POR DEBAJO del nivel de liquidez más
+    // importante que haya en el camino, con un margen extra.
+    const liqStop = detectLiquidezPorHorizonte(data.candles);
+    if(liqStop){
+      // Se toma el nivel con más toques (más liquidez acumulada) que esté entre el stop y el precio
+      const candidatos = [liqStop.cercanaAbajo, liqStop.lejanaAbajo]
+        .filter(l => l && l.precio < price && l.precio > stop*0.97);
+      if(candidatos.length){
+        const masImportante = candidatos.reduce((a,b) => (b.toques||0) > (a.toques||0) ? b : a);
+        const margen = esCapChico ? 0.985 : 0.995; // más margen en monedas volátiles
+        const stopNuevo = masImportante.precio * margen;
+        // Solo se mueve si no dispara el stop más allá de lo razonable (tope: el doble del mínimo)
+        const distNueva = (price - stopNuevo)/price;
+        if(stopNuevo < stop && distNueva <= MIN_STOP_PCT*2.5){
+          stop = stopNuevo;
+        }
+      }
+    }
     const R = price-stop;
     // En cap chico el stop es ancho (10-15%), así que un TP1 a 1,5R quedaría a +15/22% del precio,
     // demasiado lejos para tomar ganancia parcial. Se usan múltiplos más chicos: el R:R baja pero
@@ -2357,6 +2446,23 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
       ? Math.max(0.10, Math.min(0.15, atrPctShort*3))
       : Math.max(0.01, Math.min(0.02, atrPctShort*1.5));
     if((stop-price)/price < MIN_STOP_PCT_SHORT) stop = price*(1+MIN_STOP_PCT_SHORT);
+
+    // Mismo criterio que en LONG: el stop va POR ENCIMA del nivel de liquidez más importante,
+    // porque ahí es donde el precio va a barrer stops antes de girar a la baja.
+    const liqStopS = detectLiquidezPorHorizonte(data.candles);
+    if(liqStopS){
+      const candidatosS = [liqStopS.cercanaArriba, liqStopS.lejanaArriba]
+        .filter(l => l && l.precio > price && l.precio < stop*1.03);
+      if(candidatosS.length){
+        const masImportanteS = candidatosS.reduce((a,b) => (b.toques||0) > (a.toques||0) ? b : a);
+        const margenS = esCapChico ? 1.015 : 1.005;
+        const stopNuevoS = masImportanteS.precio * margenS;
+        const distNuevaS = (stopNuevoS - price)/price;
+        if(stopNuevoS > stop && distNuevaS <= MIN_STOP_PCT_SHORT*2.5){
+          stop = stopNuevoS;
+        }
+      }
+    }
     const R = stop-price;
     if(esCapChico){ t1=price-R*0.6; t2=price-R*1.2; t3=Math.min(support, price-R*2); }
     else { t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5); }
