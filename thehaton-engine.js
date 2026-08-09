@@ -53,7 +53,7 @@ async function fetchJSON(url){
 }
 
 async function tryBinance(symbolRaw, tf){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
   const interval = TF_MAP[tf].binance;
   const klines = await fetchJSON(`${BINANCE}/api/v3/klines?symbol=${pair}&interval=${interval}&limit=220`);
@@ -86,7 +86,7 @@ function classifyTrend(values, tolPct=2){
 }
 
 async function fetchOpenInterestTrend(symbolRaw, tf){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
   const period = OI_PERIOD_MAP[tf] || '4h';
   try{
@@ -98,7 +98,7 @@ async function fetchOpenInterestTrend(symbolRaw, tf){
 }
 
 async function fetchFundingTrend(symbolRaw){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
   try{
     const rows = await fetchJSON(`${FUTURES}/fapi/v1/fundingRate?symbol=${pair}&limit=6`);
@@ -110,7 +110,7 @@ async function fetchFundingTrend(symbolRaw){
 
 // Ratio Long/Short de los "top traders" (posiciones grandes) — dato real de Binance Futures, gratis, sin key.
 async function fetchTopTraderRatio(symbolRaw, period='1h'){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
   try{
     const rows = await fetchJSON(`${FUTURES}/futures/data/topLongShortPositionRatio?symbol=${pair}&period=${period}&limit=1`);
@@ -124,7 +124,7 @@ async function fetchTopTraderRatio(symbolRaw, period='1h'){
 // de apalancamiento excesivo (más riesgo de liquidaciones en cadena). Es "best effort": si no se
 // puede mapear el símbolo a un ID de CoinGecko, devuelve null sin romper el resto del análisis.
 async function fetchOIToMarketCapRatio(symbolRaw, currentPrice){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
   try{
     const oiRes = await fetchJSON(`${FUTURES}/fapi/v1/openInterest?symbol=${pair}`);
@@ -143,7 +143,7 @@ async function fetchOIToMarketCapRatio(symbolRaw, currentPrice){
 // movimiento viene de apalancamiento (posiciones), no de demanda/oferta real — información valiosa
 // que un solo "volumen total" no distingue.
 async function fetchSpotFuturesFlow(symbolRaw, tf='15m'){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
   try{
     const [spotRows, futRows] = await Promise.all([
@@ -228,7 +228,7 @@ async function tryGecko(query, tf){
 }
 
 async function tryOKX(symbolRaw, tf){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const instId = `${sym}-USDT`;
   const bar = TF_MAP[tf].okx;
   const res = await fetchJSON(`https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=220`);
@@ -244,7 +244,7 @@ async function tryOKX(symbolRaw, tf){
   };
 }
 async function tryBybit(symbolRaw, tf){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = `${sym}USDT`;
   const interval = TF_MAP[tf].bybit;
   const res = await fetchJSON(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${pair}&interval=${interval}&limit=200`);
@@ -261,7 +261,7 @@ async function tryBybit(symbolRaw, tf){
   };
 }
 async function tryMEXC(symbolRaw, tf){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = `${sym}USDT`;
   const interval = TF_MAP[tf].mexc;
   const klines = await fetchJSON(`https://api.mexc.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=220`);
@@ -276,7 +276,7 @@ async function tryMEXC(symbolRaw, tf){
   };
 }
 async function tryGate(symbolRaw, tf){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = `${sym}_USDT`;
   const interval = TF_MAP[tf].gate;
   const rows = await fetchJSON(`https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${pair}&interval=${interval}&limit=220`);
@@ -291,7 +291,7 @@ async function tryGate(symbolRaw, tf){
   };
 }
 async function tryKuCoin(symbolRaw, tf){
-  const sym = symbolRaw.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const sym = normalizarSimbolo(symbolRaw);
   const pair = `${sym}-USDT`;
   const type = TF_MAP[tf].kucoin;
   const secPerCandle = TF_MAP[tf].kucoinSec;
@@ -312,6 +312,29 @@ async function tryKuCoin(symbolRaw, tf){
   };
 }
 
+// Normaliza lo que escribe la persona a un símbolo limpio.
+// Antes cada fuente hacía .replace(/[^A-Z0-9]/g,'') y después le pegaba 'USDT' — así que si
+// escribías "BICOUSDT" o "BICO/USDT" terminaba buscando "BICOUSDTUSDT", que no existe en ningún
+// exchange, y el resultado era "moneda no encontrada" aunque la moneda estuviera perfectamente.
+function normalizarSimbolo(entrada){
+  let s = String(entrada||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  // Se saca el par del final solo si queda algo antes (para no romper "USDT" a secas)
+  for(const sufijo of ['USDT','USDC','BUSD','USD']){
+    if(s.endsWith(sufijo) && s.length > sufijo.length){ s = s.slice(0, -sufijo.length); break; }
+  }
+  return s;
+}
+
+// Corre una promesa con límite de tiempo. Sin esto, una fuente que cuelga bloquea a todas las que
+// vienen después: el buscador prueba 6 exchanges en fila, y cada uno puede reintentar con 4 proxies
+// de 10 segundos — o sea que una moneda podía tardar minutos o directamente no cargar nunca.
+function conTiempoLimite(promesa, ms, etiqueta){
+  return Promise.race([
+    promesa,
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error(`${etiqueta}: se agotó el tiempo (${ms}ms)`)), ms)),
+  ]);
+}
+
 async function fetchTokenData(query, tf){
   // Volvimos a probar cada exchange UNA POR VEZ, en fila — lo probé en paralelo (Promise.allSettled)
   // pensando que sería más rápido, pero fue al revés: esa función espera a que TODAS terminen (ganen
@@ -320,14 +343,27 @@ async function fetchTokenData(query, tf){
   // en fallar del todo, no la de la primera en responder bien. Orden actualizado: Binance primero
   // (la más completa), MEXC segundo (mejor cobertura de altcoins chicas), después el resto.
   const sources = [tryBinance, tryMEXC, tryOKX, tryBybit, tryGate, tryKuCoin];
+  const fallos = [];
   for(const src of sources){
     try{
-      const data = await src(query, tf);
+      // 6 segundos por fuente: si no responde en ese tiempo, se pasa a la siguiente en vez de
+      // quedarse colgado. Con 6 fuentes, el peor caso pasa de varios minutos a ~36 segundos.
+      const data = await conTiempoLimite(src(query, tf), 6000, src.name);
       if(data.candles && data.candles.length>=30) return data;
-    }catch(e){ /* probamos con la siguiente fuente */ }
+      fallos.push(`${src.name}: sin velas suficientes`);
+    }catch(e){ fallos.push(`${src.name}: ${e.message}`); }
   }
   // ninguna fuente de exchanges centralizados lo tiene -> probamos DEXs (GeckoTerminal)
-  return await tryGecko(query, tf);
+  try{
+    return await conTiempoLimite(tryGecko(query, tf), 8000, 'GeckoTerminal');
+  }catch(e){
+    fallos.push(`GeckoTerminal: ${e.message}`);
+    // Error que dice QUÉ pasó en cada fuente, en vez de un "no encontrada" a secas. Una API caída
+    // no es lo mismo que una moneda inexistente.
+    const err = new Error(`No se pudo obtener datos de "${query}". Intentos: ${fallos.join(' | ')}`);
+    err.detalleFuentes = fallos;
+    throw err;
+  }
 }
 
 // Tendencia macro (4h, EMA200) usada como filtro: no se opera contra la tendencia mayor sin confluencia extrema
