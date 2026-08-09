@@ -1315,6 +1315,49 @@ function detectFVG(candles, lookback=60){
   return unfilled.slice(-2);
 }
 
+// IFVG (Inverse Fair Value Gap): cuando un imbalance es ATRAVESADO por completo, cambia de rol.
+// Un FVG alcista que el precio perfora hacia abajo deja de ser soporte y pasa a ser resistencia —
+// los que compraron ahí quedaron atrapados y venden al volver al nivel. Y al revés para el bajista.
+// Es de las zonas más confiables porque hay órdenes atrapadas defendiéndola.
+function detectIFVG(candles, lookback=80){
+  if(!candles || candles.length < 10) return [];
+  const start = Math.max(2, candles.length-lookback);
+  const gaps = [];
+  for(let i=start;i<candles.length;i++){
+    const c1=candles[i-2], c3=candles[i];
+    if(c1.h < c3.l) gaps.push({type:'bull', top:c3.l, bottom:c1.h, idx:i-1});
+    if(c1.l > c3.h) gaps.push({type:'bear', top:c1.l, bottom:c3.h, idx:i-1});
+  }
+  const price = candles.at(-1).c;
+  const invertidos = [];
+  for(const g of gaps){
+    // ¿Alguna vela POSTERIOR cerró completamente del otro lado del gap?
+    let violado = false, idxViolacion = null;
+    for(let j=g.idx+2; j<candles.length; j++){
+      if(g.type==='bull' && candles[j].c < g.bottom){ violado = true; idxViolacion = j; break; }
+      if(g.type==='bear' && candles[j].c > g.top){ violado = true; idxViolacion = j; break; }
+    }
+    if(!violado) continue;
+    // Ya invertido: ahora funciona al revés. Solo interesa si el precio todavía no volvió a testearlo
+    // desde el nuevo lado (si ya lo testeó y lo perforó otra vez, perdió validez).
+    const rolNuevo = g.type==='bull' ? 'resistencia' : 'soporte';
+    const relevante = g.type==='bull' ? (price < g.bottom) : (price > g.top);
+    if(!relevante) continue;
+    const distPct = g.type==='bull'
+      ? (g.bottom - price)/price*100
+      : (price - g.top)/price*100;
+    invertidos.push({
+      tipoOriginal: g.type,
+      rolNuevo,
+      top: g.top, bottom: g.bottom,
+      distPct: Math.abs(distPct),
+      idxViolacion,
+    });
+  }
+  // Los más cercanos al precio primero
+  return invertidos.sort((a,b)=>a.distPct-b.distPct).slice(0,2);
+}
+
 // Detección de CLUSTERS de liquidez (no solo pares): agrupa todos los pivots que caen dentro de la
 // tolerancia entre sí. Un cluster de 3+ toques es un pool de liquidez mucho más fuerte que uno de 2.
 function detectEqualLevels(labeledPivots, tolerancePct=0.0015){
@@ -1567,6 +1610,8 @@ function computeStructure(candles, atrArr){
   const events = detectStructureEvents(candles, pivots);
   const {bullishOB, bearishOB} = detectOrderBlocks(candles, atrArr);
   const fvgs = detectFVG(candles);
+
+
   const {eqHighs, eqHighsCount, eqLows, eqLowsCount} = detectEqualLevels(pivots);
   const fib = fibLevels(pivots);
   const candlePattern = detectCandlePattern(candles);
@@ -1574,6 +1619,41 @@ function computeStructure(candles, atrArr){
   const doubleTopBottom = detectDoubleTopBottom(candles);
 
   let score=10, notes=[];
+
+  // ═══ IMBALANCES (FVG) CON PESO REAL EN EL SCORE ═══
+  // Antes se detectaban pero no sumaban nada. El concepto: un movimiento agresivo deja una zona
+  // sin negociar, y el precio vuelve a buscarla con precisión para rellenarla antes de continuar.
+  // Cuando el precio se acerca a un imbalance sin rellenar, esa es una zona de reacción probable.
+  const precioFvg = candles.at(-1).c;
+  for(const g of fvgs){
+    const dentro = precioFvg >= g.bottom*0.998 && precioFvg <= g.top*1.002;
+    const cerca = !dentro && Math.abs((g.type==='bull' ? g.top : g.bottom) - precioFvg)/precioFvg < 0.02;
+    if(!dentro && !cerca) continue;
+    if(g.type==='bull'){
+      score += dentro ? 3 : 1;
+      notes.push(`📊 Imbalance alcista sin rellenar en $${fmt(g.bottom)}–$${fmt(g.top)}${dentro?' y el precio está adentro':' cerca del precio'}. El mercado suele volver a estas zonas a buscar eficiencia y reaccionar desde ahí.`);
+    } else {
+      score -= dentro ? 3 : 1;
+      notes.push(`📊 Imbalance bajista sin rellenar en $${fmt(g.bottom)}–$${fmt(g.top)}${dentro?' y el precio está adentro':' cerca del precio'}. El mercado suele volver a estas zonas a buscar eficiencia y reaccionar desde ahí.`);
+    }
+  }
+
+  // ═══ IFVG: imbalances INVERTIDOS ═══
+  // Un imbalance atravesado cambia de rol: el alcista roto pasa a ser resistencia (los que
+  // compraron ahí quedaron atrapados y venden al volver), el bajista roto pasa a ser soporte.
+  // Son zonas fuertes justamente porque hay órdenes atrapadas defendiéndolas.
+  const ifvgs = detectIFVG(candles);
+  for(const g of ifvgs){
+    if(g.distPct > 2.5) continue; // solo los que están cerca del precio
+    if(g.rolNuevo === 'resistencia'){
+      score -= 2;
+      notes.push(`🔀 IFVG bajista: había un imbalance alcista en $${fmt(g.bottom)}–$${fmt(g.top)} que el precio perforó. Ahora funciona como resistencia — los que compraron ahí quedaron atrapados y suelen vender al volver al nivel.`);
+    } else {
+      score += 2;
+      notes.push(`🔀 IFVG alcista: había un imbalance bajista en $${fmt(g.bottom)}–$${fmt(g.top)} que el precio superó. Ahora funciona como soporte — los que vendieron ahí quedaron atrapados y suelen recomprar al volver.`);
+    }
+  }
+
   const bias = events.trendStructure;
   notes.push(bias==='bull' ? 'Estructura HH-HL: tendencia alcista intacta.' : bias==='bear' ? 'Estructura LH-LL: tendencia bajista intacta.' : 'Estructura sin secuencia clara (rango).');
   if(events.bos){ score+=5; notes.push(`BOS ${events.bos==='bullish'?'alcista':'bajista'}: continuación confirmada rompiendo el swing previo.`); }
@@ -1764,7 +1844,7 @@ function computeStructure(candles, atrArr){
   }
 
   score = Math.max(0, Math.min(20, score));
-  return {score, notes, events, bullishOB, bearishOB, fvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, doubleTopBottom, resistanceTests, supportTests, accBearTrap, distBullTrap};
+  return {score, notes, events, bullishOB, bearishOB, fvgs, ifvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, doubleTopBottom, resistanceTests, supportTests, accBearTrap, distBullTrap};
 }
 
 // ---------- Scoring ----------
@@ -2385,6 +2465,11 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
       ? Math.max(0.10, Math.min(0.15, atrPct*3))
       : Math.max(0.01, Math.min(0.02, atrPct*1.5));
     if((price-stop)/price < MIN_STOP_PCT) stop = price*(1-MIN_STOP_PCT);
+    // TECHO MÁXIMO del stop. MIN_STOP_PCT es un PISO — sin un techo, si el soporte estructural
+    // está lejísimos el stop se va con él. Caso real: BICO con el stop a 68% del precio, lo que
+    // obligaba a un TP1 en +102% (la moneda tenía que duplicar para ganar). Sin sentido operativo.
+    const MAX_STOP_PCT = esCapChico ? 0.15 : 0.06;
+    if((price-stop)/price > MAX_STOP_PCT) stop = price*(1-MAX_STOP_PCT);
 
     // ═══ STOP MÁS ALLÁ DE LA LIQUIDEZ ═══
     // Si el stop queda JUSTO ANTES de un nivel con liquidez acumulada, el precio va a barrer esa
@@ -2446,6 +2531,8 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
       ? Math.max(0.10, Math.min(0.15, atrPctShort*3))
       : Math.max(0.01, Math.min(0.02, atrPctShort*1.5));
     if((stop-price)/price < MIN_STOP_PCT_SHORT) stop = price*(1+MIN_STOP_PCT_SHORT);
+    const MAX_STOP_PCT_SHORT = esCapChico ? 0.15 : 0.06;
+    if((stop-price)/price > MAX_STOP_PCT_SHORT) stop = price*(1+MAX_STOP_PCT_SHORT);
 
     // Mismo criterio que en LONG: el stop va POR ENCIMA del nivel de liquidez más importante,
     // porque ahí es donde el precio va a barrer stops antes de girar a la baja.
@@ -2482,6 +2569,11 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
   } else {
     dir='NEUTRAL / ESPERAR'; entryLow=support; entryHigh=resistance;
     stop=support-risk; t1=resistance; t2=resistance+risk; t3=resistance+risk*2;
+    // Mismo techo que en las ramas LONG/SHORT. Sin esto, en una moneda que subió mucho el soporte
+    // queda lejísimos y el stop se va con él — caso real de BICO: stop a 68% del precio, con un
+    // TP1 en +102%. Esta rama es la que producía ese setup.
+    const MAX_STOP_NEUTRAL = esCapChico ? 0.15 : 0.06;
+    if(stop < price*(1-MAX_STOP_NEUTRAL)) stop = price*(1-MAX_STOP_NEUTRAL);
   }
   const volPct = (lastATR/price)*100;
   let leverage='1x - 2x';
@@ -2595,7 +2687,7 @@ export {
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, fetchUnlockRisk, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
-  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, detectLiquidezPorHorizonte, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
+  ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, detectLiquidezPorHorizonte, detectIFVG, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectDoubleTopBottom, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
   computeScore, buildAnalystMode, buildSetup,
