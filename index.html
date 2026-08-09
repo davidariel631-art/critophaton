@@ -1084,6 +1084,10 @@ const goBtn = document.getElementById('goBtn');
 const input = document.getElementById('tokenInput');
 
 function setStatus(msg){ statusEl.textContent = msg || ''; }
+// Versión que sí interpreta HTML, para los mensajes de error con detalle por fuente.
+// setStatus normal usa textContent a propósito (evita inyección con texto que venga de fuera);
+// esta se usa solo con texto armado acá adentro, nunca con datos de una API.
+function setStatusHTML(html){ statusEl.innerHTML = html || ''; }
 const CORS_PROXIES_WEB = [
   url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
   url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
@@ -1445,7 +1449,16 @@ async function analyze(qOverride){
   setStatus(`Buscando ${q} (Binance → OKX → Bybit → MEXC → Gate.io → DEX)...`);
   let data;
   try{ data = await fetchTokenData(q, currentTF); }
-  catch(e){ setStatus('No se encontró el token en ninguna fuente. Probá el símbolo exacto o pegá el contrato completo.'); goBtn.disabled=false; return; }
+  catch(e){
+    // Se muestra QUÉ falló en cada fuente. Una API caída no es lo mismo que una moneda inexistente,
+    // y el mensaje anterior ("no se encontró en ninguna fuente") mezclaba las dos cosas.
+    const detalle = e.detalleFuentes?.length
+      ? `<br><span style="font-size:11px;color:var(--sub);">${e.detalleFuentes.map(d=>'• '+d).join('<br>')}</span>`
+      : '';
+    const huboTimeouts = (e.detalleFuentes||[]).some(d=>d.includes('se agotó el tiempo'));
+    setStatusHTML(`<b>No se pudo traer los datos de "${q}".</b>${huboTimeouts ? ' Algunas fuentes tardaron demasiado en responder — puede ser un problema temporal, probá de nuevo en un minuto.' : ' Revisá el símbolo, o pegá el contrato completo si es un token de DEX.'}${detalle}`);
+    goBtn.disabled=false; return;
+  }
   if(!data.candles || data.candles.length < 30){ setStatus('Datos insuficientes para un análisis confiable.'); goBtn.disabled=false; return; }
   setStatus('Chequeando tendencia macro (4h), Open Interest, funding, flujo de capital, fuerza relativa y memoria compartida...');
   const [macro, sharedMemory, oiTrendData, fundingTrendData, capitalFlow, btcReference, spotFutFlow] = await Promise.all([
