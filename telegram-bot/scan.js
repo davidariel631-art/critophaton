@@ -673,10 +673,15 @@ function analystSummary(result){
 async function confirmTheses(state, capitalFlow){
   const acc = state.account;
   const stillWatching = [];
+  // Contabilidad de la fase: sin esto, una tesis que falla por un error de red vuelve a la lista
+  // como si nada y nunca te enterás de que en realidad no se analizó.
+  const _cuenta = { total: 0, analizadas: 0, fallidas: 0, expiradas: 0, confirmadas: 0, fallos: [] };
   for(const thesis of acc.theses){
     if(thesis.status !== 'WATCHING'){ stillWatching.push(thesis); continue; }
+    _cuenta.total++;
 
     if(Date.now() > thesis.expiresAt){
+      _cuenta.expiradas++;
       // Modo Aprendizaje Pasivo: simula qué hubiera pasado si igual hubiésemos entrado con el setup
       // teórico de la detección original. Sirve para medir si el filtro de confirmación realmente
       // ayuda (compara win rate de confirmadas vs. win rate simulado de las que el filtro descartó).
@@ -712,6 +717,14 @@ async function confirmTheses(state, capitalFlow){
       const btcReference = data15.displayName!=='BTC' ? await fetchBTCReference('15m').catch(()=>null) : null;
       const marketContext15 = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
       const result15 = computeScore(data15, macro, [], state.memory, marketContext15, btcReference);
+      // priceNow se declara ACÁ, apenas existe result15. Antes estaba declarado ~170 líneas más
+      // abajo pero se usaba mucho antes (en la entrada anticipada en zona y en el Fibonacci), lo
+      // que en JavaScript lanza "Cannot access 'priceNow' before initialization" — la Temporal Dead
+      // Zone de const. El catch de cada moneda lo capturaba y la dejaba en WATCHING, así que el
+      // proceso no moría: simplemente NINGUNA tesis podía confirmar nunca. Eso explica los días
+      // enteros sin abrir una sola operación.
+      const priceNow = result15?.metrics?.price ?? data15?.price;
+      if(!Number.isFinite(priceNow)) throw new Error(`Precio actual inválido para ${thesis.symbol}`);
 
       const alineado = result15.recommendation === thesis.dir;
       const bosAFavor = thesis.dir==='LONG' ? result15.structure?.events?.bos==='bullish' : result15.structure?.events?.bos==='bearish';
@@ -878,7 +891,6 @@ async function confirmTheses(state, capitalFlow){
       // (sin romper la tendencia) es una entrada conservadora clásica de trend-following.
       const mt = result15.metrics;
       const st15 = result15.structure;
-      const priceNow = mt.price;
       const nearEMA20 = Math.abs(priceNow - mt.lastE20)/priceNow < 0.01;
       const nearEMA50 = Math.abs(priceNow - mt.lastE50)/priceNow < 0.015;
       const ob15 = thesis.dir==='LONG' ? st15?.bullishOB : st15?.bearishOB;
@@ -1127,6 +1139,18 @@ async function confirmTheses(state, capitalFlow){
         stillWatching.push(thesis);
         continue;
       }
+      // Diagnóstico: qué camino confirmó (o cuáles faltaron). Sin esto no hay forma de saber
+      // cuál de los 12 caminos está haciendo el trabajo real y cuál nunca se activa.
+      const _caminos = {
+        BOS: bosAFavor, Confianza: confianzaSubio, Confluencia: confluenceAFavor,
+        Trap: bearTrapConfirmacion, Pullback: pullbackConfirmacion, ImanLiq: liquidityMagnetConfirmacion,
+        Patron: patronCompletoConfirmacion, MACDtemprano: macdEarlyAFavor, SFP: sfpConfirmacion,
+        EMA50short: ema50ShortConfirmacion, GatilloStoch: gatilloEstocastico,
+        Fibonacci: fibConLiquidez, EntradaZona: entradaEnZona,
+      };
+      const _activos = Object.entries(_caminos).filter(([,v])=>v).map(([k])=>k);
+      console.log(`  [${thesis.symbol}] alineado:${alineado?'✅':'❌'} | caminos: ${_activos.length? _activos.join(', ') : 'ninguno'}`);
+
       if(alineado && (bosAFavor || confianzaSubio || confluenceAFavor || bearTrapConfirmacion || pullbackConfirmacion || liquidityMagnetConfirmacion || patronCompletoConfirmacion || macdEarlyAFavor || sfpConfirmacion || ema50ShortConfirmacion || gatilloEstocastico || fibConLiquidez || entradaEnZona)){
         // Las monedas de cap chico llevan el tag ' (cap chico)' — se les aplica stop ancho (10-15%)
         // y apalancamiento fijo 5x, porque se mueven mucho más que las grandes y un stop de 1-2%
@@ -1501,9 +1525,28 @@ async function confirmTheses(state, capitalFlow){
         journal(thesis, `Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando.`);
         stillWatching.push(thesis);
       }
-    }catch(e){ console.error('Error confirmando', thesis.symbol, e.message); stillWatching.push(thesis); }
+    }catch(e){
+      // Un solo reintento: la mayoría de estos fallos son de red (rate limit, timeout puntual),
+      // y sin reintento esa moneda se queda sin analizar hasta la próxima corrida.
+      let recuperada = false;
+      try{
+        await new Promise(res=>setTimeout(res, 1200));
+        const reintento = await fetchTokenData(thesis.symbol, '15m');
+        if(reintento?.candles?.length){
+          recuperada = true;
+          console.log(`  [${thesis.symbol}] falló y se recuperó en el reintento — se revisa en la próxima corrida.`);
+        }
+      }catch(e2){ /* si el reintento también falla, se registra abajo */ }
+      _cuenta.fallidas++;
+      _cuenta.fallos.push(`${thesis.symbol}: ${e.message}`);
+      if(!recuperada) console.error('Error confirmando', thesis.symbol, e.message);
+      stillWatching.push(thesis);
+    }
     await new Promise(res=>setTimeout(res, 300));
   }
+  const _ok = _cuenta.total - _cuenta.fallidas - _cuenta.expiradas;
+  console.log(`  → Fase 2: ${_cuenta.total} tesis en espera · ${_ok} analizadas · ${_cuenta.expiradas} expiradas · ${_cuenta.fallidas} con error`);
+  if(_cuenta.fallidas > 0) console.log(`     Fallaron: ${_cuenta.fallos.slice(0,8).join(' | ')}${_cuenta.fallos.length>8?' …':''}`);
   acc.theses = stillWatching;
 }
 
@@ -1854,7 +1897,14 @@ async function main(){
 
   await Promise.all(sendPromises);
   saveState(state);
-  console.log('--- Listo. Capital de TheHaton:', state.account.capital, '· Tesis abiertas:', state.account.theses.length, '---');
+  // Desglose por estado: "47 tesis" no dice nada si no se sabe cuántas están esperando y cuántas
+  // realmente abiertas. Con el bug de priceNow, TODAS quedaban atascadas en WATCHING y el número
+  // total no lo dejaba ver.
+  const _tesis = state.account.theses || [];
+  const _watching = _tesis.filter(t => !t.entry).length;
+  const _active = _tesis.filter(t => t.entry).length;
+  console.log('--- Listo. Capital de TheHaton:', state.account.capital,
+    `· Tesis: ${_tesis.length} (🟡 esperando confirmación: ${_watching} · 🟢 operaciones abiertas: ${_active}) ---`);
 }
 
 main().catch(e=>{ console.error('Error fatal:', e); process.exit(1); });
