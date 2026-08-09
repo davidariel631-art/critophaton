@@ -741,6 +741,29 @@
 
   <div class="tabpanel" id="panel-heatmap">
     <div class="card">
+      <h2>🌡️ Termómetro del mercado</h2>
+      <div class="hint" style="margin-top:0;margin-bottom:12px;">Todas las monedas ubicadas según su Estocástico. Arriba las sobrecompradas (agotadas al alza), abajo las sobrevendidas (agotadas a la baja). Tocá cualquiera para analizarla.</div>
+      <div class="tf-group" id="screenerTfRow" style="margin-bottom:10px;">
+        <button class="tf-btn" data-scrtf="15m">15m</button>
+        <button class="tf-btn" data-scrtf="1h">1h</button>
+        <button class="tf-btn active" data-scrtf="4h">4h</button>
+        <button class="tf-btn" data-scrtf="1d">1D</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <button class="searchbar-btn" id="screenerGoBtn" style="background:var(--amber);color:#00131a;border:none;border-radius:9px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;">Cargar termómetro</button>
+        <select id="screenerCant" style="background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-size:12.5px;">
+          <option value="80">80 monedas</option>
+          <option value="150" selected>150 monedas</option>
+          <option value="250">250 monedas</option>
+        </select>
+      </div>
+      <div id="screenerStatus" class="subrow"></div>
+      <div id="screenerBox" style="display:none;">
+        <div id="screenerPlot" style="position:relative;width:100%;height:560px;background:#050505;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:10px;"></div>
+        <div id="screenerResumen" class="subrow" style="margin-top:10px;"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:18px;">
       <h2>📊 Los valores con mayor variación hoy 💪🏻</h2>
       <div class="hint" style="margin-top:0;">Se busca entre ~1000 monedas (no solo las 50 más grandes), para que aparezcan también las chicas que se están moviendo fuerte.</div>
       <div id="topMoversStatus" class="subrow">Cargando…</div>
@@ -2511,6 +2534,145 @@ function renderTopMovers(all){
       });
     });
 }
+
+// ═══════════════════════════════════════════════════════════════
+// TERMÓMETRO DEL MERCADO
+// Ubica todas las monedas según su Estocástico, para ver de un vistazo cuáles están agotadas
+// al alza (sobrecompradas) y cuáles al baja (sobrevendidas). Es un buscador de oportunidades:
+// en vez de esperar que el motor elija una, se ve el mercado entero y se elige a mano.
+// ═══════════════════════════════════════════════════════════════
+let screenerTf = '4h';
+
+async function cargarTermometro(){
+  const status = document.getElementById('screenerStatus');
+  const box = document.getElementById('screenerBox');
+  const cant = parseInt(document.getElementById('screenerCant').value, 10);
+  status.textContent = 'Buscando las monedas con más volumen...';
+  box.style.display = 'none';
+
+  try{
+    // Un solo pedido trae TODOS los pares con su volumen — de ahí se eligen los más líquidos.
+    const tickers = await fetchJSON('https://api.binance.com/api/v3/ticker/24hr');
+    const pares = tickers
+      .filter(t => t.symbol.endsWith('USDT') && !/UP|DOWN|BULL|BEAR/.test(t.symbol))
+      .sort((a,b) => parseFloat(b.quoteVolume) - parseFloat(a.quoteVolume))
+      .slice(0, cant);
+
+    const intervalo = screenerTf === '1d' ? '1d' : screenerTf;
+    const resultados = [];
+    const LOTE = 12; // de a 12 en paralelo: rápido sin que Binance corte por exceso de pedidos
+
+    for(let i=0; i<pares.length; i+=LOTE){
+      const lote = pares.slice(i, i+LOTE);
+      status.textContent = `Analizando ${Math.min(i+LOTE, pares.length)} de ${pares.length} monedas...`;
+      const datos = await Promise.all(lote.map(async p => {
+        try{
+          const kl = await fetchJSON(`https://api.binance.com/api/v3/klines?symbol=${p.symbol}&interval=${intervalo}&limit=60`);
+          if(!Array.isArray(kl) || kl.length < 20) return null;
+          const velas = kl.map(k => ({t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5]}));
+          const st = TheHatonEngine.stochasticOscillator(velas);
+          const k = st.k.filter(v=>v!=null).at(-1);
+          if(k==null || isNaN(k)) return null;
+          return {
+            sym: p.symbol.replace('USDT',''),
+            k,
+            chg: parseFloat(p.priceChangePercent) || 0,
+            vol: parseFloat(p.quoteVolume) || 0,
+          };
+        }catch(e){ return null; }
+      }));
+      resultados.push(...datos.filter(Boolean));
+    }
+
+    if(!resultados.length){ status.textContent = 'No se pudieron traer los datos. Probá de nuevo en un minuto.'; return; }
+    status.textContent = `✅ ${resultados.length} monedas analizadas en ${screenerTf}.`;
+    box.style.display = '';
+    dibujarTermometro(resultados);
+  }catch(e){
+    status.textContent = 'Error al cargar: ' + (e.message||'no se pudo conectar con Binance');
+  }
+}
+
+function dibujarTermometro(datos){
+  const cont = document.getElementById('screenerPlot');
+  const W = cont.clientWidth || 900, H = 560;
+  const margenSup = 14, margenInf = 14;
+  const alturaUtil = H - margenSup - margenInf;
+  // El eje vertical va de 100 (arriba) a 0 (abajo)
+  const yDe = k => margenSup + (100-k)/100 * alturaUtil;
+
+  // Bandas de fondo, con los mismos cortes que usa el motor
+  const bandas = [
+    {desde:80, hasta:100, color:'rgba(239,68,68,0.16)',  label:'SOBRECOMPRADO'},
+    {desde:60, hasta:80,  color:'rgba(239,68,68,0.07)',  label:'FUERTE'},
+    {desde:40, hasta:60,  color:'rgba(255,255,255,0.03)',label:'NEUTRAL'},
+    {desde:20, hasta:40,  color:'rgba(16,185,129,0.07)', label:'DÉBIL'},
+    {desde:0,  hasta:20,  color:'rgba(16,185,129,0.16)', label:'SOBREVENDIDO'},
+  ];
+  let html = bandas.map(b=>{
+    const y1 = yDe(b.hasta), y2 = yDe(b.desde);
+    return `<div style="position:absolute;left:0;right:0;top:${y1}px;height:${y2-y1}px;background:${b.color};"></div>
+            <div style="position:absolute;right:8px;top:${y1+4}px;font-size:9.5px;color:rgba(255,255,255,0.35);letter-spacing:1px;font-weight:600;">${b.label}</div>`;
+  }).join('');
+
+  // Reparto horizontal: se ordenan por Estocástico y se distribuyen para que no se encimen.
+  const orden = [...datos].sort((a,b)=>b.k-a.k);
+  const anchoUtil = W - 30;
+  const cols = Math.max(8, Math.floor(anchoUtil / 34));
+  // Se agrupan por franjas de 2 puntos de Estocástico para separar los que caen en el mismo nivel
+  const franjas = {};
+  orden.forEach(d=>{
+    const f = Math.floor(d.k/2);
+    (franjas[f] = franjas[f] || []).push(d);
+  });
+
+  Object.values(franjas).forEach(grupo=>{
+    grupo.forEach((d, idx)=>{
+      const y = yDe(d.k);
+      // Se reparten en abanico dentro de la franja
+      const x = 14 + ((idx * 37) % anchoUtil);
+      const color = d.k>=80 ? '#ef4444' : d.k>=60 ? '#f87171' : d.k<=20 ? '#10b981' : d.k<=40 ? '#34d399' : '#8b98a8';
+      const tamano = d.k>=80 || d.k<=20 ? 9 : 7;
+      html += `<div class="scr-punto" data-sym="${d.sym}" style="position:absolute;left:${x}px;top:${y}px;transform:translate(-50%,-50%);cursor:pointer;z-index:2;">
+        <div style="width:${tamano}px;height:${tamano}px;border-radius:50%;background:${color};margin:0 auto;box-shadow:0 0 6px ${color}66;"></div>
+        <div style="font-size:8.5px;color:${color};text-align:center;margin-top:2px;white-space:nowrap;font-weight:600;">${d.sym}</div>
+      </div>`;
+    });
+  });
+
+  // Línea del promedio
+  const promedio = datos.reduce((s,d)=>s+d.k,0)/datos.length;
+  html += `<div style="position:absolute;left:0;right:0;top:${yDe(promedio)}px;border-top:1px dashed rgba(245,158,11,0.7);z-index:3;"></div>
+           <div style="position:absolute;right:8px;top:${yDe(promedio)-16}px;font-size:10px;color:#f59e0b;font-weight:700;z-index:3;">PROMEDIO ${promedio.toFixed(1)}</div>`;
+
+  cont.innerHTML = html;
+
+  // Resumen debajo
+  const sobrecompradas = datos.filter(d=>d.k>=80);
+  const sobrevendidas = datos.filter(d=>d.k<=20);
+  const lista = arr => arr.sort((a,b)=>b.vol-a.vol).slice(0,8).map(d=>`${d.sym} (${d.k.toFixed(0)})`).join(', ') || '—';
+  document.getElementById('screenerResumen').innerHTML =
+    `<b style="color:var(--rose);">🔴 Sobrecompradas (${sobrecompradas.length}):</b> ${lista(sobrecompradas)}<br><br>` +
+    `<b style="color:var(--teal);">🟢 Sobrevendidas (${sobrevendidas.length}):</b> ${lista(sobrevendidas)}<br><br>` +
+    `<i>Promedio del mercado: ${promedio.toFixed(1)} — ${promedio>=60?'el mercado en general está caliente':promedio<=40?'el mercado en general está frío':'el mercado está equilibrado'}.</i>`;
+
+  // Tocar una moneda la manda a analizar
+  cont.querySelectorAll('.scr-punto').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      document.getElementById('tokenInput').value = el.dataset.sym;
+      switchTab('analizar');
+      document.getElementById('goBtn').click();
+    });
+  });
+}
+
+document.getElementById('screenerGoBtn')?.addEventListener('click', cargarTermometro);
+document.getElementById('screenerTfRow')?.addEventListener('click', e=>{
+  const btn = e.target.closest('.tf-btn'); if(!btn) return;
+  document.querySelectorAll('#screenerTfRow .tf-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  screenerTf = btn.dataset.scrtf;
+});
 
 async function loadHeatmap(){
   const statusEl2 = document.getElementById('heatmapStatus');
