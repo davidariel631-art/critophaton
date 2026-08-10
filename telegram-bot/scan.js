@@ -27,9 +27,9 @@ import fs from 'fs';
 import webpush from 'web-push';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
-  fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk,
+  fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -79,7 +79,7 @@ async function runMarketPulse(state, capitalFlow){
       const macro = tf==='1d' ? null : await fetchMacroTrend('BTC').catch(()=>null);
       const oiTrendData = await fetchOpenInterestTrend('BTC', tf).catch(()=>null);
       const fundingTrendData = await fetchFundingTrend('BTC').catch(()=>null);
-      const mc = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
+      const mc = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow, usdStrength: await fetchUsdStrength().catch(()=>null) };
       results[tf] = computeScore(data, macro, [], state.memory, mc, null);
       if(tf==='4h') results['4h'].rawData = data; // guardamos el precio actual real de esta temporalidad
     }
@@ -548,6 +548,98 @@ function journal(thesis, note){
   console.log(`  [${thesis.symbol}] ${note}`);
 }
 
+// ═══ TIMELINE DE LA TESIS ═══
+// El diario guarda TODO lo que pasa (incluidos los "sigo esperando" repetidos cada 30 min, que
+// terminan siendo decenas de entradas iguales). El timeline guarda solo los HITOS: detectada,
+// confirmada, entrada, TP1, breakeven, cierre. Sirve para ver de un vistazo qué pasó con cada
+// operación, y para después medir cuánto tarda cada etapa.
+// ═══ CIERRE UNIFICADO ═══
+// Hay 5 caminos distintos por los que una operación puede cerrarse, y tres de ellos NO guardaban
+// pnlPct — o sea que el Research Center no podía analizarlas. Esta función garantiza que todos
+// registren exactamente los mismos campos y disparen el post-mortem.
+function cerrarOperacion(acc, thesis, exit, pnlUsd, motivo, sendPromises){
+  const pnlPct = (thesis.entry && exit)
+    ? +((exit-thesis.entry)/thesis.entry*100*(thesis.dir==='LONG'?1:-1)).toFixed(3)
+    : null;
+  const cerrada = {
+    ...thesis, exit,
+    result: pnlUsd>=0 ? 'win' : 'loss',
+    pnl: +pnlUsd.toFixed(4),
+    pnlUsd: +pnlUsd.toFixed(4),
+    pnlPct,
+    motivoCierre: motivo,
+    closedAt: Date.now(),
+  };
+  acc.closedTrades.push(cerrada);
+  // Post-mortem: qué esperaba, qué pasó, qué componente acertó. Solo con datos registrados.
+  try{
+    const pm = postMortem(cerrada, acc.closedTrades.slice(0,-1));
+    if(pm?.texto && sendPromises) sendPromises.push(sendTelegram(`🔍 <b>POST-MORTEM</b>\n━━━━━━━━━━━━━━━━━━━━\n${pm.texto}`));
+  }catch(e){ console.error('Error en post-mortem', thesis.symbol, e.message); }
+  return cerrada;
+}
+
+function hito(thesis, etapa, detalle){
+  if(!thesis.timeline) thesis.timeline = [];
+  // No se repite el mismo hito dos veces (por ejemplo si una corrida se solapa con otra)
+  if(thesis.timeline.some(h=>h.etapa===etapa)) return;
+  thesis.timeline.push({ ts: Date.now(), etapa, detalle: detalle||'' });
+}
+
+// Arma el timeline en texto para mostrarlo en Telegram o en la web.
+function timelineTexto(thesis){
+  if(!thesis.timeline?.length) return '';
+  const inicio = thesis.timeline[0].ts;
+  return thesis.timeline.map(h=>{
+    const min = Math.round((h.ts-inicio)/60000);
+    const cuando = min===0 ? 'inicio' : min<60 ? `+${min}min` : `+${(min/60).toFixed(1)}hs`;
+    return `${h.etapa} <i>(${cuando})</i>${h.detalle?` — ${h.detalle}`:''}`;
+  }).join('\n');
+}
+
+// ═══ EVALUAR SEÑALES SOMBRA ═══
+// Revisa las señales que se rechazaron por poco y comprueba qué habría pasado.
+// Se evalúan 24 horas después de registrarlas, comparando contra el precio actual.
+async function evaluarShadowSignals(state){
+  const pendientes = (state.shadowSignals||[]).filter(s => !s.evaluada && (Date.now()-s.detectadaEn) > 24*3600*1000);
+  if(!pendientes.length) return;
+  console.log(`--- Evaluando ${pendientes.length} señal(es) sombra de hace 24hs ---`);
+
+  for(const s of pendientes.slice(0, 12)){ // de a 12 por corrida, para no saturar las APIs
+    try{
+      const d = await fetchTokenData(s.symbol, '15m');
+      if(!d?.candles?.length){ s.evaluada = true; s.resultado = 'sin datos'; continue; }
+      // Se busca si tocó el TP1 o el stop en las velas posteriores
+      const desde = d.candles.filter(v => v.t >= s.detectadaEn);
+      if(desde.length < 4){ continue; } // todavía no hay suficientes velas, se reintenta después
+      let tocoTp = false, tocoStop = false;
+      for(const v of desde){
+        if(s.dir === 'LONG'){
+          if(v.l <= s.stop){ tocoStop = true; break; }
+          if(v.h >= s.tp1){ tocoTp = true; break; }
+        } else {
+          if(v.h >= s.stop){ tocoStop = true; break; }
+          if(v.l <= s.tp1){ tocoTp = true; break; }
+        }
+      }
+      s.evaluada = true;
+      s.resultado = tocoTp ? 'habría ganado' : tocoStop ? 'habría perdido' : 'sin definir';
+      s.evaluadaEn = Date.now();
+    }catch(e){ /* se reintenta en la próxima corrida */ }
+    await new Promise(r=>setTimeout(r, 250));
+  }
+
+  // Resumen: ¿el umbral está bien puesto?
+  const evaluadas = (state.shadowSignals||[]).filter(s => s.evaluada && ['habría ganado','habría perdido'].includes(s.resultado));
+  if(evaluadas.length >= 10){
+    const ganadoras = evaluadas.filter(s => s.resultado === 'habría ganado').length;
+    const wr = (ganadoras/evaluadas.length*100).toFixed(1);
+    console.log(`  → Señales sombra: ${evaluadas.length} evaluadas, ${wr}% habrían ganado.`);
+    if(parseFloat(wr) >= 55) console.log(`     ⚠️ Las señales rechazadas por poco están ganando ${wr}%. El umbral de ${THRESHOLD} podría estar demasiado alto.`);
+    else if(parseFloat(wr) <= 40) console.log(`     ✅ Solo ganan ${wr}%: el umbral está filtrando bien.`);
+  }
+}
+
 // ---------- Fase 1: escanear 4h/1D en busca de nuevas tesis (usa el motor completo) ----------
 async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
   const acc = state.account;
@@ -584,6 +676,31 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
 
       updateSharedMemory(state, symbol, result.recommendation);
 
+      // ═══ SEÑALES SOMBRA ═══
+      // Las que quedaron cerca del umbral pero no llegaron. Se registran con lo que hubiera sido
+      // el setup, para después poder responder: "¿las que rechazamos por 0,2 puntos habrían ganado?".
+      // Permite ajustar el umbral con evidencia, sin arriesgar plata.
+      if(result.recommendation !== 'NO OPERAR' && best >= THRESHOLD - 0.8 && best < THRESHOLD){
+        try{
+          const setupSombra = buildSetup(data, result, 'balanced', null, (tag||'').includes('cap chico'));
+          state.shadowSignals = state.shadowSignals || [];
+          state.shadowSignals.push({
+            symbol, tag: tag||'', dir: result.recommendation,
+            score: +best.toFixed(2), faltaba: +(THRESHOLD - best).toFixed(2),
+            confianza: result.confidence,
+            precio: result.metrics.price,
+            stop: setupSombra.stop, tp1: setupSombra.t1, tp2: setupSombra.t2,
+            marketPhase: (()=>{ try{ return detectMarketPhase(data.candles)?.fase ?? null; }catch(e){ return null; } })(),
+            detectadaEn: Date.now(),
+            // Se evalúa sola más adelante, comparando contra el precio de ese momento
+            evaluada: false, resultado: null,
+          });
+          // Se guardan las últimas 200 para no inflar el archivo de estado
+          if(state.shadowSignals.length > 200) state.shadowSignals = state.shadowSignals.slice(-200);
+          console.log(`  ${symbol}: señal sombra registrada (${best.toFixed(2)}, le faltaban ${(THRESHOLD-best).toFixed(2)} puntos).`);
+        }catch(e){ /* si falla, no se interrumpe el escaneo */ }
+      }
+
       if(best < THRESHOLD || result.recommendation === 'NO OPERAR') continue;
 
       // Filtro de sobre-extensión TAMBIÉN en la detección, no solo en la confirmación.
@@ -611,7 +728,9 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
       const hour = argentinaHourNow();
       if(hour < WORK_HOUR_START || hour >= WORK_HOUR_END) continue;
       const today = todayKey();
-      if(acc.tradesToday.date !== today) acc.tradesToday = {date:today, count:0};
+      // Defensa: un estado guardado por una versión anterior puede no tener tradesToday, y sin
+      // esta guarda la lectura de .date lanza un error que tira abajo el escaneo de esa moneda.
+      if(!acc.tradesToday || acc.tradesToday.date !== today) acc.tradesToday = {date:today, count:0};
       if(acc.tradesToday.count >= MAX_TRADES_PER_DAY) continue;
 
       // Crear la TESIS (todavía no es una operación real)
@@ -624,6 +743,8 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
         theoEntry: result.metrics.price, theoStop: theoSetup.stop, theoTp1: theoSetup.t1,
       };
       journal(thesis, `Tesis detectada en 4h: ${result.recommendation} (score ${best.toFixed(1)}/10, confianza ${result.confidence}%). ${analystSummary(result)} Bajando a 15m a buscar confirmación de entrada.`);
+        hito(thesis, '🔭 Detectada', `score ${best.toFixed(1)}/10 en 4h`);
+        thesis.score4h = +best.toFixed(1);
       acc.theses.push(thesis);
 
       // Mensaje de "en radar" — a propósito con formato bien distinto al de la SEÑAL confirmada
@@ -715,7 +836,7 @@ async function confirmTheses(state, capitalFlow){
       const oiTrendData = data15.source==='Binance' ? await fetchOpenInterestTrend(thesis.symbol, '15m').catch(()=>null) : null;
       const fundingTrendData = data15.source==='Binance' ? await fetchFundingTrend(thesis.symbol).catch(()=>null) : null;
       const btcReference = data15.displayName!=='BTC' ? await fetchBTCReference('15m').catch(()=>null) : null;
-      const marketContext15 = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow };
+      const marketContext15 = { oiTrend: oiTrendData?.trend||null, fundingTrend: fundingTrendData?.trend||null, capitalFlow, usdStrength: await fetchUsdStrength().catch(()=>null) };
       const result15 = computeScore(data15, macro, [], state.memory, marketContext15, btcReference);
       // priceNow se declara ACÁ, apenas existe result15. Antes estaba declarado ~170 líneas más
       // abajo pero se usaba mucho antes (en la entrada anticipada en zona y en el Fibonacci), lo
@@ -987,7 +1108,14 @@ async function confirmTheses(state, capitalFlow){
         }
       }catch(e){ /* si falla, simplemente no aporta este camino, no rompe el resto */ }
 
-      if(!momentumHealthOk && !escapeValvulaTiempo){
+      // La válvula de escape NO aplica cuando el bloqueo es por Estocástico en extremo.
+      // Motivo: puse la válvula para destrabar el bot cuando no abría operaciones, pero la causa
+      // real de eso era el bug de priceNow, no los filtros. Y comprar con el Estocástico en 97 no
+      // se vuelve buena idea porque pasaron 8 horas — el agotamiento sigue estando.
+      // Caso real que lo motivó: LISTA confirmó un LONG con el Estocástico en 97 porque la tesis
+      // llevaba más de 8hs esperando y la válvula desactivó el bloqueo.
+      const bloqueoEsPorExtremo = momentumHealthNote.includes('sobrecompra') || momentumHealthNote.includes('sobreventa');
+      if(!momentumHealthOk && (bloqueoEsPorExtremo || !escapeValvulaTiempo)){
         journal(thesis, `Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — ${momentumHealthNote} Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana).`);
         stillWatching.push(thesis);
         continue;
@@ -1002,6 +1130,25 @@ async function confirmTheses(state, capitalFlow){
       //   clásico de principiante que describe toda la bibliografía. Acá simplemente no se veta: se
       //   deja que los demás caminos (sobre todo "Momentum Continuation", que ya busca el pullback a
       //   EMA20/50 dentro de la tendencia) hagan su trabajo sin este filtro peleando en contra.
+      // ═══ PROTECCIÓN DEL MOTOR ═══
+      // Antes que cualquier otro filtro: si los datos no tienen sentido, no se opera.
+      // Un precio absurdo o desactualizado produce señales bien formadas pero equivocadas.
+      const sanidad = verificarDatosSanos(data15);
+      if(!sanidad.sano){
+        journal(thesis, `🛑 No se opera por protección del motor: ${sanidad.problemas.join(' ')}`);
+        stillWatching.push(thesis);
+        continue;
+      }
+
+      // ═══ RIESGO DE CORRELACIÓN ═══
+      // Cinco LONG en cinco altcoins no son cinco apuestas independientes.
+      const correl = analizarCorrelacion(acc.theses, { riesgoPorOperacion: 2, btcCambio24h: btcReference?.changePct ?? null });
+      if(correl.nivel === 'alto'){
+        journal(thesis, `⚠️ Riesgo de correlación alto: ${correl.alertas[0]} Se sigue observando en vez de sumar otra operación del mismo lado.`);
+        stillWatching.push(thesis);
+        continue;
+      }
+
       // ═══ FILTRO DE SOBRE-EXTENSIÓN PARABÓLICA ═══
       // Caso real que lo motivó: BICO subió +675% desde la base y el bot recomendó LONG justo ahí.
       // Después cayó -19% en una vela. Comprar al final de una subida vertical es comprar el techo:
@@ -1192,7 +1339,21 @@ async function confirmTheses(state, capitalFlow){
         // En cap chico el TP1 usa un múltiplo más chico (0,6R) para que sea alcanzable con el stop
         // ancho, así que el mínimo exigido baja a 0,5:1. La ganancia real viene de TP2 y TP3, que
         // sí conservan buena relación — TP1 acá cumple la función de asegurar parte de la posición.
-        const rrMinimo = esCapChico ? 0.5 : 1.5;
+        // ═══ R:R MÍNIMO REAL ═══
+        // Antes cap chico exigía apenas 0,5:1 — o sea que se aceptaba arriesgar el doble de lo que
+        // se buscaba. Eso venía del stop fijo del 10%, que obligaba a bajar el umbral para que algo
+        // pasara. Con el stop ahora definido por la estructura, se puede exigir 1:1 de verdad.
+        // Una señal con score 8 pero R:R de 0,6 sigue siendo una mala operación.
+        const rrMinimo = esCapChico ? 1.0 : 1.5;
+
+        // Stop demasiado ancho: si para que la tesis no quede invalidada hace falta arriesgar más
+        // del 15%, la moneda directamente no entra. No se fuerza el stop a 15% "porque sí".
+        const distStopPct = Math.abs(entryPrice - setup.stop)/entryPrice*100;
+        if(distStopPct > 15){
+          journal(thesis, `Confirmación descartada: para que la idea no quede invalidada haría falta un stop a ${distStopPct.toFixed(1)}% del precio. Más del 15% no entra — no se fuerza el stop a un número arbitrario, se descarta la operación.`);
+          stillWatching.push(thesis);
+          continue;
+        }
         if(rrToTp1 < rrMinimo){
           journal(thesis, `Confirmación técnica presente pero R:R a TP1 es solo ${rrToTp1.toFixed(2)}:1 (mínimo exigido ${rrMinimo}:1). Se sigue observando en vez de forzar una entrada con mala relación riesgo/beneficio.`);
           stillWatching.push(thesis);
@@ -1302,6 +1463,102 @@ async function confirmTheses(state, capitalFlow){
         }
 
         thesis.status = 'ACTIVE';
+        // Datos que necesita la Biblioteca de tesis para poder filtrar y comparar después.
+        // ═══ REGISTRO COMPLETO PARA MEDIR DESPUÉS ═══
+        // Se guarda TODO lo que influyó en esta decisión, para poder responder más adelante
+        // preguntas como "¿el score 8+ acierta más que el 7.6?" o "¿cuánto aporta cada Dios?".
+        // Sin este registro, cualquier ajuste de pesos sería adivinar de nuevo.
+        thesis.score15m = +Math.max(result15.longScore, result15.shortScore).toFixed(1);
+
+        thesis.score = thesis.score4h ?? thesis.score15m; // el score 'oficial' es el que creó la tesis
+        thesis.confianza = result15.confidence;
+        thesis.dataQuality = result15.dataQuality?.score ?? null;
+        thesis.marketPhase = detectMarketPhase(data15.candles)?.fase ?? null;
+        // Qué caminos confirmaron la entrada. Se declara ACÁ, antes del primer uso: estaba
+        // declarado ~180 líneas más abajo y el hito de confirmación lo usaba antes, lo que
+        // lanzaba "Cannot access 'setupsActivos' before initialization" y tiraba abajo toda la
+        // confirmación de esa moneda. Mismo tipo de error que tuvo priceNow.
+        const setupsActivos = [
+          bosAFavor && 'BOS', confluenceAFavor && 'Confluencia', bearTrapConfirmacion && 'Bear/Bull Trap',
+          pullbackConfirmacion && 'Pullback', liquidityMagnetConfirmacion && 'Imán de liquidez',
+          patronCompletoConfirmacion && 'Patrón completo', gatilloEstocastico && 'Gatillo Estocástico',
+          fibConLiquidez && 'Fibonacci', entradaEnZona && 'Entrada en zona', macdEarlyAFavor && 'MACD temprano',
+        ].filter(Boolean).join(' + ') || 'Confluencia general';
+
+        thesis.registro = {
+          // Los 6 componentes con su aporte real al score
+          componentes: (result15.explainEngine?.componentes||[]).map(cp=>({ n:cp.nombre, aporte:cp.aporte, senal:cp.senal })),
+          ajusteCalidad: result15.explainEngine?.ajusteCalidad?.efectoEnScore ?? null,
+          // Contexto
+          estocastico: result15.metrics?.lastStochK ?? null,
+          rsi: result15.metrics?.lastRSI ?? null,
+          adx: (()=>{ try{ return adx(data15.candles); }catch(e){ return null; } })(),
+          divergencia: result15.metrics?.divergencia?.tipo ?? null,
+          triangulo: result15.metrics?.triangulo?.tipo ?? null,
+          // Liquidez: si estaba a favor o en contra
+          liquidezAFavor: (()=>{ try{
+            const l = detectLiquidezPorHorizonte(data15.candles); if(!l) return null;
+            const a = l.cercanaArriba, b = l.cercanaAbajo;
+            if(!a || !b) return null;
+            const fuerte = a.toques > b.toques ? 'arriba' : b.toques > a.toques ? 'abajo' : 'pareja';
+            if(fuerte==='pareja') return 'pareja';
+            return (thesis.dir==='LONG' && fuerte==='arriba') || (thesis.dir==='SHORT' && fuerte==='abajo') ? 'a favor' : 'en contra';
+          }catch(e){ return null; } })(),
+          fuerzaVolumen: (()=>{ try{ const f = computeVolumeProbability(data15.candles,20); return f ? +f.probUp.toFixed(0) : null; }catch(e){ return null; } })(),
+          // Caminos que confirmaron
+          caminos: setupsActivos,
+          // Cuánto tardó desde la detección
+          horasHastaConfirmar: +((Date.now()-thesis.detectedAt)/3600000).toFixed(1),
+          // Si entró por válvula de escape (importante: son entradas de menor calidad)
+          porValvulaEscape: horasEsperando >= 8,
+          // ═══ DATOS DE GESTIÓN — para saber si 1R/1.6R/2.5R son los múltiplos correctos ═══
+          // Sin esto no se puede responder: ¿las monedas chicas necesitan 3-9% de stop o 10-15%?
+          // ¿los movimientos llegan a 2.5R o se quedan en 1.4R? Hoy esos números son una hipótesis.
+          gestion: (()=>{
+            const riesgo = Math.abs(entryPrice - setup.stop);
+            if(riesgo <= 0) return null;
+            return {
+              stopPct: +(riesgo/entryPrice*100).toFixed(2),
+              rTp1: +(Math.abs(setup.t1-entryPrice)/riesgo).toFixed(2),
+              rTp2: +(Math.abs(setup.t2-entryPrice)/riesgo).toFixed(2),
+              rTp3: +(Math.abs(setup.t3-entryPrice)/riesgo).toFixed(2),
+              atrPct: result15.metrics?.lastATR!=null ? +(result15.metrics.lastATR/entryPrice*100).toFixed(2) : null,
+              // Si el stop salió de un nivel estructural o del cálculo por ATR
+              stopEstructural: setup.stopEstructural ?? null,
+            };
+          })(),
+          // MFE/MAE: hasta dónde llegó a favor y en contra antes de cerrar. Se van actualizando
+          // mientras la operación está abierta (en la fase de gestión).
+          mfe: 0, mae: 0,
+          // Señales estructurales que le dimos peso al score SIN medirlas. Registrarlas es la
+          // única forma de saber después si aportan o si les dimos influencia por intuición.
+          ifvg: (()=>{ try{ const l = detectIFVG(data15.candles); return l?.length ? l[0].rolNuevo : null; }catch(e){ return null; } })(),
+          imbalance: (()=>{ try{
+            const fv = result15.structure?.fvgs || [];
+            if(!fv.length) return null;
+            const dentro = fv.find(g => entryPrice >= g.bottom*0.998 && entryPrice <= g.top*1.002);
+            return dentro ? `dentro de imbalance ${dentro.type}` : `imbalance ${fv[0].type} cerca`;
+          }catch(e){ return null; } })(),
+          rupturaTriangulo: (()=>{ try{
+            const tri = detectTrianguloCompresion(data15.candles);
+            if(!tri) return null;
+            const rup = analizarRupturaCompresion(data15.candles, tri);
+            return rup ? `${tri.tipo}/${rup.sesgo}` : tri.tipo;
+          }catch(e){ return null; } })(),
+          // Qué dioses votaron a favor en el momento de entrar
+          actividadAnomala: (()=>{ try{
+            const a = detectActividadAnomala(data15.candles, { funding: data15.funding!=null?data15.funding*100:null });
+            return a?.hayAlgo ? { nivel:a.nivel, puntaje:a.puntaje, tipos:a.señales.map(s=>s.tipo) } : null;
+          }catch(e){ return null; } })(),
+          diosesAFavor: (result15.committee||[]).filter(g=>g.vote===thesis.dir).map(g=>g.name.replace(/^[^\s]+\s/,'')),
+          // Cómo venían las operaciones parecidas ANTES de abrir esta (para comparar después)
+          parecidasAlEntrar: (()=>{ try{
+            const p = buscarTesisParecidas(acc.closedTrades||[], { dir: thesis.dir, tipoSetup: setupsActivos, score: thesis.score4h, tag: thesis.tag||'', symbol: thesis.symbol });
+            return p?.encontradas ? { cantidad: p.encontradas, winRate: p.winRate } : null;
+          }catch(e){ return null; } })(),
+        };
+        hito(thesis, '🟢 Confirmada', `por ${setupsActivos || 'confluencia'}`);
+        hito(thesis, '🚀 Entrada', `$${entryPrice.toFixed(6)}`);
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.tp3 = setup.t3; thesis.units = units; thesis.originalUnits = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         // Tipo de setup y hora del día, para poder desglosar estadísticas después (win rate por
@@ -1312,6 +1569,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
         const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : sfpConfirmacion ? (thesis.dir==='LONG' ? sfp.bullishNote : sfp.bearishNote) : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : ema50ShortConfirmacion ? `Precio cerca de la EMA50 en 4h (zona de rebote), en tendencia bajista, con el Estocástico en 15m cruzando hacia abajo desde sobrecompra — combo probado con backtest real (profit factor 1.0-2.33 en 3 períodos)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
         journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
+        if(!acc.tradesToday) acc.tradesToday = {date: todayKey(), count:0};
         acc.tradesToday.count++;
 
         const analyst = buildAnalystMode(data15, result15, setup, '15m');
@@ -1361,6 +1619,16 @@ async function confirmTheses(state, capitalFlow){
             if(lB) pl.push(`abajo a ${lB.distPct.toFixed(1)}%`);
             relato.push(`🌊 Después, la liquidez de mayor plazo está ${pl.join(' y ')} — ese es el objetivo más grande una vez que se consume la cercana.`);
           }
+        }
+
+        // Actividad anómala: detecta que algo raro está pasando, sin identificar quién.
+        // No reemplaza a Arkham (eso es de pago) pero sí deja ver las huellas de alguien grande.
+        const anomalo = detectActividadAnomala(data15.candles, {
+          funding: data15.funding != null ? data15.funding*100 : null,
+          oiCambioPct: marketContext15?.oiTrend === 'RISING' ? 15 : marketContext15?.oiTrend === 'FALLING' ? -15 : null,
+        });
+        if(anomalo?.hayAlgo){
+          relato.push(`${anomalo.nivel==='MUY ALTA'?'🚨':'⚠️'} <b>Actividad inusual (${anomalo.nivel.toLowerCase()})</b>: ${anomalo.detalle}`);
         }
 
         // Índice de fuerza del volumen — es la misma línea naranja que ya se dibuja en la sección
@@ -1477,12 +1745,7 @@ async function confirmTheses(state, capitalFlow){
         const lecturaLiq = lecturaDeLiquidez(data15.candles, result15.structure, thesis.dir);
         const DIV = '━━━━━━━━━━━━━━━━━━━━';
         // Qué caminos confirmaron: da contexto sobre la CALIDAD de la entrada
-        const setupsActivos = [
-          bosAFavor && 'BOS', confluenceAFavor && 'Confluencia', bearTrapConfirmacion && 'Bear/Bull Trap',
-          pullbackConfirmacion && 'Pullback', liquidityMagnetConfirmacion && 'Imán de liquidez',
-          patronCompletoConfirmacion && 'Patrón completo', gatilloEstocastico && 'Gatillo Estocástico',
-          fibConLiquidez && 'Fibonacci', entradaEnZona && 'Entrada en zona', macdEarlyAFavor && 'MACD temprano',
-        ].filter(Boolean).join(' + ') || 'Confluencia general';
+
         const pct = (v) => ((v-entryPrice)/entryPrice*100);
         const confluenciaLineas = (result15.committee||[])
           .filter(g=>g.vote===thesis.dir).slice(0,4)
@@ -1491,7 +1754,11 @@ async function confirmTheses(state, capitalFlow){
         sendPromises.push(sendTelegram(
           `${thesis.dir==='LONG'?'🟢':'🔴'} <b>SEÑAL CONFIRMADA — $${thesis.symbol}${thesis.tag||''}</b>\n` +
           `${DIV}\n` +
-          `📊 Score: <b>${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10</b>\n` +
+          // Se muestran los DOS scores: el de 4h (que es el que pasó el umbral de 7.6 y creó la
+          // tesis) y el de 15m (recalculado al confirmar). Antes solo se veía el de 15m, y como
+          // puede ser más bajo, parecía que una señal de 6.8 había pasado un umbral de 7.6.
+          `📊 Score: <b>${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10</b> en 15m` +
+          (thesis.score4h ? ` · <b>${thesis.score4h}/10</b> en 4h <i>(el que creó la tesis)</i>` : '') + `\n` +
           `🎯 Confianza: <b>${result15.confidence}%</b>\n` +
           `🧩 Setup: ${setupsActivos}\n` +
           `📈 Dirección: <b>${thesis.dir}</b>\n` +
@@ -1510,7 +1777,51 @@ async function confirmTheses(state, capitalFlow){
 
           `${DIV}\n🧠 <b>CONFLUENCIA</b>\n${confluenciaLineas}\n\n` +
 
+          // EXPLAIN ENGINE: de dónde sale el score, componente por componente.
+          (result15.explainEngine ? `${DIV}\n🔬 <b>DE DÓNDE SALE EL SCORE</b>\n` +
+            result15.explainEngine.componentes
+              .filter(cp => Math.abs(cp.aporte) >= 0.01)
+              .map(cp => `${cp.aporte>=0?'🟢':'🔴'} ${cp.nombre}: <b>${cp.aporte>=0?'+':''}${cp.aporte}</b> <i>(${cp.detalle})</i>`)
+              .join('\n') +
+            `\n⚪ Base: +${result15.explainEngine.base}` +
+            (result15.explainEngine.ajusteCalidad ? `\n⚙️ Ajuste por volumen/volatilidad: ${result15.explainEngine.ajusteCalidad.efectoEnScore>=0?'+':''}${result15.explainEngine.ajusteCalidad.efectoEnScore}` : '') +
+            `\n<i>${result15.explainEngine.informativos.length} señales más se calculan pero no votan en el score.</i>\n\n` : '') +
+
           `${DIV}\n📖 <b>LECTURA COMPLETA</b>\n<i>${relatoCompleto}</i>\n\n` +
+
+          // Timeline: los hitos de esta tesis, no el diario completo
+          // Market Phase: en qué etapa del ciclo está. Un score de 8 en clímax no es lo mismo que
+          // un score de 8 en expansión temprana.
+          (()=>{ const fase = detectMarketPhase(data15.candles);
+            if(!fase || fase.fase==='DESCONOCIDA') return '';
+            const encaja = fase.favorable===thesis.dir ? '✅ la fase acompaña esta operación'
+              : fase.favorable==='ninguna' ? '⚠️ fase de agotamiento — operar acá es a contramano'
+              : `⚠️ la fase favorece ${fase.favorable}, no ${thesis.dir}`;
+            return `${DIV}\n${fase.emoji} <b>FASE DEL MERCADO: ${fase.fase}</b>\n<i>${fase.motivo}</i>\n${encaja}\n\n`;
+          })() +
+
+          (thesis.timeline?.length ? `${DIV}\n⏱ <b>RECORRIDO</b>\n${timelineTexto(thesis)}\n\n` : '') +
+
+          // Calidad de datos: cuánta confianza merecen los datos detrás de este score
+          (result15.dataQuality?.score!=null ? `${DIV}\n🔌 <b>CALIDAD DE DATOS: ${result15.dataQuality.score}/100</b> (${result15.dataQuality.nivel})` +
+            (result15.dataQuality.faltantes?.length ? `\n<i>Falta: ${result15.dataQuality.faltantes.join(', ')}</i>` : '') + `\n\n` : '') +
+
+          // MEMORIA: cómo salieron las operaciones parecidas a esta. Es la pregunta más útil que
+          // se puede hacer antes de abrir — y hasta ahora la función existía pero no se usaba.
+          (()=>{ const par = buscarTesisParecidas(acc.closedTrades||[], {
+              dir: thesis.dir, tipoSetup: thesis.tipoSetup,
+              score: +Math.max(result15.longScore, result15.shortScore).toFixed(1),
+              tag: thesis.tag||'', symbol: thesis.symbol });
+            if(!par || !par.encontradas) return '';
+            const icono = !par.suficienteMuestra ? '🔍' : par.winRate >= 55 ? '✅' : par.winRate <= 40 ? '⚠️' : '➖';
+            return `${DIV}\n${icono} <b>OPERACIONES PARECIDAS</b>\n<i>${par.resumen}</i>\n\n`;
+          })() +
+
+          // ANALISTA: lectura en lenguaje natural de todo lo anterior. No es IA — es un narrador
+          // por reglas que solo puede decir lo que está en los datos, así que nunca inventa.
+          (()=>{ const ex = explicarAnalisis(result15, { marketPhase: detectMarketPhase(data15.candles) });
+            return ex?.texto ? `${DIV}\n🗣 <b>LECTURA DEL ANALISTA</b>\n<i>${ex.texto}</i>\n\n` : '';
+          })() +
 
           `${DIV}\n❌ Invalidación: ${invalidacion}\n` +
           `💰 Capital: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})\n\n` +
@@ -1589,6 +1900,20 @@ async function manageActiveTheses(state){
     const range = await fetchPriceRange(thesis.symbol, sinceTs);
     const price = range?.last ?? null;
 
+    // ═══ MFE / MAE ═══
+    // MFE = hasta dónde llegó a favor. MAE = hasta dónde llegó en contra.
+    // Sirven para responder si los TP están bien puestos: si el MFE promedio es 1.4R, poner TP3
+    // en 2.5R significa que casi nunca se alcanza. Y si el MAE promedio es 0.8R, un stop a 1R
+    // está justo al borde de lo que el precio suele retroceder antes de girar.
+    if(price!=null && thesis.entry && thesis.stop && thesis.registro){
+      const riesgo = Math.abs(thesis.entry - thesis.stop);
+      if(riesgo > 0){
+        const aFavor = thesis.dir==='LONG' ? (price-thesis.entry)/riesgo : (thesis.entry-price)/riesgo;
+        thesis.registro.mfe = Math.max(thesis.registro.mfe ?? 0, +aFavor.toFixed(2));
+        thesis.registro.mae = Math.min(thesis.registro.mae ?? 0, +aFavor.toFixed(2));
+      }
+    }
+
     if(price==null){
       thesis.priceFailCount = (thesis.priceFailCount||0) + 1;
       console.log(`⚠️ No se pudo obtener precio de ${thesis.symbol} (falla #${thesis.priceFailCount} seguida).`);
@@ -1634,7 +1959,7 @@ async function manageActiveTheses(state){
       const pnl = thesis.units * (price-thesis.entry) * (thesis.dir==='LONG'?1:-1);
       acc.capital = +(acc.capital+pnl).toFixed(4);
       journal(thesis, `Cierre forzado por antigüedad (más de ${MAX_DAYS_OPEN_LIMIT} días abierta sin resolver). Cerrada al precio actual $${price.toFixed(6)} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT).`);
-      acc.closedTrades.push({...thesis, exit:price, result: pnl>=0?'win':'loss', pnl:+pnl.toFixed(4), closedAt: Date.now()});
+      cerrarOperacion(acc, thesis, price, pnl, 'antigüedad', sendPromises);
       sendPromises.push(sendTelegram(
         `⏰ <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir} por antigüedad</b>\n` +
         `Llevaba abierta demasiado tiempo sin tocar TP ni Stop. Resultado: ${pnl>=0?'GANÓ':'PERDIÓ'} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
@@ -1665,13 +1990,15 @@ async function manageActiveTheses(state){
           `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el resto ya no puede terminar en pérdida.\n` +
           `El 60% restante sigue corriendo hacia TP2 (40%) y TP3 (20%).\nCapital: ${acc.capital.toFixed(2)} USDT`
         ));
+        hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 50% y el stop pasó a breakeven');
         sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`));
         stillOpen.push(thesis);
       } else if(hitSL){
         const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
         acc.capital = +(acc.capital+pnl).toFixed(4);
         journal(thesis, `Stop tocado antes de TP1 (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Capital: ${acc.capital.toFixed(2)}.`);
-        acc.closedTrades.push({...thesis, exit:thesis.stop, result: pnl>=0?'win':'loss', pnl:+pnl.toFixed(4), closedAt: Date.now()});
+        hito(thesis, '🛑 Cerrada por stop', `${pnl>=0?'+':''}${pnl.toFixed(2)} USDT`);
+        cerrarOperacion(acc, thesis, thesis.stop, pnl, 'stop antes de TP1', sendPromises);
         sendPromises.push(sendTelegram(
           (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
           `🛑 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
@@ -1696,7 +2023,7 @@ async function manageActiveTheses(state){
         acc.capital = +(acc.capital+pnl).toFixed(4);
         const totalPnl = (thesis.partialPnl||0) + pnl;
         journal(thesis, `Volvió a breakeven: se cierra el resto (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
-        acc.closedTrades.push({...thesis, exit:thesis.stop, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
+        cerrarOperacion(acc, thesis, thesis.stop, totalPnl, 'stop tras toma parcial', sendPromises);
         sendPromises.push(sendTelegram(
           (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
           `⚖️ <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
@@ -1730,7 +2057,7 @@ async function manageActiveTheses(state){
         acc.capital = +(acc.capital+pnl).toFixed(4);
         const totalPnl = (thesis.partialPnl||0) + pnl;
         journal(thesis, `TP2 alcanzado: se cierra el resto (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
-        acc.closedTrades.push({...thesis, exit:thesis.tp2, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
+        cerrarOperacion(acc, thesis, thesis.tp2, totalPnl, 'TP2', sendPromises);
         sendPromises.push(sendTelegram(
           `🚀 <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\nTP2 alcanzado ✅\nResultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
         ));
@@ -1752,7 +2079,7 @@ async function manageActiveTheses(state){
       acc.capital = +(acc.capital+pnl).toFixed(4);
       const totalPnl = (thesis.partialPnl||0) + pnl;
       journal(thesis, `${hitTP3?'TP3 alcanzado (objetivo final)':'Volvió a breakeven'}: se cierra el 20% final (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
-      acc.closedTrades.push({...thesis, exit, result: totalPnl>=0?'win':'loss', pnl:+totalPnl.toFixed(4), closedAt: Date.now()});
+      cerrarOperacion(acc, thesis, exit, totalPnl, 'TP final', sendPromises);
       sendPromises.push(sendTelegram(
         (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
         `${hitTP3?'🎯':'⚖️'} <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
@@ -1867,6 +2194,9 @@ async function main(){
 
   console.log('--- Fase 1: gestionando tesis ACTIVAS (TP/SL/breakeven) ---');
   await manageActiveTheses(state);
+
+  // Se evalúan las señales sombra de hace 24hs antes de seguir
+  await evaluarShadowSignals(state).catch(e=>console.error('Error evaluando sombras:', e.message));
 
   console.log('--- Fase 2: confirmando tesis WATCHING en 15m (motor completo) ---');
   await confirmTheses(state, capitalFlow);
