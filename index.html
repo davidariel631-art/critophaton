@@ -431,6 +431,7 @@
     <button class="tab-btn" data-tab="dexnuevos">DEX Nuevos</button>
     <button class="tab-btn" data-tab="comparar">Comparar</button>
     <button class="tab-btn" data-tab="historial">Historial</button>
+    <button class="tab-btn" data-tab="intel">🧠 Intelligence</button>
     <button class="tab-btn" data-tab="wallet">Wallet</button>
     <button class="tab-btn" data-tab="thehaton">TheHaton</button>
   </div>
@@ -456,6 +457,7 @@
       <button class="more-item" data-tab="dexnuevos">DEX Nuevos</button>
       <button class="more-item" data-tab="comparar">Comparar</button>
       <button class="more-item" data-tab="historial">Historial</button>
+      <button class="more-item" data-tab="intel">🧠 Intelligence</button>
       <button class="more-item" id="abrirAjustesBtn">⚙️ Ajustes</button>
       <button class="more-item" id="moreCloseBtn">✕ Cerrar</button>
     </div>
@@ -590,6 +592,10 @@
         <div>
           <div id="recTag" class="rec-tag rec-none">NO OPERAR</div>
           <div class="subrow" id="tokenLabel">—</div>
+          <div id="anomaliaPanel" style="display:none;margin-top:10px;"></div>
+          <div id="fasePanel" style="display:none;margin-top:10px;"></div>
+          <div id="analistaPanel" style="display:none;margin-top:10px;"></div>
+          <div id="explainPanel" style="display:none;margin-top:12px;"></div>
           <div class="subrow" id="priceLabel">—</div>
           <div class="subrow">Confianza: <b id="confVal">0%</b></div>
           <div class="confbar"><div class="confbar-fill" id="confBar" style="width:0%"></div></div>
@@ -759,8 +765,8 @@
       </div>
       <div id="screenerStatus" class="subrow"></div>
       <div id="screenerBox" style="display:none;">
-        <div id="screenerPlot" style="position:relative;width:100%;height:560px;background:#050505;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-top:10px;"></div>
-        <div id="screenerResumen" class="subrow" style="margin-top:10px;"></div>
+        <div id="screenerResumen" class="subrow" style="margin-top:12px;"></div>
+        <div id="screenerPlot" style="width:100%;margin-top:10px;"></div>
       </div>
     </div>
     <div class="card" style="margin-top:18px;">
@@ -809,6 +815,9 @@
         </div>
         <div class="indi-grid" style="margin-top:10px;">
           <div class="indi-line"><div class="il-k">Nivel cercano ↑</div><div class="il-v" id="liqNearUp">—</div></div>
+          <div class="indi-line"><div class="il-k">VAH (techo del área)</div><div class="il-v" id="liqVAH">—</div></div>
+          <div class="indi-line"><div class="il-k">POC (mayor volumen)</div><div class="il-v" id="liqPOC">—</div></div>
+          <div class="indi-line"><div class="il-k">VAL (piso del área)</div><div class="il-v" id="liqVAL">—</div></div>
           <div class="indi-line"><div class="il-k">Nivel cercano ↓</div><div class="il-v" id="liqNearDown">—</div></div>
         </div>
         <div id="liqChartContainer" style="width:100%;height:520px;margin-top:12px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
@@ -870,6 +879,22 @@
     <div class="card">
       <h2>Historial de análisis (guardado en este navegador)</h2>
       <div id="historyList" class="subrow">Todavía no analizaste ninguna moneda.</div>
+    </div>
+  </div>
+
+  <div class="tabpanel" id="panel-intel">
+    <div class="card">
+      <h2>🧠 TheHaton Intelligence</h2>
+      <div class="hint" style="margin-top:0;margin-bottom:12px;">Todo lo que el sistema sabe, en un solo lugar: rendimiento por moneda, patrones encontrados, salud de las fuentes de datos y biblioteca de operaciones.</div>
+      <div class="tf-group" id="intelTabs" style="margin-bottom:14px;flex-wrap:wrap;">
+        <button class="tf-btn active" data-intel="metricas">📈 Cómo va</button>
+        <button class="tf-btn" data-intel="research">🔬 Qué aprendimos</button>
+        <button class="tf-btn" data-intel="ranking">🏆 Qué funciona</button>
+        <button class="tf-btn" data-intel="stops">🎯 Simuladores</button>
+        <button class="tf-btn" data-intel="datos">📊 Datos</button>
+      </div>
+      <div id="intelStatus" class="subrow"></div>
+      <div id="intelContenido"></div>
     </div>
   </div>
 
@@ -1245,6 +1270,93 @@ function renderResults(data, result, setup){
 
   document.getElementById('tokenLabel').textContent = `${data.displayName} · ${currentTF} · fuente: ${data.source}`;
   document.getElementById('priceLabel').textContent = `$${fmt(data.price)}  (${fmtPct(data.change24h||0)} 24h)`;
+
+  // ═══ ACTIVIDAD ANÓMALA ═══
+  // Detecta que algo raro está pasando sin identificar quién. Va arriba de todo porque cuando
+  // aparece es lo más importante de la pantalla.
+  try{
+    const anom = TheHatonEngine.detectActividadAnomala(data.candles, {
+      funding: data.funding != null ? data.funding*100 : null,
+    });
+    const ap2 = document.getElementById('anomaliaPanel');
+    if(anom?.hayAlgo){
+      const color = anom.nivel==='MUY ALTA' ? 'var(--rose)' : anom.nivel==='ALTA' ? 'var(--amber)' : 'var(--sub)';
+      ap2.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:10px;padding:11px 13px;">
+        <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;">ACTIVIDAD INUSUAL</div>
+        <div style="font-weight:700;font-size:14px;margin:3px 0;color:${color};">${anom.nivel==='MUY ALTA'?'🚨':'⚠️'} ${anom.nivel}</div>
+        ${anom.señales.map(s=>`<div style="font-size:11.5px;line-height:1.5;margin-top:5px;">• ${s.texto}</div>`).join('')}
+        <div style="font-size:10.5px;color:var(--sub);margin-top:8px;font-style:italic;">${anom.aclaracion}</div>
+      </div>`;
+      ap2.style.display = '';
+    } else ap2.style.display = 'none';
+  }catch(e){ document.getElementById('anomaliaPanel').style.display='none'; }
+
+  // ═══ FASE DEL MERCADO ═══
+  // Un score de 8 significa cosas distintas según la etapa del ciclo. Antes esto solo se veía
+  // en Telegram; en la web no aparecía por ningún lado.
+  try{
+    const fase = TheHatonEngine.detectMarketPhase(data.candles);
+    const fp = document.getElementById('fasePanel');
+    if(fase && fase.fase!=='DESCONOCIDA'){
+      const peligro = (fase.riesgoLong || fase.riesgoShort);
+      const color = peligro ? 'var(--rose)' : fase.favorable==='LONG' ? 'var(--teal)' : fase.favorable==='SHORT' ? 'var(--rose)' : 'var(--sub)';
+      fp.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:10px;padding:11px 13px;">
+        <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;">FASE DEL MERCADO</div>
+        <div style="font-weight:700;font-size:14.5px;margin:3px 0;">${fase.emoji||''} ${fase.fase}</div>
+        <div style="font-size:11.5px;color:var(--sub);line-height:1.5;">${fase.motivo}</div>
+      </div>`;
+      fp.style.display = '';
+    } else fp.style.display = 'none';
+  }catch(e){ document.getElementById('fasePanel').style.display='none'; }
+
+  // ═══ LECTURA DEL ANALISTA ═══
+  try{
+    const fase = TheHatonEngine.detectMarketPhase(data.candles);
+    const ex = TheHatonEngine.explicarAnalisis(result, { marketPhase: fase });
+    const ap = document.getElementById('analistaPanel');
+    if(ex?.resumen){
+      ap.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;">
+        <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;margin-bottom:5px;">🗣 LECTURA</div>
+        <div style="font-size:12.5px;line-height:1.6;">${ex.resumen}</div>
+        ${ex.alertas?.length ? `<div style="font-size:11.5px;line-height:1.5;color:var(--amber);margin-top:8px;">⚠️ ${ex.alertas.join(' ')}</div>` : ''}
+      </div>`;
+      ap.style.display = '';
+    } else ap.style.display = 'none';
+  }catch(e){ document.getElementById('analistaPanel').style.display='none'; }
+
+  // ═══ DE DÓNDE SALE EL SCORE (Explain Engine, con barras) ═══
+  try{
+    const ee = result.explainEngine;
+    const ep = document.getElementById('explainPanel');
+    if(ee?.componentes?.length){
+      const maxAbs = Math.max(...ee.componentes.map(cp=>Math.abs(cp.aporte)), 0.5);
+      const filas = ee.componentes.map(cp=>{
+        const ancho = Math.abs(cp.aporte)/maxAbs*50; // hasta 50% hacia cada lado desde el centro
+        const positivo = cp.aporte >= 0;
+        const color = Math.abs(cp.aporte)<0.01 ? 'var(--border)' : positivo ? 'var(--teal)' : 'var(--rose)';
+        return `<div style="margin-bottom:7px;">
+          <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px;">
+            <span>${cp.nombre}</span>
+            <span style="color:${color};font-weight:700;">${positivo&&cp.aporte>0?'+':''}${cp.aporte}</span>
+          </div>
+          <div style="position:relative;height:7px;background:rgba(255,255,255,0.05);border-radius:4px;">
+            <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:rgba(255,255,255,0.18);"></div>
+            <div style="position:absolute;top:0;bottom:0;border-radius:4px;background:${color};${positivo?`left:50%;width:${ancho}%;`:`right:50%;width:${ancho}%;`}"></div>
+          </div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px;">${cp.detalle}</div>
+        </div>`;
+      }).join('');
+      ep.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 13px;">
+        <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;margin-bottom:9px;">🔬 DE DÓNDE SALE EL SCORE</div>
+        ${filas}
+        <div style="font-size:10.5px;color:var(--sub);margin-top:8px;border-top:1px solid var(--border);padding-top:7px;">
+          Base +${ee.base}${ee.ajusteCalidad ? ` · Ajuste por volumen/volatilidad ${ee.ajusteCalidad.efectoEnScore>=0?'+':''}${ee.ajusteCalidad.efectoEnScore}` : ''}
+          · ${ee.informativos?.length||0} señales más se calculan pero no votan
+        </div>
+      </div>`;
+      ep.style.display = '';
+    } else ep.style.display = 'none';
+  }catch(e){ document.getElementById('explainPanel').style.display='none'; }
 
   const circumference = 264;
   document.getElementById('longScoreNum').textContent = result.longScore.toFixed(1);
@@ -1863,9 +1975,15 @@ function switchTab(tabName){
   document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
   document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+tabName).classList.add('active');
-  if(tabName==='heatmap' && !heatmapLoaded){ loadHeatmap(); loadTopMovers(); }
+  // Se recarga si nunca se cargó O si pasaron más de 15 minutos desde la última vez.
+  // Antes heatmapLoaded se ponía en true y no se recargaba nunca más en toda la sesión.
+  if(tabName==='heatmap'){
+    const viejo = !ultimaCargaHeatmap || (Date.now()-ultimaCargaHeatmap) > 15*60*1000;
+    if(!heatmapLoaded || viejo){ loadHeatmap(); loadTopMovers(); ultimaCargaHeatmap = Date.now(); }
+  }
   if(tabName==='historial') renderHistory();
   if(tabName==='thehaton') loadTheHaton();
+  if(tabName==='intel') cargarIntel();
 }
 // Sub-pestañas DENTRO de "Analizar" (Resumen / Gráfico / Indicadores / Análisis IA) — para no tener
 // que scrollear un solo bloque gigante en el celular. Ningún ID de adentro cambió, solo se agrupó
@@ -2031,6 +2149,7 @@ setInterval(loadMacroAssets, 30*60*1000); // cada 30 min para no gastar la cuota
 
 // ================= HEATMAP =================
 let heatmapLoaded = false;
+let ultimaCargaHeatmap = null;
 // ================= TREEMAP (algoritmo squarify) =================
 function worstAspect(row, side, areaOverride){
   const areaSum = areaOverride ?? row.reduce((s,r)=>s+r.area,0);
@@ -2262,6 +2381,17 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     // vez que el usuario mueve o hace zoom al gráfico — así el "indicador" se comporta pegado al
     // gráfico de verdad, no como una imagen fija en un lugar distinto.
     const profile = computeLiquidityProfile(data.candles, price);
+    // Área de valor: el rango donde se negoció el 70% del volumen. Fuera de él, el precio se mueve
+    // rápido; adentro, lento. El motor ya lo calculaba pero la web no lo mostraba.
+    const _fmtP = v => v==null ? '—' : (v>=1000 ? v.toLocaleString('en-US',{maximumFractionDigits:2}) : v>=1 ? v.toFixed(4) : v.toPrecision(4));
+    if(profile?.vah!=null){
+      document.getElementById('liqVAH').textContent = '$'+_fmtP(profile.vah);
+      document.getElementById('liqVAL').textContent = '$'+_fmtP(profile.val);
+      const dentro = profile.dentroDelAreaDeValor;
+      document.getElementById('liqPOC').innerHTML = '$'+_fmtP(profile.poc) +
+        ` <span style="font-size:10px;color:${dentro?'var(--sub)':'var(--amber)'};">${dentro?'· precio dentro del área':'· '+(profile.posicionRelativa||'')}</span>`;
+    }
+
     const { bins, minP, priceStep, nBins, pocAbove: pocSell, pocBelow: pocBuy } = profile;
     const maxBin = Math.max(...bins) || 1;
 
@@ -2332,6 +2462,44 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         if(isPOC){
           ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Manrope'; ctx.textAlign = 'right';
           ctx.fillText(formatVol(bins[b]), lastCandleX-4, yC+hC/2+3);
+        }
+      }
+
+      // ═══ ÁREA DE VALOR dibujada sobre el gráfico ═══
+      // El rango donde se negoció el 70% del volumen. Dentro del área el precio se mueve lento
+      // (mucha negociación); fuera, rápido. Antes solo estaba como texto en el panel de abajo.
+      if(profile?.vah!=null && profile?.val!=null){
+        const yVah = candleSeries.priceToCoordinate(profile.vah);
+        const yVal = candleSeries.priceToCoordinate(profile.val);
+        const yPoc = profile.poc!=null ? candleSeries.priceToCoordinate(profile.poc) : null;
+        if(yVah!=null && yVal!=null){
+          // Sombreado suave del área completa
+          ctx.fillStyle = 'rgba(255,255,255,0.04)';
+          ctx.fillRect(0, Math.min(yVah,yVal), cssW, Math.abs(yVal-yVah));
+          // Bordes VAH y VAL punteados
+          ctx.strokeStyle = 'rgba(200,210,225,0.55)';
+          ctx.lineWidth = 1; ctx.setLineDash([5,4]);
+          [[yVah,'VAH'],[yVal,'VAL']].forEach(([y,etq])=>{
+            ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(cssW,y); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(0,0,0,0.65)';
+            ctx.fillRect(4, y-13, 30, 13);
+            ctx.fillStyle = 'rgba(200,210,225,0.9)';
+            ctx.font = 'bold 9px Manrope'; ctx.textAlign = 'left';
+            ctx.fillText(etq, 8, y-3);
+            ctx.setLineDash([5,4]);
+          });
+          ctx.setLineDash([]);
+          // POC: la línea más importante, sólida y naranja
+          if(yPoc!=null){
+            ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.moveTo(0,yPoc); ctx.lineTo(cssW,yPoc); ctx.stroke();
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(4, yPoc-13, 30, 13);
+            ctx.fillStyle = '#f59e0b';
+            ctx.font = 'bold 9px Manrope'; ctx.textAlign = 'left';
+            ctx.fillText('POC', 8, yPoc-3);
+          }
         }
       }
 
@@ -2481,10 +2649,12 @@ async function loadTopMovers(){
   const statusEl3 = document.getElementById('topMoversStatus');
   const box = document.getElementById('topMoversBox');
 
-  const cached = getCached('topMovers');
+  // Cache de 15 minutos, no de 24hs. Antes mostraba los datos del día anterior y parecía
+  // que la pestaña nunca se actualizaba — porque efectivamente no lo hacía.
+  const cached = getCached('topMovers', 0.25);
   if(cached){
     renderTopMovers(cached);
-    statusEl3.textContent = '✅ Datos de hoy (se actualizan solos 1 vez cada 24hs).';
+    statusEl3.textContent = '✅ Datos recientes (se refrescan cada 15 min).';
     return;
   }
 
@@ -2608,69 +2778,63 @@ async function cargarTermometro(){
 
 function dibujarTermometro(datos){
   const cont = document.getElementById('screenerPlot');
-  const W = cont.clientWidth || 900, H = 560;
-  const margenSup = 14, margenInf = 14;
-  const alturaUtil = H - margenSup - margenInf;
-  // El eje vertical va de 100 (arriba) a 0 (abajo)
-  const yDe = k => margenSup + (100-k)/100 * alturaUtil;
+  const promedio = datos.reduce((s,d)=>s+d.k,0)/datos.length;
 
-  // Bandas de fondo, con los mismos cortes que usa el motor
+  // ═══ DISEÑO POR BANDAS, NO POR DISPERSIÓN ═══
+  // La versión anterior repartía los puntos con (idx * 37) % ancho, lo que los apilaba en columnas
+  // arbitrarias: en el celular se superponían y el texto de 8,5px era ilegible.
+  // Ahora cada banda es una fila con las monedas como fichas que fluyen naturalmente. Se lee bien
+  // en cualquier ancho y no hace falta posicionamiento absoluto.
   const bandas = [
-    {desde:80, hasta:100, color:'rgba(239,68,68,0.16)',  label:'SOBRECOMPRADO'},
-    {desde:60, hasta:80,  color:'rgba(239,68,68,0.07)',  label:'FUERTE'},
-    {desde:40, hasta:60,  color:'rgba(255,255,255,0.03)',label:'NEUTRAL'},
-    {desde:20, hasta:40,  color:'rgba(16,185,129,0.07)', label:'DÉBIL'},
-    {desde:0,  hasta:20,  color:'rgba(16,185,129,0.16)', label:'SOBREVENDIDO'},
+    { desde:80, hasta:100, label:'SOBRECOMPRADO', sub:'agotadas al alza', color:'#ef4444', bg:'rgba(239,68,68,0.10)' },
+    { desde:60, hasta:80,  label:'FUERTE',        sub:'con impulso comprador', color:'#f87171', bg:'rgba(239,68,68,0.05)' },
+    { desde:40, hasta:60,  label:'NEUTRAL',       sub:'sin dirección clara', color:'#8b98a8', bg:'rgba(255,255,255,0.02)' },
+    { desde:20, hasta:40,  label:'DÉBIL',         sub:'con impulso vendedor', color:'#34d399', bg:'rgba(16,185,129,0.05)' },
+    { desde:0,  hasta:20,  label:'SOBREVENDIDO',  sub:'agotadas a la baja', color:'#10b981', bg:'rgba(16,185,129,0.10)' },
   ];
-  let html = bandas.map(b=>{
-    const y1 = yDe(b.hasta), y2 = yDe(b.desde);
-    return `<div style="position:absolute;left:0;right:0;top:${y1}px;height:${y2-y1}px;background:${b.color};"></div>
-            <div style="position:absolute;right:8px;top:${y1+4}px;font-size:9.5px;color:rgba(255,255,255,0.35);letter-spacing:1px;font-weight:600;">${b.label}</div>`;
+
+  const html = bandas.map(b=>{
+    const enBanda = datos.filter(d => d.k >= b.desde && d.k < (b.hasta===100?101:b.hasta))
+                         .sort((a,b2)=> b2.vol - a.vol); // las de más volumen primero
+    if(!enBanda.length) return '';
+    const fichas = enBanda.map(d=>`
+      <span class="scr-ficha" data-sym="${d.sym}" style="
+        display:inline-flex;align-items:center;gap:5px;
+        background:${b.bg};border:1px solid ${b.color}44;border-radius:8px;
+        padding:5px 9px;margin:0 5px 5px 0;cursor:pointer;font-size:11.5px;
+        transition:border-color .15s ease;">
+        <b style="color:${b.color};">${d.sym}</b>
+        <span style="color:var(--sub);font-size:10.5px;">${d.k.toFixed(0)}</span>
+        <span style="color:${d.chg>=0?'var(--teal)':'var(--rose)'};font-size:10px;">${d.chg>=0?'+':''}${d.chg.toFixed(1)}%</span>
+      </span>`).join('');
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:7px;">
+          <span style="font-size:11.5px;font-weight:700;color:${b.color};letter-spacing:0.5px;">${b.label}</span>
+          <span style="font-size:10.5px;color:var(--sub);">${b.desde}–${b.hasta} · ${enBanda.length} moneda${enBanda.length!==1?'s':''} · ${b.sub}</span>
+        </div>
+        <div>${fichas}</div>
+      </div>`;
   }).join('');
 
-  // Reparto horizontal: se ordenan por Estocástico y se distribuyen para que no se encimen.
-  const orden = [...datos].sort((a,b)=>b.k-a.k);
-  const anchoUtil = W - 30;
-  const cols = Math.max(8, Math.floor(anchoUtil / 34));
-  // Se agrupan por franjas de 2 puntos de Estocástico para separar los que caen en el mismo nivel
-  const franjas = {};
-  orden.forEach(d=>{
-    const f = Math.floor(d.k/2);
-    (franjas[f] = franjas[f] || []).push(d);
-  });
+  cont.innerHTML = html || '<div class="subrow">Sin datos para mostrar.</div>';
 
-  Object.values(franjas).forEach(grupo=>{
-    grupo.forEach((d, idx)=>{
-      const y = yDe(d.k);
-      // Se reparten en abanico dentro de la franja
-      const x = 14 + ((idx * 37) % anchoUtil);
-      const color = d.k>=80 ? '#ef4444' : d.k>=60 ? '#f87171' : d.k<=20 ? '#10b981' : d.k<=40 ? '#34d399' : '#8b98a8';
-      const tamano = d.k>=80 || d.k<=20 ? 9 : 7;
-      html += `<div class="scr-punto" data-sym="${d.sym}" style="position:absolute;left:${x}px;top:${y}px;transform:translate(-50%,-50%);cursor:pointer;z-index:2;">
-        <div style="width:${tamano}px;height:${tamano}px;border-radius:50%;background:${color};margin:0 auto;box-shadow:0 0 6px ${color}66;"></div>
-        <div style="font-size:8.5px;color:${color};text-align:center;margin-top:2px;white-space:nowrap;font-weight:600;">${d.sym}</div>
-      </div>`;
-    });
-  });
-
-  // Línea del promedio
-  const promedio = datos.reduce((s,d)=>s+d.k,0)/datos.length;
-  html += `<div style="position:absolute;left:0;right:0;top:${yDe(promedio)}px;border-top:1px dashed rgba(245,158,11,0.7);z-index:3;"></div>
-           <div style="position:absolute;right:8px;top:${yDe(promedio)-16}px;font-size:10px;color:#f59e0b;font-weight:700;z-index:3;">PROMEDIO ${promedio.toFixed(1)}</div>`;
-
-  cont.innerHTML = html;
-
-  // Resumen debajo
+  // Resumen: lo más accionable, arriba de todo
   const sobrecompradas = datos.filter(d=>d.k>=80);
   const sobrevendidas = datos.filter(d=>d.k<=20);
-  const lista = arr => arr.sort((a,b)=>b.vol-a.vol).slice(0,8).map(d=>`${d.sym} (${d.k.toFixed(0)})`).join(', ') || '—';
-  document.getElementById('screenerResumen').innerHTML =
-    `<b style="color:var(--rose);">🔴 Sobrecompradas (${sobrecompradas.length}):</b> ${lista(sobrecompradas)}<br><br>` +
-    `<b style="color:var(--teal);">🟢 Sobrevendidas (${sobrevendidas.length}):</b> ${lista(sobrevendidas)}<br><br>` +
-    `<i>Promedio del mercado: ${promedio.toFixed(1)} — ${promedio>=60?'el mercado en general está caliente':promedio<=40?'el mercado en general está frío':'el mercado está equilibrado'}.</i>`;
+  const clima = promedio>=60 ? 'el mercado está caliente — cuidado con comprar arriba'
+              : promedio<=40 ? 'el mercado está frío — puede haber oportunidades de compra'
+              : 'el mercado está equilibrado';
+  document.getElementById('screenerResumen').innerHTML = `
+    <div class="indi-grid" style="margin-bottom:10px;">
+      <div class="indi-col"><div class="il-k">Promedio</div><div class="il-v" style="color:${promedio>=60?'var(--rose)':promedio<=40?'var(--teal)':'var(--sub)'};">${promedio.toFixed(1)}</div></div>
+      <div class="indi-col"><div class="il-k">Sobrecompradas</div><div class="il-v" style="color:var(--rose);">${sobrecompradas.length}</div></div>
+      <div class="indi-col"><div class="il-k">Sobrevendidas</div><div class="il-v" style="color:var(--teal);">${sobrevendidas.length}</div></div>
+      <div class="indi-col"><div class="il-k">Analizadas</div><div class="il-v">${datos.length}</div></div>
+    </div>
+    <div style="font-size:12px;color:var(--sub);">${clima}. Tocá cualquier moneda para analizarla.</div>`;
 
-  // Tocar una moneda la manda a analizar
-  cont.querySelectorAll('.scr-punto').forEach(el=>{
+  cont.querySelectorAll('.scr-ficha').forEach(el=>{
     el.addEventListener('click', ()=>{
       document.getElementById('tokenInput').value = el.dataset.sym;
       switchTab('analizar');
@@ -3044,6 +3208,325 @@ document.getElementById('huntToggleBtn').addEventListener('click', async ()=>{
 
 // ================= THEHATON (cuenta virtual del bot) =================
 const THEHATON_STATE_URL = 'https://raw.githubusercontent.com/davidariel631-art/critophaton/main/telegram-bot/state.json';
+// ═══════════════════════════════════════════════════════════════
+// THEHATON INTELLIGENCE
+// Le da interfaz a todo lo que el motor calcula pero antes no se podía ver desde ningún lado:
+// el reporte de investigación, el rendimiento por moneda, la biblioteca de operaciones y la
+// salud de las fuentes de datos.
+// ═══════════════════════════════════════════════════════════════
+let intelVista = 'metricas';
+let _intelTrades = null;
+
+async function cargarIntel(){
+  const status = document.getElementById('intelStatus');
+  const cont = document.getElementById('intelContenido');
+  if(_intelTrades === null){
+    status.textContent = 'Cargando datos de TheHaton...';
+    try{
+      const res = await fetch(THEHATON_STATE_URL + '?t=' + Date.now());
+      const state = res.ok ? await res.json() : null;
+      _intelTrades = state?.account?.closedTrades || [];
+    }catch(e){ _intelTrades = []; }
+  }
+  status.textContent = _intelTrades.length
+    ? `${_intelTrades.length} operaciones cerradas registradas.`
+    : 'Todavía no hay operaciones cerradas para analizar.';
+  cont.innerHTML = renderIntel(intelVista, _intelTrades);
+  if(intelVista === 'datos') conectarSelectorMoneda();
+}
+
+function renderIntel(vista, trades){
+  const E = window.TheHatonEngine;
+  if(!E) return '<div class="subrow">El motor no está disponible.</div>';
+
+  // Las 8 vistas se agruparon en 4 pestañas para que entren en el celular sin partirse en tres
+  // renglones. Cada grupo junta las vistas que responden la misma pregunta.
+  const sep = (titulo) => `<div style="font-size:12px;color:var(--sub);letter-spacing:0.5px;margin:22px 0 10px;border-top:1px solid var(--border);padding-top:14px;">${titulo}</div>`;
+  if(vista === 'metricas') return renderIntelVista('metricas', trades);
+  if(vista === 'research') return renderIntelVista('research', trades) + sep('SEGUIMIENTO DE HIPÓTESIS') + renderIntelVista('hipotesis', trades);
+  if(vista === 'ranking')  return renderIntelVista('ranking', trades) + sep('VALIDACIÓN FUERA DE MUESTRA') + renderIntelVista('validacion', trades);
+  if(vista === 'stops')    return renderIntelVista('stops', trades) + sep('SIMULADOR DE OBJETIVOS (TP1)') + renderIntelVista('tps', trades);
+  if(vista === 'datos')    return renderIntelVista('monedas', trades) + sep('BIBLIOTECA DE OPERACIONES') + renderIntelVista('biblioteca', trades) + sep('SALUD DE LAS FUENTES') + renderIntelVista('apis', trades);
+  return renderIntelVista(vista, trades);
+}
+
+function renderIntelVista(vista, trades){
+  const E = window.TheHatonEngine;
+
+  if(vista === 'metricas'){
+    const met = E.metricasCompletas(trades);
+    if(!met.listo) return `<div class="subrow">${met.nota}</div>`;
+    const col = (k,v,c2) => `<div class="indi-col"><div class="il-k">${k}</div><div class="il-v"${c2?` style="color:${c2};"`:''}>${v}</div></div>`;
+    let html = `<div class="indi-grid" style="margin-bottom:12px;">
+      ${col('Expectancy', (met.expectancy>=0?'+':'')+met.expectancy+'%', met.expectancy>0?'var(--teal)':'var(--rose)')}
+      ${col('Win rate', met.winRate+'%')}
+      ${col('Profit Factor', met.profitFactor===Infinity?'∞':met.profitFactor, met.profitFactor>=1?'var(--teal)':'var(--rose)')}
+      ${col('Drawdown máx', met.drawdownMax+'%', 'var(--amber)')}
+      ${col('Ganancia media', '+'+met.avgWin+'%','var(--teal)')}
+      ${col('Pérdida media', '-'+met.avgLoss+'%','var(--rose)')}
+      ${col('Peor racha', met.peorRachaPerdedora+' seguidas')}
+      ${col('Resultado neto', (met.netoUsd!=null?(met.netoUsd>=0?'+':'')+met.netoUsd+' USDT':(met.resultadoNetoPct>=0?'+':'')+met.resultadoNetoPct+'%'), (met.netoUsd??met.resultadoNetoPct)>=0?'var(--teal)':'var(--rose)')}
+    </div>
+    ${met.netoUsd!=null?`<div class="subrow" style="margin-bottom:10px;font-size:12px;">
+      Bruto <b>${met.brutoUsd>=0?'+':''}${met.brutoUsd} USDT</b> − costes <b style="color:var(--rose);">${met.costesUsd} USDT</b> = <b style="color:${met.netoUsd>=0?'var(--teal)':'var(--rose)'};">${met.netoUsd>=0?'+':''}${met.netoUsd} USDT netos</b>
+    </div>`:''}
+    <div class="indi-col" style="border-top-color:var(--amber);margin-bottom:14px;"><div style="font-size:12.5px;">${met.veredicto}</div></div>`;
+
+    if(met.costes){
+      html += `<div style="font-size:12px;color:var(--sub);letter-spacing:0.5px;margin:16px 0 8px;">COSTES DE EJECUCIÓN</div>
+        <div class="subrow" style="margin-bottom:8px;">Bruto <b>${met.resultadoBrutoPct}%</b> → Neto <b style="color:${met.resultadoNetoPct>=0?'var(--teal)':'var(--rose)'};">${met.resultadoNetoPct}%</b> · se llevan ${met.costes.costeTotal}% (${met.costes.costePromedioPorOperacion}% por operación)</div>
+        <div class="indi-col" style="border-top-color:var(--rose);"><div style="font-size:12px;">${met.costes.conclusion}</div></div>
+        <div class="hint" style="margin-top:8px;">${met.costes.nota}</div>`;
+    }
+
+    const reg = E.rendimientoPorRegimen(trades);
+    if(reg.listo){
+      html += '<div style="font-size:12px;color:var(--sub);letter-spacing:0.5px;margin:18px 0 8px;">RENDIMIENTO POR RÉGIMEN DE MERCADO</div>';
+      html += reg.filas.map(f=>{
+        const cl = f.expectancy>=0.1?'var(--teal)':f.expectancy>-0.1?'var(--sub)':'var(--rose)';
+        return `<div class="indi-col" style="margin-bottom:9px;border-top-color:${cl};">
+          <div style="display:flex;justify-content:space-between;"><span style="font-weight:700;font-size:13px;">${f.regimen}</span><span style="color:${cl};font-weight:700;">${f.expectancy>=0?'+':''}${f.expectancy}R</span></div>
+          <div style="font-size:11px;color:var(--sub);margin-top:3px;">${f.operaciones} ops · WR ${f.winRate}% · muestra ${f.confianza}${f.mejorSetup?` · mejor setup acá: ${f.mejorSetup.setup} (${f.mejorSetup.expectancy}R)`:''}</div>
+        </div>`;
+      }).join('');
+      html += `<div class="hint" style="margin-top:8px;">${reg.nota}</div>`;
+    }
+
+    // Calidad de la decisión, separada del resultado. Una operación puede ser mala y ganar.
+    const cal = E.resumenCalidadDecisiones(trades);
+    if(cal.listo){
+      html += '<div style="font-size:12px;color:var(--sub);letter-spacing:0.5px;margin:18px 0 8px;">CALIDAD DE LA DECISIÓN (independiente del resultado)</div>';
+      html += cal.filas.map(f=>{
+        const cl = f.calidad==='BUENA'?'var(--teal)':f.calidad==='ACEPTABLE'?'#34d399':f.calidad==='DÉBIL'?'var(--amber)':'var(--rose)';
+        return `<div class="indi-line" style="border-bottom:1px solid var(--border);padding:8px 0;">
+          <div class="il-k" style="color:${cl};">${f.calidad}</div>
+          <div class="il-v">${f.operaciones} ops · WR ${f.winRate}%${f.suficienteMuestra?'':' <span style="font-size:10px;color:var(--amber);">(muestra chica)</span>'}</div>
+        </div>`;
+      }).join('');
+      html += `<div class="indi-col" style="margin-top:10px;border-top-color:var(--amber);"><div style="font-size:12.5px;">${cal.conclusion}</div></div>`;
+      html += `<div class="hint" style="margin-top:8px;">${cal.nota}</div>`;
+    }
+    return html;
+  }
+
+  if(vista === 'research'){
+    const r = E.generarReporteResearch(trades);
+    if(!r.hallazgos.length && r.advertencias.length){
+      return `<div class="subrow"><b>Win rate global: ${r.winRateGlobal ?? '—'}%</b> sobre ${r.operaciones} operaciones.<br><br>` +
+        r.advertencias.map(a=>`⚠️ ${a}`).join('<br><br>') + '</div>';
+    }
+    let html = `<div class="subrow" style="margin-bottom:14px;"><b>Win rate global: ${r.winRateGlobal}%</b> sobre ${r.operaciones} operaciones · ${r.listoParaConcluir ? 'muestra suficiente' : '<span style="color:var(--amber);">muestra chica todavía</span>'}</div>`;
+    if(r.valorConfirmacion){
+      const v = r.valorConfirmacion;
+      const color = v.ventaja > 5 ? 'var(--teal)' : v.ventaja < -5 ? 'var(--rose)' : 'var(--sub)';
+      html += `<div class="indi-col" style="margin-bottom:14px;border-top-color:${color};"><b>¿La confirmación en 15m aporta?</b><br>
+        Confirmadas: ${v.winRateConfirmadas}% · Descartadas: ${v.winRateDescartadas}%<br>
+        <span style="color:${color};">${v.veredicto}</span></div>`;
+    }
+    // Aporte real de cada componente — la medición que responde "¿cuánto vale cada Dios?"
+    if(r.aporteComponentes?.length){
+      html += '<div style="font-size:12px;color:var(--sub);letter-spacing:0.5px;margin:16px 0 8px;">APORTE REAL DE CADA COMPONENTE</div>';
+      html += r.aporteComponentes.map(a=>{
+        const color = a.edge>=10 ? 'var(--teal)' : a.edge<=-10 ? 'var(--rose)' : 'var(--sub)';
+        return `<div class="indi-col" style="margin-bottom:10px;border-top-color:${color};">
+          <div style="font-weight:700;font-size:13.5px;">${a.componente}</div>
+          <div style="font-size:11.5px;color:var(--sub);margin-top:4px;">
+            Empujando fuerte: <b style="color:${color};">${a.winRateConAporte}%</b> (${a.conAporte} ops) ·
+            Sin aportar: <b>${a.winRateSinAporte}%</b> (${a.sinAporte} ops)
+          </div>
+          <div style="font-size:12px;margin-top:5px;color:${color};">${a.edge>0?'+':''}${a.edge} puntos — ${a.veredicto}</div>
+        </div>`;
+      }).join('');
+      html += '<div style="font-size:12px;color:var(--sub);letter-spacing:0.5px;margin:16px 0 8px;">PATRONES ENCONTRADOS</div>';
+    }
+
+    html += r.hallazgos.map(h=>{
+      const color = h.direccion==='mejor' ? 'var(--teal)' : 'var(--rose)';
+      return `<div class="indi-col" style="margin-bottom:10px;border-top-color:${color};">
+        <div style="font-size:12px;color:var(--sub);">${h.tipo}</div>
+        <div style="font-weight:700;font-size:14px;">${h.valor} — <span style="color:${color};">${h.winRate}%</span> <span style="font-size:11px;color:var(--sub);">(${h.diferencia>0?'+':''}${h.diferencia} vs promedio)</span></div>
+        <div style="font-size:11.5px;color:var(--sub);margin-top:5px;">${h.operaciones} operaciones · confianza ${h.confianza}</div>
+        <div style="font-size:11.5px;margin-top:5px;">${h.hipotesis}</div>
+      </div>`;
+    }).join('');
+    html += `<div class="hint" style="margin-top:14px;">${r.nota}</div>`;
+    return html;
+  }
+
+  if(vista === 'monedas'){
+    const simbolos = [...new Set(trades.map(t=>t.symbol))].sort();
+    if(!simbolos.length) return '<div class="subrow">Todavía no hay monedas con operaciones cerradas.</div>';
+    let html = `<select id="intelMoneda" style="background:var(--panel2);border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--text);font-size:12.5px;margin-bottom:14px;">` +
+      simbolos.map(s=>`<option value="${s}">${s}</option>`).join('') + '</select><div id="intelMonedaBox"></div>';
+    return html;
+  }
+
+  if(vista === 'biblioteca'){
+    const r = E.buscarEnBiblioteca(trades, {});
+    if(!r.total) return '<div class="subrow">Todavía no hay operaciones en la biblioteca.</div>';
+    const filas = r.operaciones.slice().reverse().slice(0,40).map(t=>{
+      const gano = t.pnlPct > 0;
+      return `<div class="indi-line" style="border-bottom:1px solid var(--border);padding:9px 0;">
+        <div class="il-k">${t.symbol}${t.tag||''} · ${t.dir} · <span style="font-size:10.5px;">${t.tipoSetup||'sin dato'}</span></div>
+        <div class="il-v" style="color:${gano?'var(--teal)':'var(--rose)'};">${gano?'+':''}${(t.pnlPct??0).toFixed(2)}% <span style="font-size:10.5px;color:var(--sub);">score ${t.score??'—'}</span></div>
+      </div>`;
+    }).join('');
+    return `<div class="subrow" style="margin-bottom:12px;">${r.total} operaciones · WR ${r.winRate}% · Profit Factor ${r.profitFactor}</div>${filas}`;
+  }
+
+  if(vista === 'tps'){
+    const tp = E.simularTPs(trades);
+    if(!tp.listo) return `<div class="subrow">${tp.nota}<br><br><i>Usa el MFE registrado: si una operación llegó a 1,4R, un objetivo a 1,2R se habría alcanzado y uno a 2R no.</i></div>`;
+    let html = tp.filas.map(f=>{
+      const esMejor = f.tpEnR===tp.mejor.tpEnR, esActual = f.tpEnR===1.0;
+      return `<div class="indi-line" style="border-bottom:1px solid var(--border);padding:8px 0;${esMejor?'background:rgba(16,185,129,0.06);':''}">
+        <div class="il-k">${f.tpEnR}R ${esActual?'<span style="font-size:10px;color:var(--amber);">(actual)</span>':''}${esMejor?' <span style="font-size:10px;color:var(--teal);">★</span>':''}</div>
+        <div class="il-v" style="color:${f.expectancy>0?'var(--teal)':'var(--rose)'};">${f.expectancy>=0?'+':''}${f.expectancy}R <span style="font-size:10.5px;color:var(--sub);">· se alcanza ${f.pctAlcanzado}%</span></div>
+      </div>`;
+    }).join('');
+    html += `<div class="indi-col" style="margin-top:10px;border-top-color:var(--amber);"><div style="font-size:12px;">${tp.conclusion}</div></div>`;
+    html += `<div class="hint" style="margin-top:8px;">${tp.advertencia}</div>`;
+    return html;
+  }
+
+  if(vista === 'validacion'){
+    const v = E.validarFueraDeMuestra(trades);
+    if(!v.listo) return `<div class="subrow">${v.nota}<br><br><i>Esta es la prueba más importante contra el sobreajuste: busca patrones en una parte de las operaciones y los comprueba en otra que nunca miró.</i></div>`;
+    let html = `<div class="indi-grid" style="margin-bottom:12px;">
+      <div class="indi-col"><div class="il-k">Investigación</div><div class="il-v">${v.entrenamiento.operaciones} ops · ${v.entrenamiento.winRate}%</div></div>
+      <div class="indi-col"><div class="il-k">Validación</div><div class="il-v">${v.validacion.operaciones} ops · ${v.validacion.winRate}%</div></div>
+    </div>`;
+    html += v.resultados.map(r=>{
+      const color = r.validado===true?'var(--teal)':r.validado===false?'var(--rose)':'var(--amber)';
+      return `<div class="indi-col" style="margin-bottom:9px;border-top-color:${color};">
+        <div style="font-weight:700;font-size:13px;">${r.etiqueta}: ${r.clave}</div>
+        <div style="font-size:11.5px;margin-top:4px;">${r.veredicto}</div>
+      </div>`;
+    }).join('');
+    html += `<div class="indi-col" style="margin-top:12px;border-top-color:var(--amber);"><div style="font-size:12.5px;">${v.conclusion}</div></div>`;
+    html += `<div class="hint" style="margin-top:10px;">${v.nota}</div>`;
+    return html;
+  }
+
+  if(vista === 'ranking'){
+    const e = E.expectancyPorEstrategia(trades);
+    if(!e.listo) return `<div class="subrow">${e.nota}<br><br><i>La expectancy mide cuánto se gana en promedio por operación, contando frecuencia y tamaño. Es mejor métrica que el win rate solo.</i></div>`;
+    const mc = E.monteCarlo(trades, 1000);
+    let html = e.ranking.slice(0,12).map(x=>{
+      const color = x.expectancy>=0.3?'var(--teal)':x.expectancy>=0.1?'#34d399':x.expectancy>-0.1?'var(--sub)':'var(--rose)';
+      const opaco = x.confianza==='baja' ? 'opacity:0.65;' : '';
+      return `<div class="indi-col" style="margin-bottom:9px;border-top-color:${color};${opaco}">
+        <div style="display:flex;justify-content:space-between;">
+          <span style="font-weight:700;font-size:13px;">${x.veredicto} ${x.estrategia}</span>
+          <span style="color:${color};font-weight:700;">${x.expectancy>=0?'+':''}${x.expectancy}R</span>
+        </div>
+        <div style="font-size:11px;color:var(--sub);margin-top:3px;">
+          ${x.categoria} · ${x.operaciones} ops · WR ${x.winRate}% · PF ${x.profitFactor} · muestra ${x.confianza}
+        </div>
+        ${x.mfePromedio!=null?`<div style="font-size:10.5px;color:var(--sub);">MFE ${x.mfePromedio}R · MAE ${x.maePromedio}R</div>`:''}
+      </div>`;
+    }).join('');
+    html += `<div class="hint" style="margin:12px 0;">${e.nota}</div>`;
+    if(mc.listo){
+      html += `<div style="font-size:12px;color:var(--sub);letter-spacing:0.5px;margin:16px 0 8px;">MONTE CARLO (${mc.iteraciones} secuencias)</div>
+        <div class="indi-grid" style="margin-bottom:10px;">
+          <div class="indi-col"><div class="il-k">Capital mediana</div><div class="il-v">${mc.capital.mediana}</div></div>
+          <div class="indi-col"><div class="il-k">Peor caso (1%)</div><div class="il-v" style="color:var(--rose);">${mc.capital.peor}</div></div>
+          <div class="indi-col"><div class="il-k">Drawdown malo</div><div class="il-v" style="color:var(--amber);">${mc.drawdown.malo}%</div></div>
+          <div class="indi-col"><div class="il-k">Peor racha</div><div class="il-v">${mc.peorRachaTipica} (máx ${mc.peorRachaPosible})</div></div>
+        </div>
+        <div class="indi-col" style="border-top-color:var(--amber);"><div style="font-size:12px;">${mc.conclusion}</div></div>`;
+    }
+    return html;
+  }
+
+  if(vista === 'stops'){
+    const s = E.simularStops(trades);
+    if(!s.listo) return `<div class="subrow">${s.nota}<br><br><i>El simulador usa el MFE y el MAE de cada operación cerrada: si el retroceso máximo fue de 0,7R, un stop a 1R la habría dejado viva.</i></div>`;
+    const filas = s.filas.map(f=>{
+      const esMejor = f.stopEnR === s.mejor.stopEnR;
+      const esActual = f.stopEnR === 1.0;
+      const color = f.expectancy > 0 ? 'var(--teal)' : 'var(--rose)';
+      return `<div class="indi-line" style="border-bottom:1px solid var(--border);padding:9px 0;${esMejor?'background:rgba(16,185,129,0.06);':''}">
+        <div class="il-k">${f.stopEnR}R ${esActual?'<span style="font-size:10px;color:var(--amber);">(actual)</span>':''}${esMejor?' <span style="font-size:10px;color:var(--teal);">★ mejor</span>':''}</div>
+        <div class="il-v" style="color:${color};">${f.expectancy>=0?'+':''}${f.expectancy}R <span style="font-size:10.5px;color:var(--sub);">· WR ${f.winRate}% · PF ${f.profitFactor} · DD ${f.drawdownMax}%${f.salvadas?` · ${f.salvadas} salvadas`:''}</span></div>
+      </div>`;
+    }).join('');
+    return `<div class="subrow" style="margin-bottom:12px;">Simulado sobre ${s.operaciones} operaciones cerradas.</div>${filas}
+      <div class="indi-col" style="margin-top:12px;border-top-color:var(--amber);">
+        <div style="font-size:12.5px;">${s.conclusion}</div>
+      </div>
+      <div class="hint" style="margin-top:10px;">${s.advertencia}</div>`;
+  }
+
+  if(vista === 'hipotesis'){
+    // Los reportes se guardan en este navegador para poder comparar a lo largo del tiempo.
+    // Un patrón que aparece una vez puede ser casualidad; uno que se repite en varios reportes no.
+    let historicos = [];
+    try{ historicos = JSON.parse(localStorage.getItem('krax_reportes_research') || '[]'); }catch(e){ historicos = []; }
+    const actual = E.generarReporteResearch(trades);
+    // Se guarda el reporte de hoy si todavía no está (uno por día como máximo)
+    const hoy = new Date().toISOString().slice(0,10);
+    if(actual.hallazgos.length && !historicos.some(h=>h.dia===hoy)){
+      historicos.push({ dia: hoy, hallazgos: actual.hallazgos });
+      try{ localStorage.setItem('krax_reportes_research', JSON.stringify(historicos.slice(-30))); }catch(e){}
+    }
+    const s = E.seguirHipotesis(historicos);
+    if(!s.listo) return `<div class="subrow">${s.nota}<br><br><i>Cada vez que entres acá se guarda un reporte del día. Con 3 o más se puede empezar a ver qué patrones se sostienen.</i></div>`;
+    return `<div class="subrow" style="margin-bottom:14px;">${s.nota}</div>` + s.hipotesis.map(h=>{
+      const color = h.estado==='SOSTENIDA' ? 'var(--teal)' : h.estado==='PROBABLE' ? 'var(--amber)' : 'var(--sub)';
+      const icono = h.estado==='SOSTENIDA' ? '✅' : h.estado==='PROBABLE' ? '🟡' : '⚪';
+      return `<div class="indi-col" style="margin-bottom:10px;border-top-color:${color};">
+        <div style="font-size:12px;color:var(--sub);">${h.tipo}</div>
+        <div style="font-weight:700;font-size:14px;">${icono} ${h.valor} — <span style="color:${color};">${h.estado}</span></div>
+        <div style="font-size:11.5px;color:var(--sub);margin-top:5px;">Apareció en ${h.veces} de ${s.reportesAnalizados} reportes (${h.consistencia}%)</div>
+        <div style="font-size:11.5px;margin-top:5px;">${h.conclusion}</div>
+      </div>`;
+    }).join('');
+  }
+
+  if(vista === 'apis'){
+    const salud = E.getSaludAPIs ? E.getSaludAPIs() : [];
+    if(!salud.length) return '<div class="subrow">Todavía no se registraron llamadas a las fuentes en esta sesión. Analizá una moneda y volvé acá.</div>';
+    return salud.map(s=>`<div class="indi-line" style="border-bottom:1px solid var(--border);padding:9px 0;">
+      <div class="il-k">${s.estado} ${s.nombre}</div>
+      <div class="il-v">${s.disponibilidad}% <span style="font-size:10.5px;color:var(--sub);">(${s.intentos} intentos${s.msPromedio?`, ${s.msPromedio}ms`:''})</span></div>
+    </div>${s.ultimoError?`<div style="font-size:10.5px;color:var(--rose);margin:-4px 0 8px;">Último error: ${s.ultimoError}</div>`:''}`).join('');
+  }
+  return '';
+}
+
+function conectarSelectorMoneda(){
+  const sel = document.getElementById('intelMoneda');
+  if(!sel) return;
+  const pintar = () => {
+    const h = window.TheHatonEngine.computeHistorialMoneda(_intelTrades, sel.value);
+    const box = document.getElementById('intelMonedaBox');
+    if(!h || !h.operaciones){ box.innerHTML = '<div class="subrow">Sin operaciones para esta moneda.</div>'; return; }
+    box.innerHTML = `
+      <div class="indi-grid" style="margin-bottom:12px;">
+        <div class="indi-col"><div class="il-k">Operaciones</div><div class="il-v">${h.operaciones}</div></div>
+        <div class="indi-col"><div class="il-k">Win rate</div><div class="il-v" style="color:${h.winRate>=50?'var(--teal)':'var(--rose)'};">${h.winRate}%</div></div>
+        <div class="indi-col"><div class="il-k">Profit Factor</div><div class="il-v">${h.profitFactor===Infinity?'∞':h.profitFactor}</div></div>
+        <div class="indi-col"><div class="il-k">P&L total</div><div class="il-v" style="color:${h.pnlTotal>=0?'var(--teal)':'var(--rose)'};">${h.pnlTotal>=0?'+':''}${h.pnlTotal}</div></div>
+      </div>
+      <div class="subrow" style="margin-bottom:10px;">LONG: ${h.long} ops (${h.winRateLong ?? '—'}%) · SHORT: ${h.short} ops (${h.winRateShort ?? '—'}%)</div>
+      ${!h.suficienteMuestra ? '<div class="hint" style="color:var(--amber);">⚠️ Menos de 10 operaciones: estos porcentajes todavía son ruido, no una tendencia.</div>' : ''}
+      ${h.caminosQueFuncionaron?.length ? '<div style="margin-top:12px;"><b style="font-size:12.5px;">Por camino de confirmación:</b>' + h.caminosQueFuncionaron.map(cm=>`<div class="indi-line" style="padding:6px 0;"><div class="il-k">${cm.nombre}</div><div class="il-v">${cm.winRate}% <span style="font-size:10.5px;color:var(--sub);">(${cm.operaciones})</span></div></div>`).join('') + '</div>' : ''}
+    `;
+  };
+  sel.addEventListener('change', pintar);
+  pintar();
+}
+
+document.getElementById('intelTabs')?.addEventListener('click', e=>{
+  const btn = e.target.closest('.tf-btn'); if(!btn) return;
+  document.querySelectorAll('#intelTabs .tf-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  intelVista = btn.dataset.intel;
+  cargarIntel();
+});
+
 async function loadTheHaton(){
   const statusEl4 = document.getElementById('thehatonStatus');
   const body = document.getElementById('thehatonBody');
