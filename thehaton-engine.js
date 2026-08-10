@@ -312,6 +312,31 @@ async function tryKuCoin(symbolRaw, tf){
   };
 }
 
+// ═══ MONITOR DE APIs ═══
+// Registra qué fuente respondió y cuál falló, para saber si una señal salió con datos completos.
+// Se alimenta solo, desde los intentos que ya hace fetchTokenData: no agrega ningún pedido extra.
+const _saludAPIs = {};
+function registrarAPI(nombre, ok, ms, motivo){
+  if(!_saludAPIs[nombre]) _saludAPIs[nombre] = { intentos:0, exitos:0, fallos:0, msTotal:0, ultimoError:null };
+  const s = _saludAPIs[nombre];
+  s.intentos++;
+  if(ok){ s.exitos++; s.msTotal += (ms||0); }
+  else { s.fallos++; s.ultimoError = motivo || 'error desconocido'; }
+}
+function getSaludAPIs(){
+  return Object.entries(_saludAPIs).map(([nombre,s])=>{
+    const pct = s.intentos ? (s.exitos/s.intentos*100) : 0;
+    return {
+      nombre,
+      disponibilidad: +pct.toFixed(1),
+      estado: pct>=95 ? '🟢' : pct>=70 ? '🟡' : '🔴',
+      intentos: s.intentos,
+      msPromedio: s.exitos ? Math.round(s.msTotal/s.exitos) : null,
+      ultimoError: s.ultimoError,
+    };
+  }).sort((a,b)=>a.disponibilidad-b.disponibilidad);
+}
+
 // Normaliza lo que escribe la persona a un símbolo limpio.
 // Antes cada fuente hacía .replace(/[^A-Z0-9]/g,'') y después le pegaba 'USDT' — así que si
 // escribías "BICOUSDT" o "BICO/USDT" terminaba buscando "BICOUSDTUSDT", que no existe en ningún
@@ -348,10 +373,12 @@ async function fetchTokenData(query, tf){
     try{
       // 6 segundos por fuente: si no responde en ese tiempo, se pasa a la siguiente en vez de
       // quedarse colgado. Con 6 fuentes, el peor caso pasa de varios minutos a ~36 segundos.
+      const _t0 = Date.now();
       const data = await conTiempoLimite(src(query, tf), 6000, src.name);
-      if(data.candles && data.candles.length>=30) return data;
+      if(data.candles && data.candles.length>=30){ registrarAPI(src.name, true, Date.now()-_t0); return data; }
+      registrarAPI(src.name, false, null, 'sin velas suficientes');
       fallos.push(`${src.name}: sin velas suficientes`);
-    }catch(e){ fallos.push(`${src.name}: ${e.message}`); }
+    }catch(e){ registrarAPI(src.name, false, null, e.message); fallos.push(`${src.name}: ${e.message}`); }
   }
   // ninguna fuente de exchanges centralizados lo tiene -> probamos DEXs (GeckoTerminal)
   try{
@@ -579,6 +606,37 @@ function getHighImpactMacroWindow(bufferHours=2){
   const claimsDiff = (thursdayTime.getTime()-now.getTime())/(3600*1000);
   if(Math.abs(claimsDiff) <= bufferHours) return { isNear:true, hoursUntil:claimsDiff, announcementTime:thursdayTime.toISOString(), kind:'Peticiones de desempleo semanales' };
 
+  // ISM Manufacturero: primer día HÁBIL del mes, 10:00am ET (15:00 UTC en verano).
+  // Del video de análisis de BTC: un ISM/PMI fuerte le quita urgencia a la Fed para bajar tasas,
+  // fortalece al dólar y presiona a la baja a los activos de riesgo como cripto.
+  const ismHourUTC = 15;
+  let primerHabil = 1;
+  for(let d=1; d<=5; d++){
+    const dia = new Date(Date.UTC(year, month, d)).getUTCDay();
+    if(dia!==0 && dia!==6){ primerHabil = d; break; }
+  }
+  const ismTime = new Date(Date.UTC(year, month, primerHabil, ismHourUTC, 0));
+  const ismDiff = (ismTime.getTime()-now.getTime())/(3600*1000);
+  if(Math.abs(ismDiff) <= bufferHours) return { isNear:true, hoursUntil:ismDiff, announcementTime:ismTime.toISOString(), kind:'ISM Manufacturero' };
+
+  // ISM de Servicios: tercer día hábil del mes, misma hora. Pesa incluso más que el manufacturero
+  // porque los servicios son la mayor parte de la economía de EE.UU.
+  let habiles = 0, tercerHabil = 3;
+  for(let d=1; d<=7; d++){
+    const dia = new Date(Date.UTC(year, month, d)).getUTCDay();
+    if(dia!==0 && dia!==6){ habiles++; if(habiles===3){ tercerHabil = d; break; } }
+  }
+  const ismServTime = new Date(Date.UTC(year, month, tercerHabil, ismHourUTC, 0));
+  const ismServDiff = (ismServTime.getTime()-now.getTime())/(3600*1000);
+  if(Math.abs(ismServDiff) <= bufferHours) return { isNear:true, hoursUntil:ismServDiff, announcementTime:ismServTime.toISOString(), kind:'ISM de Servicios' };
+
+  // PMI preliminar de S&P Global: alrededor del día 22-24, 9:45am ET (13:45 UTC).
+  // La fecha exacta varía, así que es una ventana de precaución, no un dato confirmado.
+  const diaMes = now.getUTCDate();
+  if(diaMes>=22 && diaMes<=24 && now.getUTCHours()>=13 && now.getUTCHours()<=15){
+    return { isNear:true, hoursUntil:0, announcementTime:now.toISOString(), kind:'PMI preliminar (ventana aproximada)' };
+  }
+
   // CPI: ventana aproximada (día 10-15), no fecha exacta confirmada — aviso más suave
   const dayOfMonth = now.getUTCDate();
   if(dayOfMonth>=10 && dayOfMonth<=15 && now.getUTCHours()===targetUTCHour){
@@ -645,6 +703,38 @@ async function fetchUnlockRisk(symbol){
       ? `desbloqueo de ${pctDelFloat.toFixed(2)}% del circulante en ${horasFaltan<24 ? Math.round(horasFaltan)+' horas' : Math.round(horasFaltan/24)+' días'} (${prox.category||'vesting'})`
       : `desbloqueo programado en ${Math.round(horasFaltan/24)} días`,
   };
+}
+
+// ═══ FUERZA DEL DÓLAR (proxy de DXY) ═══
+// El motor YA usaba mc.usdStrength para calcular la señal de mercado, pero el bot nunca se lo
+// pasaba — o sea que ese componente valía 0 siempre. Acá se calcula de verdad.
+// Por qué importa: dólar fuerte = presión bajista sobre activos de riesgo como cripto. Es la
+// relación inversa clásica del módulo 6 del Máster en Microestructura.
+// Se usa EUR/USD y GBP/USD como proxy (juntos son ~70% del índice DXY real) desde exchangerate.host,
+// que es gratis y sin clave. Si falla, devuelve null y el motor sigue funcionando igual que antes.
+let _usdCache = { valor: null, ts: 0 };
+async function fetchUsdStrength(){
+  const AHORA = Date.now();
+  // El dólar se mueve lento: con actualizar cada 6 horas alcanza y no se castiga la API.
+  if(_usdCache.valor !== null && (AHORA - _usdCache.ts) < 6*3600*1000) return _usdCache.valor;
+  try{
+    const hoy = new Date();
+    const hace7 = new Date(AHORA - 7*24*3600*1000);
+    const iso = d => d.toISOString().slice(0,10);
+    const [actual, previo] = await Promise.all([
+      fetchJSON(`https://api.exchangerate.host/${iso(hoy)}?base=USD&symbols=EUR,GBP`),
+      fetchJSON(`https://api.exchangerate.host/${iso(hace7)}?base=USD&symbols=EUR,GBP`),
+    ]);
+    const eurAhora = actual?.rates?.EUR, gbpAhora = actual?.rates?.GBP;
+    const eurAntes = previo?.rates?.EUR, gbpAntes = previo?.rates?.GBP;
+    if(!eurAhora || !eurAntes || !gbpAhora || !gbpAntes) return null;
+    // Si USD/EUR sube, el dólar se fortalece. Promedio de las dos monedas.
+    const cambioEur = (eurAhora-eurAntes)/eurAntes*100;
+    const cambioGbp = (gbpAhora-gbpAntes)/gbpAntes*100;
+    const fuerza = +((cambioEur+cambioGbp)/2).toFixed(3);
+    _usdCache = { valor: fuerza, ts: AHORA };
+    return fuerza;
+  }catch(e){ return null; }
 }
 
 async function fetchCapitalFlowContext(){
@@ -900,6 +990,63 @@ function detectNivelesEstructurales(candles, lookback=120){
     maxImportante: maximos.length ? maximos.reduce((a,b)=> b.valor>a.valor?b:a) : null,
     minImportante: minimos.length ? minimos.reduce((a,b)=> b.valor<a.valor?b:a) : null,
   };
+}
+
+// ═══ MARKET PHASE ═══
+// Clasifica en qué etapa del ciclo está la moneda. Un mismo score de 8 significa cosas muy
+// distintas según la fase: comprar en expansión temprana no es lo mismo que comprar en clímax.
+// Caso concreto: BICO tenía Tendencia+Momentum+SmartMoney a favor y el bot dio LONG — pero venía
+// de +674%, o sea fase de clímax/distribución, el peor momento posible para comprar.
+// NO suma ni resta al score: es contexto para leer el score con criterio.
+function detectMarketPhase(candles){
+  if(!candles || candles.length < 100) return { fase:'DESCONOCIDA', motivo:'Historial insuficiente para clasificar.' };
+  const closes = candles.map(c=>c.c);
+  const precio = closes.at(-1);
+  const adxVal = adx(candles);
+  const v100 = candles.slice(-100);
+  const max100 = Math.max(...v100.map(c=>c.h));
+  const min100 = Math.min(...v100.map(c=>c.l));
+  const rango = (max100-min100)/min100*100;
+  const posicion = (precio-min100)/(max100-min100||1); // 0 = piso, 1 = techo
+
+  // Subida acumulada reciente: distingue expansión sana de movimiento parabólico
+  const v24 = candles.slice(-96);
+  const minReciente = Math.min(...v24.map(c=>c.l));
+  const subidaReciente = (precio-minReciente)/minReciente*100;
+
+  // Volumen: creciente indica participación real, decreciente indica agotamiento
+  const volPrimera = v100.slice(0,50).reduce((s,c)=>s+c.v,0)/50;
+  const volUltima = v100.slice(-50).reduce((s,c)=>s+c.v,0)/50;
+  const volCreciendo = volUltima > volPrimera*1.15;
+  const volCayendo = volUltima < volPrimera*0.85;
+
+  const e50 = ema(closes,50).at(-1), e200 = ema(closes, Math.min(200, closes.length-1)).at(-1);
+  const enTendenciaAlcista = precio > e50 && e50 > e200;
+  const enTendenciaBajista = precio < e50 && e50 < e200;
+
+  // CLÍMAX: subida vertical con volumen que ya no acompaña — el movimiento se agota
+  if(subidaReciente >= 60 && posicion > 0.8){
+    return { fase:'CLÍMAX', emoji:'🔥', motivo:`Subió ${subidaReciente.toFixed(0)}% en 24hs y está en la parte alta del rango. El movimiento ya se hizo; comprar acá es comprar el techo.`, favorable:'ninguna', riesgoLong:true };
+  }
+  // CAPITULACIÓN: caída vertical
+  if(posicion < 0.2 && enTendenciaBajista){
+    const caida = (max100-precio)/max100*100;
+    if(caida >= 40) return { fase:'CAPITULACIÓN', emoji:'🩸', motivo:`Cayó ${caida.toFixed(0)}% desde el máximo y está en el piso del rango. Vender acá es vender el piso.`, favorable:'ninguna', riesgoShort:true };
+  }
+  // DISTRIBUCIÓN: arriba del rango, sin fuerza y con volumen cayendo
+  if(posicion > 0.7 && volCayendo && (adxVal==null || adxVal < 25)){
+    return { fase:'DISTRIBUCIÓN', emoji:'🟠', motivo:'Precio en la parte alta del rango pero el volumen viene cayendo y la tendencia perdió fuerza: puede estar repartiéndose la posición antes de una caída.', favorable:'SHORT' };
+  }
+  // ACUMULACIÓN: abajo del rango, lateral, volumen apareciendo
+  if(posicion < 0.35 && (adxVal==null || adxVal < 22)){
+    return { fase:'ACUMULACIÓN', emoji:'🟡', motivo:`Precio en la parte baja de un rango de ${rango.toFixed(0)}% sin tendencia definida${volCreciendo?', con volumen empezando a aparecer':''}: puede estarse armando una posición antes de una subida.`, favorable:'LONG' };
+  }
+  // EXPANSIÓN: tendencia clara con fuerza
+  if(adxVal!=null && adxVal >= 25){
+    if(enTendenciaAlcista) return { fase:'EXPANSIÓN ALCISTA', emoji:'🟢', motivo:`Tendencia alcista con fuerza (ADX ${adxVal.toFixed(0)})${volCreciendo?' y volumen acompañando':''}. Los retrocesos suelen ser oportunidad de compra.`, favorable:'LONG' };
+    if(enTendenciaBajista) return { fase:'MARKDOWN', emoji:'🔴', motivo:`Tendencia bajista con fuerza (ADX ${adxVal.toFixed(0)}). Los rebotes suelen ser oportunidad de venta.`, favorable:'SHORT' };
+  }
+  return { fase:'RANGO', emoji:'⚪', motivo:`Sin tendencia definida (ADX ${adxVal!=null?adxVal.toFixed(0):'—'}), moviéndose dentro de un rango de ${rango.toFixed(0)}%. Conviene operar los bordes, no el medio.`, favorable:'bordes del rango' };
 }
 
 function detectTrianguloCompresion(candles, lookback=50){
@@ -2124,9 +2271,45 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   // de subirlo — no alcanza con que la idea tenga buen respaldo teórico, tiene que dar mejor en la
   // práctica también.
   let bullishness = trendSignal*weights.trend + momentumSignal*weights.momentum + derivSignal*weights.deriv + structureSignal*weights.structure + macroSignal*weights.macro + marketSignal*weights.market;
+
+  // ═══ EXPLAIN ENGINE ═══
+  // Guarda de dónde sale el score, componente por componente. Antes esto no existía: el "breakdown"
+  // que se mostraba eran sub-puntajes (Volumen, Volatilidad) que NO entran en la fórmula final —
+  // o sea que la explicación visible no coincidía con lo que realmente decidía.
+  // El score final es 5 + 5*bullishness, así que el aporte de cada componente en puntos de score
+  // es 5 * señal * peso. Con signo: positivo empuja a LONG, negativo a SHORT.
+  const _aporte = (senal, peso) => +(5 * senal * peso).toFixed(2);
+  const explainEngine = {
+    formula: 'score = 5 + 5 × (suma de señales × sus pesos)',
+    componentes: [
+      { nombre:'Tendencia',   senal:+trendSignal.toFixed(3),     peso:weights.trend,     aporte:_aporte(trendSignal, weights.trend),         detalle: trendBias==='bull'?'precio sobre las medias':trendBias==='bear'?'precio bajo las medias':'sin dirección clara' },
+      { nombre:'Momentum',    senal:+momentumSignal.toFixed(3),  peso:weights.momentum,  aporte:_aporte(momentumSignal, weights.momentum),   detalle: `Estocástico ${lastStochK!=null?lastStochK.toFixed(0):'—'}${divergencia?' + divergencia '+divergencia.tipo:''}` },
+      { nombre:'Estructura',  senal:+structureSignal.toFixed(3), peso:weights.structure, aporte:_aporte(structureSignal, weights.structure), detalle: structure.events?.bos ? `BOS ${structure.events.bos}` : structure.events?.choch ? `CHoCH ${structure.events.choch}` : 'sin ruptura de estructura' },
+      { nombre:'Derivados',   senal:+derivSignal.toFixed(3),     peso:weights.deriv,     aporte:_aporte(derivSignal, weights.deriv),         detalle: derivNote },
+      { nombre:'Macro (4h)',  senal:+macroSignal.toFixed(3),     peso:weights.macro,     aporte:_aporte(macroSignal, weights.macro),         detalle: macro ? `precio ${macro.bias==='bull'?'sobre':'bajo'} la EMA200 de 4h${macro.confiable===false?' (poca historia)':''}` : 'sin datos de 4h' },
+      { nombre:'Dominancias', senal:+marketSignal.toFixed(3),    peso:weights.market,    aporte:_aporte(marketSignal, weights.market),       detalle: marketNote },
+    ],
+    base: 5,
+    informativos: [], // se completa más abajo, cuando el comité ya está armado
+  };
+  explainEngine.sumaAportes = +explainEngine.componentes.reduce((s,c)=>s+c.aporte, 0).toFixed(2);
+  explainEngine.componentes.sort((a,b)=>Math.abs(b.aporte)-Math.abs(a.aporte));
+
   const volumeQuality = volume/15;
   const volatQuality = volat>=10?1 : volat<=4?0.8 : 0.9;
+  const _bullAntes = bullishness;
   bullishness = Math.max(-1,Math.min(1, bullishness*(0.75+0.25*volumeQuality)*volatQuality));
+  // Volumen y volatilidad NO suman: MULTIPLICAN el resultado de los 6 componentes. Un volumen
+  // flojo o una volatilidad extrema achican la señal entera. Por eso la suma de los aportes no
+  // coincidía con el score final — faltaba explicar este paso.
+  explainEngine.ajusteCalidad = {
+    factorVolumen: +(0.75+0.25*volumeQuality).toFixed(3),
+    factorVolatilidad: +volatQuality.toFixed(3),
+    antes: +_bullAntes.toFixed(3),
+    despues: +bullishness.toFixed(3),
+    efectoEnScore: +(5*(bullishness-_bullAntes)).toFixed(2),
+    nota: 'El volumen y la volatilidad multiplican la señal, no la suman: si el volumen no acompaña o la volatilidad es extrema, toda la señal se achica.',
+  };
 
   // ---- Confluencia avanzada: cruce Estocástico + estructura SMC + funding (short/long squeeze setup) ----
   let confluenceNote = null;
@@ -2308,14 +2491,51 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
   if(!macro) missingData.push('Tendencia macro (4h)');
   if(!marketContext?.capitalFlow) missingData.push('Flujo de capital (DeFiLlama)');
   if(btcReference==null && data.displayName!=='BTC') missingData.push('Fuerza relativa vs BTC');
-  const dataQuality = { complete: missingData.length===0, missing: missingData };
+  // ═══ DATA QUALITY SCORE (0-100) ═══
+  // Antes solo decía "completo: sí/no". Eso mezclaba dos cosas muy distintas: que falte el flujo de
+  // capital global (menor) no es lo mismo que tener pocas velas para calcular indicadores (grave).
+  // Ahora cada dato pesa según cuánto afecta la decisión, y el resultado es un número comparable.
+  // NO modifica el score: solo avisa cuánta confianza merecen los datos detrás de ese score.
+  const _chequeos = [
+    { nombre:'Velas (OHLCV)',      ok: (data.candles?.length||0) >= 200, peso: 30, parcial: (data.candles?.length||0) >= 60 },
+    { nombre:'Precio actual',      ok: Number.isFinite(data.price),      peso: 15 },
+    { nombre:'Volumen',            ok: (data.candles||[]).slice(-20).every(c=>c.v>0), peso: 10 },
+    { nombre:'Open Interest',      ok: !!marketContext?.oiTrend,         peso: 12 },
+    { nombre:'Funding',            ok: !!marketContext?.fundingTrend,    peso: 12 },
+    { nombre:'Tendencia macro 4h', ok: !!macro,                          peso: 11 },
+    { nombre:'Flujo de capital',   ok: !!marketContext?.capitalFlow,     peso: 5 },
+    { nombre:'Referencia BTC',     ok: !!btcReference,                   peso: 5 },
+  ];
+  let _puntos = 0;
+  const _faltantes = [];
+  for(const ch of _chequeos){
+    if(ch.ok) _puntos += ch.peso;
+    else if(ch.parcial){ _puntos += ch.peso*0.5; _faltantes.push(`${ch.nombre} (parcial)`); }
+    else _faltantes.push(ch.nombre);
+  }
+  const _score = Math.round(_puntos);
+  const dataQuality = {
+    complete: missingData.length===0,
+    missing: missingData,
+    score: _score,
+    nivel: _score>=85 ? 'alta' : _score>=65 ? 'aceptable' : _score>=45 ? 'baja' : 'insuficiente',
+    detalle: _chequeos.map(ch=>({ nombre:ch.nombre, ok:ch.ok, peso:ch.peso })),
+    faltantes: _faltantes,
+    // Con calidad insuficiente conviene no confirmar entradas: el score sale de datos incompletos.
+    confiable: _score >= 45,
+  };
+
+  // Se completa acá porque el comité recién está armado a esta altura. Lista los que se muestran
+  // pero NO entran en la fórmula — evita creer que votaron 14 cuando votaron 6.
+  const _DECIDEN = ['📈 Dios de Tendencia','⚡ Dios Momentum','🧠 Dios Smart Money','💰 Dios Derivados','🌐 Dios Macro (4h)','🌍 Dios de Dominancias'];
+  explainEngine.informativos = (committee||[]).filter(g=>!_DECIDEN.includes(g.name)).map(g=>g.name);
 
   return {
     score10, bias,
     longScore, shortScore, confidence, stars, recommendation,
     breakdown:[{label:'Tendencia',val:Math.round(trendR),max:25},{label:'Momentum',val:Math.round(momentumR),max:20},{label:'Volumen',val:Math.round(volumeR),max:12},{label:'Volatilidad',val:Math.round(volatR),max:8},{label:'Derivados',val:Math.round(derivR),max:15},{label:'Estructura SMC',val:Math.round(structure.score),max:20}],
     metrics:{price,lastE20,lastE50,lastE200,lastRSI,lastStochK,lastHist,lastATR,support,resistance,avgVol,lastVol,funding:data.funding,bb:lastBB,supportStrength,resistanceStrength,distToSupportPct,distToResistancePct,vwap:vwapData,divergencia,triangulo:detectTrianguloCompresion(data.candles)},
-    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality, cvd:cvdData, reversionNota,
+    derivNote, structure, macroNote, marketNote, confluenceNote, committee, votesLong, votesShort, probabilities, indicatorStatus, dataQuality, cvd:cvdData, reversionNota, explainEngine,
     series:{closes,e20,e50,e200,rsiArr,macd:m,bb}
   };
 }
@@ -2465,7 +2685,8 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     const nearestStructural = structuralLevels.length ? Math.max(...structuralLevels) : null;
     const distToStructural = nearestStructural!=null ? price-nearestStructural : null;
     // "Razonable" = ni pegado al precio (ruido lo saca fácil) ni tan lejos que el R:R deje de tener sentido.
-    const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*4;
+    const topeATR = esCapChico ? 7 : 4;
+    const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*topeATR;
     stop = esRazonable ? nearestStructural*0.997 : atrStop; // pequeño colchón debajo del nivel real
     // No dejar el stop justo pegado a una concentración grande de liquidez: ahí también tienen el
     // stop otros traders, así que es un imán para que lo barran primero — si el stop calculado cae
@@ -2497,8 +2718,13 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     // chance de funcionar (casos reales: OPEN, LISTA y CROSS cerradas por stop enseguida).
     // Acá el stop va entre 10% y 15%, y el apalancamiento baja a 5x para compensar — el riesgo en
     // dólares se mantiene parecido, pero la operación tiene aire para respirar.
+    // ═══ EL STOP LO DEFINE LA ESTRUCTURA, NO UN PORCENTAJE FIJO ═══
+    // Antes cap chico forzaba un piso del 10%, y eso generaba R:R malísimos de forma sistemática:
+    // arriesgar 10% para buscar 6% en TP1 es un R:R de 0,6 (caso real: LISTA).
+    // Ahora el piso solo evita stops absurdamente pegados; si la estructura da 6%, el stop es 6%.
+    // El techo del 15% sigue como límite de seguridad — más que eso, la operación se descarta.
     const MIN_STOP_PCT = esCapChico
-      ? Math.max(0.10, Math.min(0.15, atrPct*3))
+      ? Math.max(0.03, Math.min(0.15, atrPct*2))
       : Math.max(0.01, Math.min(0.02, atrPct*1.5));
     if((price-stop)/price < MIN_STOP_PCT) stop = price*(1-MIN_STOP_PCT);
     // TECHO MÁXIMO del stop. MIN_STOP_PCT es un PISO — sin un techo, si el soporte estructural
@@ -2532,7 +2758,9 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     // En cap chico el stop es ancho (10-15%), así que un TP1 a 1,5R quedaría a +15/22% del precio,
     // demasiado lejos para tomar ganancia parcial. Se usan múltiplos más chicos: el R:R baja pero
     // el objetivo se vuelve alcanzable, que es lo que importa para asegurar parte de la ganancia.
-    if(esCapChico){ t1=price+R*0.6; t2=price+R*1.2; t3=Math.max(resistance, price+R*2); }
+    // Múltiplos de R reales: TP1 a 1R como mínimo. Antes era 0,6R, o sea que se arriesgaba más
+    // de lo que se buscaba en el primer objetivo.
+    if(esCapChico){ t1=price+R*1.0; t2=price+R*1.6; t3=Math.max(resistance, price+R*2.5); }
     else { t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5); }
     // Los TP también buscan liquidez real, no solo un múltiplo matemático — si hay una zona de
     // liquidez real (POC) en el camino hacia arriba, a una distancia sensata, el objetivo más cercano
@@ -2555,7 +2783,8 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     const structuralLevels = [structureHTF?.bearishOB?.top, structure.bearishOB?.top, resistance].filter(v=>v!=null && v>price);
     const nearestStructural = structuralLevels.length ? Math.min(...structuralLevels) : null;
     const distToStructural = nearestStructural!=null ? nearestStructural-price : null;
-    const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*4;
+    const topeATRs = esCapChico ? 7 : 4;
+    const esRazonable = distToStructural!=null && distToStructural >= lastATR*0.6 && distToStructural <= lastATR*topeATRs;
     stop = esRazonable ? nearestStructural*1.003 : atrStop;
     if(liqProfileForStop?.pocAbove && Math.abs(liqProfileForStop.pocAbove.price-stop)/price < 0.01){
       stop = Math.max(stop, liqProfileForStop.pocAbove.price*1.005);
@@ -2564,7 +2793,7 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     // Mismo piso mínimo adaptativo, mirado hacia arriba (ATR del marco mayor, techo 4%).
     const atrPctShort = lastATR/price;
     const MIN_STOP_PCT_SHORT = esCapChico
-      ? Math.max(0.10, Math.min(0.15, atrPctShort*3))
+      ? Math.max(0.03, Math.min(0.15, atrPctShort*2))
       : Math.max(0.01, Math.min(0.02, atrPctShort*1.5));
     if((stop-price)/price < MIN_STOP_PCT_SHORT) stop = price*(1+MIN_STOP_PCT_SHORT);
     const MAX_STOP_PCT_SHORT = esCapChico ? 0.15 : 0.06;
@@ -2587,7 +2816,7 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
       }
     }
     const R = stop-price;
-    if(esCapChico){ t1=price-R*0.6; t2=price-R*1.2; t3=Math.min(support, price-R*2); }
+    if(esCapChico){ t1=price-R*1.0; t2=price-R*1.6; t3=Math.min(support, price-R*2.5); }
     else { t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5); }
     // Mismo criterio que en LONG, mirado hacia abajo: si hay una zona real de liquidez a distancia
     // sensata, el objetivo más cercano se ajusta para apuntar ahí en vez de un múltiplo matemático.
@@ -2611,6 +2840,62 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     const MAX_STOP_NEUTRAL = esCapChico ? 0.15 : 0.06;
     if(stop < price*(1-MAX_STOP_NEUTRAL)) stop = price*(1-MAX_STOP_NEUTRAL);
   }
+  // ═══ TP CRUZADOS CON NIVELES REALES ═══
+  // Un TP en "1.6R" es un número matemático. Si justo ahí no hay nada, el precio no tiene motivo
+  // para frenar; y si hay una resistencia un poco antes, el TP queda detrás de una barrera.
+  // Acá se buscan los niveles reales (resistencias, soportes, liquidez, POC, VAH/VAL) y se ajusta
+  // cada TP al nivel más cercano, siempre que no empeore demasiado el R:R.
+  if(dir==='LONG' || dir==='SHORT'){
+    const esLong = dir==='LONG';
+    const riesgo = Math.abs(price - stop);
+    if(riesgo > 0){
+      // Todos los niveles reales que hay en la dirección de la operación
+      const niveles = [];
+      const push = (v, etq) => { if(v!=null && isFinite(v) && (esLong ? v>price : v<price)) niveles.push({precio:v, tipo:etq}); };
+      push(esLong ? resistance : support, esLong ? 'resistencia' : 'soporte');
+      push(esLong ? structure.eqHighs : structure.eqLows, 'liquidez');
+      try{
+        const perfil = computeLiquidityProfile(data.candles, price, 200);
+        if(perfil){ push(perfil.poc, 'POC'); push(esLong ? perfil.vah : perfil.val, esLong ? 'VAH' : 'VAL'); }
+      }catch(e){ /* si no hay perfil, se usan los TP por R */ }
+      const ob = esLong ? structure.bearishOB : structure.bullishOB;
+      if(ob) push(esLong ? ob.bottom : ob.top, 'order block');
+
+      if(niveles.length){
+        niveles.sort((a,b)=> esLong ? a.precio-b.precio : b.precio-a.precio);
+        // Para cada TP se busca el nivel real más cercano, y se usa si el R:R resultante es aceptable
+        const ajustar = (tpOriginal, rMinimo) => {
+          let mejor = tpOriginal, mejorDist = Infinity;
+          for(const n of niveles){
+            const rNivel = Math.abs(n.precio - price)/riesgo;
+            if(rNivel < rMinimo) continue; // demasiado cerca, no sirve como objetivo
+            const dist = Math.abs(n.precio - tpOriginal);
+            if(dist < mejorDist && dist/riesgo < 0.6){ mejor = n.precio; mejorDist = dist; }
+          }
+          return mejor;
+        };
+        // Mínimos alineados con lo que después exige el bot para confirmar (1.0R en TP1).
+        // Antes acá se usaba 0,9R y el bot rechazaba con 1,0 — el ajuste podía crear un TP que
+        // después tumbaba la operación entera.
+        t1 = ajustar(t1, 1.0);
+        t2 = ajustar(t2, 1.5);
+        t3 = ajustar(t3, 2.2);
+
+        // Separación REAL entre objetivos. Antes solo se garantizaba que t2 > t1 por 0,1%, así que
+        // podían quedar TP1 en 1,0R y TP2 en 1,05R — dos objetivos prácticamente en el mismo lugar,
+        // que no aportan nada como escalonamiento. Ahora se exige al menos 0,4R de separación.
+        const sepMinima = riesgo * 0.4;
+        if(esLong){
+          if(t2 - t1 < sepMinima) t2 = t1 + sepMinima;
+          if(t3 - t2 < sepMinima) t3 = t2 + sepMinima;
+        } else {
+          if(t1 - t2 < sepMinima) t2 = t1 - sepMinima;
+          if(t2 - t3 < sepMinima) t3 = t2 - sepMinima;
+        }
+      }
+    }
+  }
+
   const volPct = (lastATR/price)*100;
   let leverage='1x - 2x';
   if(volPct<1.5) leverage='4x - 5x';
@@ -2652,6 +2937,1732 @@ function fmtPct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
 // dirección que terminó teniendo la operación, cuántas ganaron vs perdieron.
 // Estadísticas desglosadas: win rate por tipo de setup, por moneda, y por horario del día —
 // automatiza para los datos en vivo el mismo tipo de análisis que se hace a mano con backtests.
+// ═══ HISTORIAL POR MONEDA ═══
+// Responde: "¿cómo le fue al bot con esta moneda en particular?". Antes solo había estadísticas
+// globales y por tipo de setup, así que no se podía saber si una moneda concreta es de las que
+// funcionan o de las que siempre pierden.
+// IMPORTANTE: esto NO modifica el score todavía. Primero hay que juntar datos suficientes —
+// con 3 operaciones un win rate del 100% no significa nada.
+function computeHistorialMoneda(closedTrades, symbol){
+  const delSimbolo = (closedTrades||[]).filter(t => t.symbol === symbol);
+  if(!delSimbolo.length) return { symbol, operaciones:0, suficienteMuestra:false };
+
+  const ganadas = delSimbolo.filter(t => t.pnlPct > 0);
+  const perdidas = delSimbolo.filter(t => t.pnlPct <= 0);
+  const longs = delSimbolo.filter(t => t.dir === 'LONG');
+  const shorts = delSimbolo.filter(t => t.dir === 'SHORT');
+  const gananciaTotal = ganadas.reduce((s,t)=>s+(t.pnlUsd||0), 0);
+  const perdidaTotal = Math.abs(perdidas.reduce((s,t)=>s+(t.pnlUsd||0), 0));
+
+  const wr = arr => arr.length ? +(arr.filter(t=>t.pnlPct>0).length/arr.length*100).toFixed(1) : null;
+
+  return {
+    symbol,
+    operaciones: delSimbolo.length,
+    ganadas: ganadas.length,
+    perdidas: perdidas.length,
+    winRate: wr(delSimbolo),
+    winRateLong: wr(longs),
+    winRateShort: wr(shorts),
+    long: longs.length,
+    short: shorts.length,
+    profitFactor: perdidaTotal>0 ? +(gananciaTotal/perdidaTotal).toFixed(2) : (gananciaTotal>0 ? Infinity : 0),
+    pnlTotal: +(delSimbolo.reduce((s,t)=>s+(t.pnlUsd||0),0)).toFixed(2),
+    // Debajo de 10 operaciones cualquier porcentaje es ruido, no una tendencia.
+    suficienteMuestra: delSimbolo.length >= 10,
+    caminosQueFuncionaron: (()=> {
+      const porCamino = {};
+      for(const t of delSimbolo){
+        const k = t.tipoSetup || 'Sin dato';
+        if(!porCamino[k]) porCamino[k] = {total:0, ganadas:0};
+        porCamino[k].total++;
+        if(t.pnlPct>0) porCamino[k].ganadas++;
+      }
+      return Object.entries(porCamino)
+        .map(([nombre,v])=>({ nombre, operaciones:v.total, winRate:+(v.ganadas/v.total*100).toFixed(1) }))
+        .sort((a,b)=>b.operaciones-a.operaciones);
+    })(),
+  };
+}
+
+// ═══ ANALISTA (explicador por reglas, sin IA externa) ═══
+// Lee TODO lo que el motor ya calculó y arma una explicación coherente en lenguaje natural.
+// No es un modelo de lenguaje: es un narrador determinista. La ventaja de hacerlo así es que
+// NUNCA puede inventar nada — solo puede decir lo que está efectivamente en los datos.
+// La desventaja es que no improvisa: si aparece una situación que no está contemplada acá, no la
+// va a comentar. Es un intercambio a propósito: prefiero que no diga nada antes de que invente.
+function explicarAnalisis(result, opciones = {}){
+  if(!result) return null;
+  const dir = result.recommendation;
+  const score = Math.max(result.longScore, result.shortScore);
+  const partes = [];
+  const alertas = [];
+
+  // 1) El veredicto y su fuerza
+  const fuerza = score>=8.5 ? 'muy fuerte' : score>=8 ? 'fuerte' : score>=7.6 ? 'suficiente' : score>=7 ? 'moderada pero por debajo del umbral' : 'débil';
+  partes.push(dir==='NO OPERAR'
+    ? `El motor no ve una oportunidad clara acá: el score quedó en ${score.toFixed(1)}/10, que no alcanza para armar una tesis.`
+    : `El motor ve una oportunidad de ${dir==='LONG'?'compra':'venta'} con una señal ${fuerza} (${score.toFixed(1)}/10, ${result.confidence}% de confianza).`);
+
+  // 2) Qué la empujó — usando el Explain Engine
+  const ee = result.explainEngine;
+  if(ee?.componentes?.length){
+    const aFavor = ee.componentes.filter(cp => dir==='LONG' ? cp.aporte>0.1 : cp.aporte<-0.1);
+    const enContra = ee.componentes.filter(cp => dir==='LONG' ? cp.aporte<-0.1 : cp.aporte>0.1);
+    if(aFavor.length){
+      const principal = aFavor[0];
+      partes.push(`Lo que más empuja es ${principal.nombre.toLowerCase()} (${principal.aporte>0?'+':''}${principal.aporte} puntos: ${principal.detalle})${aFavor.length>1?`, acompañado por ${aFavor.slice(1,3).map(x=>x.nombre.toLowerCase()).join(' y ')}`:''}.`);
+    }
+    if(enContra.length){
+      alertas.push(`${enContra.map(x=>x.nombre.toLowerCase()).join(' y ')} ${enContra.length>1?'están':'está'} en contra de esta dirección.`);
+    }
+    const nulos = ee.componentes.filter(cp => Math.abs(cp.aporte) < 0.01);
+    if(nulos.length >= 3){
+      alertas.push(`${nulos.length} de los 6 componentes no aportaron nada (${nulos.map(x=>x.nombre.toLowerCase()).join(', ')}), así que el score se apoya en pocos datos.`);
+    }
+  }
+
+  const hayOperacion = dir==='LONG' || dir==='SHORT';
+
+  // 3) Fase del mercado — contexto que cambia el significado del score
+  const fase = opciones.marketPhase;
+  if(fase && fase.fase!=='DESCONOCIDA'){
+    if(!hayOperacion){ partes.push(`Contexto: el mercado está en fase ${fase.fase}. ${fase.motivo}`); }
+    else
+    if(fase.riesgoLong && dir==='LONG') alertas.push(`⚠️ La fase es ${fase.fase}: ${fase.motivo} Abrir una compra acá va a contramano de la etapa del ciclo.`);
+    else if(fase.riesgoShort && dir==='SHORT') alertas.push(`⚠️ La fase es ${fase.fase}: ${fase.motivo}`);
+    else if(fase.favorable===dir) partes.push(`La fase del mercado (${fase.fase}) acompaña: ${fase.motivo}`);
+    else if(fase.favorable && fase.favorable!=='bordes del rango' && fase.favorable!=='ninguna') alertas.push(`La fase del mercado (${fase.fase}) favorece ${fase.favorable}, no ${dir}.`);
+  }
+
+  // 4) Liquidez: hacia dónde tiende a ir el precio
+  const st = result.structure;
+  const precio = result.metrics?.price;
+  if(st && precio && hayOperacion){
+    const arriba = st.eqHighs, abajo = st.eqLows;
+    if(arriba && abajo){
+      const distA = Math.abs(arriba-precio)/precio*100, distB = Math.abs(abajo-precio)/precio*100;
+      const masCerca = distA < distB ? 'arriba' : 'abajo';
+      const enContraLiq = (dir==='LONG' && masCerca==='abajo') || (dir==='SHORT' && masCerca==='arriba');
+      if(enContraLiq) alertas.push(`La liquidez más cercana está ${masCerca} (a ${Math.min(distA,distB).toFixed(1)}%), o sea en contra de la operación: el precio puede ir a buscarla antes de girar.`);
+      else partes.push(`La liquidez más cercana está ${masCerca}, a ${Math.min(distA,distB).toFixed(1)}% del precio, que es hacia donde apunta la operación.`);
+    }
+  }
+
+  // 5) Estructura
+  if(st?.events?.bos) partes.push(`Hay una ruptura de estructura (BOS ${st.events.bos==='bullish'?'alcista':'bajista'}) confirmando el movimiento.`);
+  else if(st?.events?.choch) partes.push(`Hay un cambio de carácter (CHoCH ${st.events.choch==='bullish'?'alcista':'bajista'}): la estructura puede estar dándose vuelta.`);
+
+  // 6) Calidad de datos
+  const dq = result.dataQuality;
+  if(dq?.score!=null && dq.score < 65){
+    alertas.push(`La calidad de datos es ${dq.nivel} (${dq.score}/100)${dq.faltantes?.length?`: falta ${dq.faltantes.slice(0,3).join(', ')}`:''}. El score sale de información incompleta.`);
+  }
+
+  // 7) Reversión, si aplica
+  if(result.reversionNota) partes.push(result.reversionNota.replace(/^[🔄📊]\s*/,''));
+
+  return {
+    resumen: partes.join(' '),
+    alertas,
+    veredicto: dir,
+    score,
+    // Texto completo listo para mostrar
+    texto: partes.join(' ') + (alertas.length ? '\n\n⚠️ ' + alertas.join(' ') : ''),
+  };
+}
+
+// ═══ SEGUIMIENTO DE HIPÓTESIS ═══
+// El Research Center genera hipótesis en cada corrida. Esta función compara reportes a lo largo
+// del tiempo para ver cuáles SE SOSTIENEN y cuáles eran ruido que desapareció.
+// Es la diferencia entre "encontré un patrón" y "este patrón se repite".
+function seguirHipotesis(reportesHistoricos){
+  const reportes = (reportesHistoricos||[]).filter(r => r?.hallazgos?.length);
+  if(reportes.length < 3){
+    return { hipotesis: [], listo:false, nota:`Hacen falta al menos 3 reportes para ver si un patrón se sostiene. Hay ${reportes.length}.` };
+  }
+  // Se agrupa cada hallazgo por su identidad (tipo + valor) a lo largo de los reportes
+  const seguimiento = {};
+  reportes.forEach((r, idx) => {
+    for(const h of r.hallazgos){
+      const clave = `${h.tipo}|${h.valor}`;
+      if(!seguimiento[clave]) seguimiento[clave] = { tipo:h.tipo, valor:h.valor, apariciones:[], };
+      seguimiento[clave].apariciones.push({ reporte: idx, winRate: h.winRate, diferencia: h.diferencia, operaciones: h.operaciones });
+    }
+  });
+
+  const hipotesis = Object.values(seguimiento).map(s => {
+    const veces = s.apariciones.length;
+    const consistencia = +(veces / reportes.length * 100).toFixed(0);
+    const difs = s.apariciones.map(a=>a.diferencia);
+    const mismoSigno = difs.every(d=>d>0) || difs.every(d=>d<0);
+    const difPromedio = +(difs.reduce((a,b)=>a+b,0)/difs.length).toFixed(1);
+    return {
+      ...s,
+      veces, consistencia, difPromedio, mismoSigno,
+      estado: (consistencia>=80 && mismoSigno) ? 'SOSTENIDA'
+            : (consistencia>=50 && mismoSigno) ? 'PROBABLE'
+            : 'RUIDO',
+      conclusion: (consistencia>=80 && mismoSigno)
+        ? `Apareció en ${veces} de ${reportes.length} reportes, siempre en la misma dirección (${difPromedio>0?'+':''}${difPromedio} puntos promedio). Este patrón se sostiene y vale la pena considerarlo.`
+        : (consistencia>=50 && mismoSigno)
+        ? `Apareció en ${veces} de ${reportes.length} reportes con la misma dirección. Prometedor, pero conviene esperar más datos.`
+        : `Solo apareció en ${veces} de ${reportes.length} reportes${!mismoSigno?' y cambió de dirección entre uno y otro':''}. Probablemente sea ruido.`,
+    };
+  }).sort((a,b)=> b.consistencia - a.consistencia || Math.abs(b.difPromedio)-Math.abs(a.difPromedio));
+
+  const sostenidas = hipotesis.filter(h=>h.estado==='SOSTENIDA');
+  return {
+    hipotesis,
+    reportesAnalizados: reportes.length,
+    listo: true,
+    nota: sostenidas.length
+      ? `${sostenidas.length} patrón(es) se sostienen a lo largo de ${reportes.length} reportes. Esos son los únicos que consideraría para tocar el motor.`
+      : `Ningún patrón se sostuvo de forma consistente en ${reportes.length} reportes. Conviene seguir juntando datos antes de cambiar nada.`,
+  };
+}
+
+// ═══ SIMULADOR DE STOPS ═══
+// Responde "¿qué habría pasado con otro stop?" SIN tocar el bot ni abrir una sola operación.
+// Usa el MFE y el MAE que quedaron registrados: si el MAE de una operación fue -0.7R, un stop a
+// 1R la habría dejado viva, y uno a 0.5R la habría cortado.
+// IMPORTANTE: es una aproximación, no una verdad. Asume que con otro stop el resto del recorrido
+// habría sido igual, y eso no siempre es cierto (un stop más ancho cambia el tamaño de posición).
+// Sirve para orientar, no para decidir solo.
+function simularStops(closedTrades, multiplicadores = [0.75, 1.0, 1.25, 1.5, 1.75, 2.0]){
+  const conDatos = (closedTrades||[]).filter(t =>
+    t.registro?.mfe != null && t.registro?.mae != null && t.registro?.gestion?.stopPct != null);
+
+  if(conDatos.length < 10){
+    return { listo:false, operaciones: conDatos.length,
+      nota:`Hacen falta al menos 10 operaciones con MFE/MAE registrados para simular. Hay ${conDatos.length}.` };
+  }
+
+  const RIESGO_PCT = 0.02; // 2% del capital por operación, igual que usa el bot
+
+  const filas = multiplicadores.map(mult => {
+    // Con un stop a `mult`R el tamaño de posición se AJUSTA para arriesgar siempre lo mismo.
+    // Esto es clave: un stop más ancho obliga a una posición más chica. Sin este ajuste, la
+    // simulación exagera el beneficio de ensanchar el stop — es el error que casi cometimos antes.
+    let capital = 100, pico = 100, drawdown = 0;
+    let ganadas = 0, perdidas = 0, neutras = 0;
+    let gananciaBruta = 0, perdidaBruta = 0;
+    const resultadosR = [];
+
+    for(const t of conDatos){
+      const maeR = Math.abs(t.registro.mae);
+      const mfeR = t.registro.mfe;
+      const riesgoUsd = capital * RIESGO_PCT; // el riesgo en dólares NO cambia con el stop
+      let rObtenido;
+
+      if(maeR >= mult){
+        // El precio retrocedió más de lo que aguanta este stop
+        rObtenido = -1; // se pierde exactamente 1R (el riesgo definido)
+        perdidas++;
+      } else if(mfeR >= 1.0){
+        // Llegó al objetivo parcial. Se toma 50% en 1R y el resto se asume en breakeven.
+        rObtenido = 0.5;
+        ganadas++;
+      } else {
+        rObtenido = 0; // ni stop ni objetivo
+        neutras++;
+      }
+      resultadosR.push(rObtenido);
+      const pnl = riesgoUsd * rObtenido;
+      capital += pnl;
+      if(pnl > 0) gananciaBruta += pnl; else perdidaBruta += Math.abs(pnl);
+      pico = Math.max(pico, capital);
+      drawdown = Math.max(drawdown, (pico-capital)/pico);
+    }
+
+    const total = ganadas + perdidas;
+    const expectancy = resultadosR.length
+      ? +(resultadosR.reduce((a,b)=>a+b,0)/resultadosR.length).toFixed(3) : 0;
+
+    return {
+      stopEnR: mult,
+      operaciones: conDatos.length,
+      ganadas, perdidas, neutras,
+      winRate: total ? +(ganadas/total*100).toFixed(1) : null,
+      // Expectancy: cuánto se gana en promedio POR OPERACIÓN, en múltiplos de R.
+      // Es mejor métrica que el win rate porque incorpora cuánto se gana y cuánto se pierde.
+      expectancy,
+      profitFactor: perdidaBruta > 0 ? +(gananciaBruta/perdidaBruta).toFixed(2) : (gananciaBruta>0 ? Infinity : 0),
+      capitalFinal: +capital.toFixed(2),
+      drawdownMax: +(drawdown*100).toFixed(1),
+      salvadas: conDatos.filter(t => Math.abs(t.registro.mae) < mult && Math.abs(t.registro.mae) >= 1.0).length,
+    };
+  });
+
+  // El mejor se elige por expectancy, no por capital final: es más robusto al orden de las operaciones
+  const mejor = filas.reduce((a,b) => b.expectancy > a.expectancy ? b : a);
+  const actual = filas.find(f => f.stopEnR === 1.0) || filas[0];
+  const dif = +(mejor.expectancy - actual.expectancy).toFixed(3);
+
+  return {
+    listo: true,
+    operaciones: conDatos.length,
+    filas, mejor, actual,
+    // ANTI-SOBREAJUSTE: no se recomienda cambiar nada si la mejora es chica o la muestra es poca.
+    recomendarCambio: conDatos.length >= 30 && Math.abs(dif) >= 0.10,
+    conclusion: (()=>{
+      if(conDatos.length < 30) return `Con ${conDatos.length} operaciones todavía no alcanza para recomendar un cambio de stop. Hacen falta al menos 30.`;
+      if(Math.abs(dif) < 0.10) return `Ningún stop mejora de forma clara al actual (diferencia de ${dif}R por operación). No hay evidencia suficiente para cambiarlo.`;
+      return `Un stop a ${mejor.stopEnR}R habría dado ${dif > 0 ? '+' : ''}${dif}R más por operación que el actual (${mejor.expectancy}R vs ${actual.expectancy}R), con un drawdown de ${mejor.drawdownMax}% contra ${actual.drawdownMax}%.`;
+    })(),
+    advertencia: 'El tamaño de posición se recalcula en cada escenario para mantener el mismo riesgo en dólares — sin eso, un stop más ancho parecería mejor de lo que es. Aun así es una aproximación: asume que el recorrido del precio habría sido igual.',
+  };
+}
+
+// ═══ EXPECTANCY POR ESTRATEGIA ═══
+// El win rate solo no alcanza: una estrategia con 40% de aciertos pero que gana 3R y pierde 1R es
+// mejor que una con 60% que gana 0,5R y pierde 1R. La expectancy mide cuánto se gana en promedio
+// POR OPERACIÓN, contando tanto la frecuencia como el tamaño.
+function expectancyPorEstrategia(closedTrades, minMuestra = 10){
+  const conR = (closedTrades||[])
+    .filter(t => t.registro?.gestion?.stopPct > 0 && t.pnlPct != null)
+    .map(t => ({ ...t, rObtenido: +(t.pnlPct/t.registro.gestion.stopPct).toFixed(3) }));
+
+  if(conR.length < minMuestra) {
+    return { listo:false, operaciones: conR.length,
+      nota:`Hacen falta al menos ${minMuestra} operaciones con datos de riesgo. Hay ${conR.length}.` };
+  }
+
+  const agrupar = (etiqueta, fn) => {
+    const grupos = {};
+    for(const t of conR){
+      const k = fn(t);
+      if(k == null) continue;
+      (grupos[k] = grupos[k] || []).push(t);
+    }
+    return Object.entries(grupos)
+      .filter(([,arr]) => arr.length >= minMuestra)
+      .map(([clave, arr]) => {
+        const ganadoras = arr.filter(t=>t.rObtenido > 0);
+        const perdedoras = arr.filter(t=>t.rObtenido <= 0);
+        const rProm = +(arr.reduce((s,t)=>s+t.rObtenido,0)/arr.length).toFixed(3);
+        const mfes = arr.filter(t=>t.registro.mfe!=null).map(t=>t.registro.mfe);
+        const maes = arr.filter(t=>t.registro.mae!=null).map(t=>Math.abs(t.registro.mae));
+        const gan = ganadoras.reduce((s,t)=>s+t.rObtenido,0);
+        const per = Math.abs(perdedoras.reduce((s,t)=>s+t.rObtenido,0));
+        return {
+          categoria: etiqueta, estrategia: clave,
+          operaciones: arr.length,
+          winRate: +(ganadoras.length/arr.length*100).toFixed(1),
+          expectancy: rProm,
+          rPromedioGanadora: ganadoras.length ? +(gan/ganadoras.length).toFixed(2) : null,
+          rPromedioPerdedora: perdedoras.length ? +(per/perdedoras.length).toFixed(2) : null,
+          profitFactor: per > 0 ? +(gan/per).toFixed(2) : (gan>0?Infinity:0),
+          mfePromedio: mfes.length ? +(mfes.reduce((a,b)=>a+b,0)/mfes.length).toFixed(2) : null,
+          maePromedio: maes.length ? +(maes.reduce((a,b)=>a+b,0)/maes.length).toFixed(2) : null,
+          // La confianza depende de la muestra: 15 operaciones no son 50
+          confianza: arr.length >= 50 ? 'alta' : arr.length >= 25 ? 'media' : 'baja',
+          veredicto: rProm >= 0.3 ? '🥇 muy buena' : rProm >= 0.1 ? '🥈 positiva'
+                   : rProm > -0.1 ? '➖ neutra' : '⚠️ negativa',
+        };
+      });
+  };
+
+  const ranking = [
+    ...agrupar('Camino', t => t.tipoSetup ?? null),
+    ...agrupar('Dirección', t => t.dir ?? null),
+    ...agrupar('Fase', t => t.marketPhase ?? null),
+    ...agrupar('Horario', t => t.horaConfirmacion==null ? null : t.horaConfirmacion<6?'00-06h':t.horaConfirmacion<12?'06-12h':t.horaConfirmacion<18?'12-18h':'18-24h'),
+    ...agrupar('Liquidez', t => t.registro?.liquidezAFavor ?? null),
+    ...agrupar('IFVG', t => t.registro?.ifvg ?? null),
+    ...agrupar('Ruptura', t => t.registro?.rupturaTriangulo ?? null),
+  ].sort((a,b)=> b.expectancy - a.expectancy);
+
+  const positivas = ranking.filter(x=>x.expectancy >= 0.1 && x.confianza !== 'baja');
+  return {
+    listo: true,
+    operaciones: conR.length,
+    ranking,
+    nota: positivas.length
+      ? `${positivas.length} estrategia(s) muestran expectancy positiva con muestra razonable. Esas son las únicas que consideraría para tocar el motor.`
+      : 'Ninguna estrategia muestra todavía expectancy positiva con muestra suficiente. Conviene seguir juntando datos antes de cambiar nada.',
+  };
+}
+
+// ═══ CALIDAD DE LA DECISIÓN vs RESULTADO ═══
+// Una operación puede ser mala y ganar, o buena y perder. Si el sistema aprende del resultado
+// aislado, va a sacar conclusiones equivocadas: reforzaría un setup malo que tuvo suerte y
+// descartaría uno bueno que tuvo mala racha.
+// Esta función separa las dos cosas: evalúa si la DECISIÓN tenía sentido según lo que se sabía
+// al momento de entrar, independientemente de cómo salió.
+function calidadDecision(trade, historial = []){
+  if(!trade?.registro) return null;
+  const r = trade.registro;
+  const puntos = [];
+  let score = 0;
+
+  // 1) ¿Cuántos componentes empujaban a favor? Más confluencia = mejor decisión.
+  const aFavor = (r.componentes||[]).filter(cp => {
+    if(Math.abs(cp.aporte) < 0.2) return false;
+    return trade.dir==='LONG' ? cp.aporte > 0 : cp.aporte < 0;
+  }).length;
+  if(aFavor >= 4){ score += 2; puntos.push(`${aFavor} componentes a favor`); }
+  else if(aFavor >= 2){ score += 1; puntos.push(`${aFavor} componentes a favor`); }
+  else puntos.push(`solo ${aFavor} componente(s) a favor`);
+
+  // 2) ¿La liquidez acompañaba?
+  if(r.liquidezAFavor === 'a favor'){ score += 1; puntos.push('liquidez a favor'); }
+  else if(r.liquidezAFavor === 'en contra'){ score -= 1; puntos.push('liquidez en contra'); }
+
+  // 3) ¿La fase del mercado acompañaba?
+  if(trade.marketPhase){
+    const contra = (trade.dir==='LONG' && ['CLÍMAX','DISTRIBUCIÓN','MARKDOWN'].includes(trade.marketPhase))
+                || (trade.dir==='SHORT' && ['CAPITULACIÓN','ACUMULACIÓN','EXPANSIÓN ALCISTA'].includes(trade.marketPhase));
+    if(contra){ score -= 2; puntos.push(`fase ${trade.marketPhase} en contra`); }
+    else { score += 1; puntos.push(`fase ${trade.marketPhase} compatible`); }
+  }
+
+  // 4) ¿El Estocástico estaba en un extremo desfavorable?
+  if(r.estocastico != null){
+    const extremoMalo = (trade.dir==='LONG' && r.estocastico >= 80) || (trade.dir==='SHORT' && r.estocastico <= 20);
+    if(extremoMalo){ score -= 2; puntos.push(`Estocástico en ${r.estocastico.toFixed(0)}, agotado`); }
+  }
+
+  // 5) ¿Entró por válvula de escape? Son entradas de menor calidad por definición.
+  if(r.porValvulaEscape){ score -= 1; puntos.push('entró por válvula de escape'); }
+
+  // 6) ¿La calidad de los datos era buena?
+  if(trade.dataQuality != null){
+    if(trade.dataQuality >= 85) score += 1;
+    else if(trade.dataQuality < 65){ score -= 1; puntos.push(`datos incompletos (${trade.dataQuality}/100)`); }
+  }
+
+  // 7) ¿El R:R justificaba el riesgo?
+  if(r.gestion?.rTp1 != null){
+    if(r.gestion.rTp1 >= 1.5){ score += 1; puntos.push(`R:R ${r.gestion.rTp1} en TP1`); }
+    else if(r.gestion.rTp1 < 1){ score -= 1; puntos.push(`R:R apenas ${r.gestion.rTp1}`); }
+  }
+
+  // 8) ¿Cómo venían las operaciones parecidas ANTES de entrar?
+  if(r.parecidasAlEntrar?.cantidad >= 10){
+    if(r.parecidasAlEntrar.winRate >= 55){ score += 1; puntos.push(`operaciones parecidas ganaban ${r.parecidasAlEntrar.winRate}%`); }
+    else if(r.parecidasAlEntrar.winRate <= 40){ score -= 1; puntos.push(`operaciones parecidas ganaban solo ${r.parecidasAlEntrar.winRate}%`); }
+  }
+
+  const calidad = score >= 4 ? 'BUENA' : score >= 1 ? 'ACEPTABLE' : score >= -1 ? 'DÉBIL' : 'MALA';
+  const gano = trade.pnlPct > 0;
+  const coincide = (calidad==='BUENA'||calidad==='ACEPTABLE') === gano;
+
+  return {
+    score, calidad, puntos,
+    resultado: gano ? 'GANÓ' : 'PERDIÓ',
+    // El caso interesante: cuando decisión y resultado NO coinciden
+    lección: coincide
+      ? null
+      : gano
+      ? `⚠️ Ganó, pero la decisión era ${calidad.toLowerCase()}. No hay que reforzar este tipo de entrada solo porque salió bien esta vez.`
+      : `ℹ️ Perdió, pero la decisión era ${calidad.toLowerCase()}. Una operación bien tomada puede perder — no hay que descartar este setup por este resultado.`,
+    resumen: `Decisión ${calidad} (${score} puntos) · ${gano?'ganó':'perdió'}${coincide?'':' — no coinciden'}`,
+  };
+}
+
+// Resumen sobre todas las operaciones: ¿el sistema toma buenas decisiones, más allá de la suerte?
+function resumenCalidadDecisiones(closedTrades){
+  const conCalidad = (closedTrades||[])
+    .map(t => ({ trade: t, cal: calidadDecision(t) }))
+    .filter(x => x.cal);
+
+  if(conCalidad.length < 10) return { listo:false, operaciones: conCalidad.length,
+    nota:`Hacen falta al menos 10 operaciones con registro completo. Hay ${conCalidad.length}.` };
+
+  const grupos = { BUENA:[], ACEPTABLE:[], DÉBIL:[], MALA:[] };
+  for(const x of conCalidad) grupos[x.cal.calidad].push(x.trade);
+
+  const filas = Object.entries(grupos)
+    .filter(([,arr]) => arr.length > 0)
+    .map(([calidad, arr]) => ({
+      calidad,
+      operaciones: arr.length,
+      winRate: +(arr.filter(t=>t.pnlPct>0).length/arr.length*100).toFixed(1),
+      suficienteMuestra: arr.length >= 10,
+    }));
+
+  const buenas = grupos.BUENA.concat(grupos.ACEPTABLE);
+  const malas = grupos.DÉBIL.concat(grupos.MALA);
+  const wrBuenas = buenas.length ? +(buenas.filter(t=>t.pnlPct>0).length/buenas.length*100).toFixed(1) : null;
+  const wrMalas = malas.length ? +(malas.filter(t=>t.pnlPct>0).length/malas.length*100).toFixed(1) : null;
+
+  // Discrepancias: ganó con decisión mala, o perdió con decisión buena
+  const ganóConMala = conCalidad.filter(x => x.trade.pnlPct > 0 && ['DÉBIL','MALA'].includes(x.cal.calidad)).length;
+  const perdióConBuena = conCalidad.filter(x => x.trade.pnlPct <= 0 && ['BUENA','ACEPTABLE'].includes(x.cal.calidad)).length;
+
+  return {
+    listo: true,
+    operaciones: conCalidad.length,
+    filas,
+    winRateDecisionesBuenas: wrBuenas,
+    winRateDecisionesMalas: wrMalas,
+    ganóConDecisionMala: ganóConMala,
+    perdióConDecisionBuena: perdióConBuena,
+    conclusion: (()=>{
+      if(wrBuenas == null || wrMalas == null || buenas.length < 8 || malas.length < 8)
+        return 'Todavía no hay suficientes operaciones de cada tipo para comparar decisiones buenas contra malas.';
+      const dif = +(wrBuenas - wrMalas).toFixed(1);
+      if(dif >= 15) return `✅ Las decisiones bien tomadas ganan ${dif} puntos más que las mal tomadas (${wrBuenas}% vs ${wrMalas}%). El criterio de entrada está funcionando.`;
+      if(dif <= -10) return `⚠️ Las decisiones que el sistema considera BUENAS están ganando MENOS que las débiles (${wrBuenas}% vs ${wrMalas}%). Eso sugiere que el criterio de calidad está mal calibrado.`;
+      return `➖ No hay diferencia clara entre decisiones buenas y débiles (${wrBuenas}% vs ${wrMalas}%). El criterio de calidad todavía no demuestra valor.`;
+    })(),
+    nota: `${ganóConMala} operación(es) ganaron con una decisión débil y ${perdióConBuena} perdieron con una decisión buena. Esos casos son ruido, no evidencia — no conviene sacar conclusiones de ellos.`,
+  };
+}
+
+// ═══ COMPARADOR DE VERSIONES DEL MOTOR ═══
+// Cuando se cambia algo del motor, hace falta poder responder: ¿mejoró o empeoró?
+// Compara las operaciones de antes y después de una fecha de corte, usando las métricas netas.
+// NO cambia nada por su cuenta: produce la comparación, la decisión es humana.
+function compararVersiones(closedTrades, fechaCorte, nombreAntes = 'Versión anterior', nombreDespues = 'Versión actual'){
+  const trades = (closedTrades||[]).filter(t => t.pnlPct != null && t.closedAt);
+  const antes = trades.filter(t => t.closedAt < fechaCorte);
+  const despues = trades.filter(t => t.closedAt >= fechaCorte);
+
+  if(antes.length < 10 || despues.length < 10){
+    return { listo:false,
+      nota:`Hacen falta al menos 10 operaciones de cada lado para comparar. Hay ${antes.length} antes y ${despues.length} después.` };
+  }
+
+  const mA = metricasCompletas(antes);
+  const mD = metricasCompletas(despues);
+  if(!mA.listo || !mD.listo) return { listo:false, nota:'No se pudieron calcular las métricas de alguno de los dos períodos.' };
+
+  const dif = (a,b) => a==null||b==null ? null : +(b-a).toFixed(3);
+  const comparacion = [
+    { metrica:'Expectancy',    antes:mA.expectancy,    despues:mD.expectancy,    diferencia:dif(mA.expectancy,mD.expectancy),       mejorEsMayor:true },
+    { metrica:'Win rate',      antes:mA.winRate,       despues:mD.winRate,       diferencia:dif(mA.winRate,mD.winRate),             mejorEsMayor:true },
+    { metrica:'Profit Factor', antes:mA.profitFactor,  despues:mD.profitFactor,  diferencia:dif(mA.profitFactor,mD.profitFactor),   mejorEsMayor:true },
+    { metrica:'Resultado neto',antes:mA.resultadoNetoPct, despues:mD.resultadoNetoPct, diferencia:dif(mA.resultadoNetoPct,mD.resultadoNetoPct), mejorEsMayor:true },
+    { metrica:'Drawdown máx',  antes:mA.drawdownMax,   despues:mD.drawdownMax,   diferencia:dif(mA.drawdownMax,mD.drawdownMax),     mejorEsMayor:false },
+    { metrica:'Peor racha',    antes:mA.peorRachaPerdedora, despues:mD.peorRachaPerdedora, diferencia:dif(mA.peorRachaPerdedora,mD.peorRachaPerdedora), mejorEsMayor:false },
+  ].map(x => ({
+    ...x,
+    mejoro: x.diferencia == null ? null : (x.mejorEsMayor ? x.diferencia > 0 : x.diferencia < 0),
+  }));
+
+  const mejoras = comparacion.filter(x=>x.mejoro===true).length;
+  const empeoras = comparacion.filter(x=>x.mejoro===false).length;
+  const difExpectancy = dif(mA.expectancy, mD.expectancy);
+
+  return {
+    listo: true,
+    antes: { nombre:nombreAntes, operaciones:antes.length, ...mA },
+    despues: { nombre:nombreDespues, operaciones:despues.length, ...mD },
+    comparacion,
+    mejoras, empeoras,
+    veredicto: (()=>{
+      if(antes.length < 30 || despues.length < 30)
+        return `Con ${antes.length} y ${despues.length} operaciones la comparación es orientativa. Hacen falta 30+ de cada lado para concluir algo.`;
+      if(mejoras >= 4 && difExpectancy > 0.1)
+        return `✅ La versión nueva mejora en ${mejoras} de 6 métricas, con +${difExpectancy} de expectancy. Hay evidencia de que el cambio ayudó.`;
+      if(empeoras >= 4 && difExpectancy < -0.1)
+        return `⚠️ La versión nueva empeora en ${empeoras} de 6 métricas (${difExpectancy} de expectancy). Convendría revertir el cambio.`;
+      return `➖ Los resultados están parejos (${mejoras} métricas mejor, ${empeoras} peor). No hay evidencia clara de que el cambio haya servido.`;
+    })(),
+    nota: 'La comparación asume que la única diferencia entre los dos períodos fue el cambio del motor. Si el mercado cambió mucho, parte de la diferencia puede venir de ahí y no del cambio.',
+  };
+}
+
+// ═══ MÉTRICAS COMPLETAS DEL SISTEMA ═══
+// Todo lo que hace falta para saber si el sistema tiene ventaja real, en un solo lugar y
+// contando los costes de ejecución. El win rate solo no dice nada.
+function metricasCompletas(closedTrades, opciones = {}){
+  const trades = (closedTrades||[]).filter(t => t.pnlPct != null);
+  if(trades.length < 10) return { listo:false, operaciones: trades.length,
+    nota:`Hacen falta al menos 10 operaciones cerradas. Hay ${trades.length}.` };
+
+  // Se trabaja con el resultado NETO, no el bruto
+  const conNeto = trades.map(t => ({ ...t, neto: calcularCosteReal(t, opciones).netoPct }));
+  const ganadoras = conNeto.filter(t => t.neto > 0);
+  const perdedoras = conNeto.filter(t => t.neto <= 0);
+
+  const sumGan = ganadoras.reduce((s,t)=>s+t.neto,0);
+  const sumPer = Math.abs(perdedoras.reduce((s,t)=>s+t.neto,0));
+  const avgWin = ganadoras.length ? +(sumGan/ganadoras.length).toFixed(2) : 0;
+  const avgLoss = perdedoras.length ? +(sumPer/perdedoras.length).toFixed(2) : 0;
+  const winRate = +(ganadoras.length/conNeto.length*100).toFixed(1);
+
+  // Expectancy: cuánto se espera ganar por operación
+  const expectancy = +((winRate/100)*avgWin - (1-winRate/100)*avgLoss).toFixed(3);
+
+  // Rachas y drawdown, en el orden real en que ocurrieron
+  const ordenadas = [...conNeto].sort((a,b)=>(a.closedAt||0)-(b.closedAt||0));
+  let capital = 100, pico = 100, dd = 0, rachaP = 0, peorRachaP = 0, rachaG = 0, mejorRachaG = 0;
+  for(const t of ordenadas){
+    capital *= (1 + (t.neto/100) * 0.02 / (t.registro?.gestion?.stopPct ? t.registro.gestion.stopPct/100 : 0.07));
+    pico = Math.max(pico, capital);
+    dd = Math.max(dd, (pico-capital)/pico);
+    if(t.neto <= 0){ rachaP++; peorRachaP = Math.max(peorRachaP, rachaP); rachaG = 0; }
+    else { rachaG++; mejorRachaG = Math.max(mejorRachaG, rachaG); rachaP = 0; }
+  }
+
+  // R promedio, si hay datos de riesgo
+  const conR = conNeto.filter(t => t.registro?.gestion?.stopPct > 0);
+  const rProm = conR.length
+    ? +(conR.reduce((s,t)=>s + t.neto/t.registro.gestion.stopPct, 0)/conR.length).toFixed(3) : null;
+
+  const costes = resumenCostes(trades, opciones);
+
+  // ═══ RESULTADO EN DÓLARES ═══
+  // Los porcentajes están bien para comparar, pero lo que importa en la práctica es cuánto
+  // se ganó o perdió de verdad. Se descuentan los costes proporcionalmente.
+  const conUsd = trades.filter(t => t.pnlUsd != null);
+  let brutoUsd = 0, costesUsd = 0;
+  for(const t of conUsd){
+    brutoUsd += t.pnlUsd;
+    // El coste en dólares se estima sobre el tamaño de la posición, no sobre el resultado
+    const det = calcularCosteReal(t, opciones);
+    const tamañoPos = t.registro?.gestion?.stopPct > 0 && t.pnlPct
+      ? Math.abs(t.pnlUsd / (t.pnlPct/100)) : null;
+    if(tamañoPos) costesUsd += tamañoPos * (det.costeTotalPct/100);
+  }
+  const netoUsd = +(brutoUsd - costesUsd).toFixed(2);
+
+  return {
+    listo: true,
+    operaciones: conNeto.length,
+    // Resultado en dólares, que es lo que se ve en la cuenta
+    brutoUsd: +brutoUsd.toFixed(2),
+    costesUsd: +costesUsd.toFixed(2),
+    netoUsd,
+    operacionesConUsd: conUsd.length,
+    winRate,
+    ganadoras: ganadoras.length,
+    perdedoras: perdedoras.length,
+    avgWin, avgLoss,
+    ratioGananciaPerdida: avgLoss > 0 ? +(avgWin/avgLoss).toFixed(2) : null,
+    profitFactor: sumPer > 0 ? +(sumGan/sumPer).toFixed(2) : (sumGan>0?Infinity:0),
+    expectancy,
+    rPromedio: rProm,
+    resultadoNetoPct: +conNeto.reduce((s,t)=>s+t.neto,0).toFixed(2),
+    resultadoBrutoPct: +trades.reduce((s,t)=>s+t.pnlPct,0).toFixed(2),
+    capitalSimulado: +capital.toFixed(2),
+    drawdownMax: +(dd*100).toFixed(1),
+    peorRachaPerdedora: peorRachaP,
+    mejorRachaGanadora: mejorRachaG,
+    costes: costes.listo ? costes : null,
+    veredicto: (()=>{
+      if(conNeto.length < 30) return `Con ${conNeto.length} operaciones cualquier conclusión es provisoria. Hacen falta 30+ para empezar a confiar en estos números.`;
+      if(expectancy > 0.3) return `✅ El sistema muestra ventaja: se espera +${expectancy}% neto por operación.`;
+      if(expectancy > 0) return `🟡 Ventaja chica pero positiva (+${expectancy}% por operación). Con los costes contados, el margen es ajustado.`;
+      return `⚠️ Expectancy negativa (${expectancy}% por operación). Después de costes, el sistema no muestra ventaja todavía.`;
+    })(),
+  };
+}
+
+// ═══ RÉGIMEN DE MERCADO ═══
+// No todas las estrategias funcionan igual en tendencia fuerte, rango o alta volatilidad.
+// Cruza cada operación con el régimen que había cuando entró, para descubrir CUÁNDO funciona
+// cada cosa — no solo qué funciona.
+function rendimientoPorRegimen(closedTrades, minMuestra = 8){
+  const conDatos = (closedTrades||[])
+    .filter(t => t.pnlPct != null && t.registro?.gestion?.stopPct > 0)
+    .map(t => ({ ...t, rObtenido: +(t.pnlPct/t.registro.gestion.stopPct).toFixed(3) }));
+
+  if(conDatos.length < minMuestra*2) return { listo:false, operaciones: conDatos.length,
+    nota:`Hacen falta al menos ${minMuestra*2} operaciones. Hay ${conDatos.length}.` };
+
+  // El régimen sale de combinar la fase del mercado con el ADX registrado
+  const regimenDe = t => {
+    const fase = t.marketPhase;
+    const adx = t.registro?.adx;
+    if(!fase) return null;
+    if(fase==='CLÍMAX' || fase==='CAPITULACIÓN') return '🚨 Clímax / capitulación';
+    if(fase==='RANGO') return adx!=null && adx<15 ? '💤 Rango tranquilo' : '⚪ Rango';
+    if(fase==='EXPANSIÓN ALCISTA') return adx!=null && adx>=35 ? '🟢 Tendencia alcista fuerte' : '🟢 Tendencia alcista';
+    if(fase==='MARKDOWN') return adx!=null && adx>=35 ? '🔴 Tendencia bajista fuerte' : '🔴 Tendencia bajista';
+    if(fase==='ACUMULACIÓN') return '🟡 Acumulación';
+    if(fase==='DISTRIBUCIÓN') return '🟠 Distribución';
+    return fase;
+  };
+
+  const grupos = {};
+  for(const t of conDatos){
+    const reg = regimenDe(t);
+    if(!reg) continue;
+    (grupos[reg] = grupos[reg] || []).push(t);
+  }
+
+  const filas = Object.entries(grupos)
+    .filter(([,arr]) => arr.length >= minMuestra)
+    .map(([regimen, arr]) => {
+      const gan = arr.filter(t=>t.rObtenido>0);
+      const expectancy = +(arr.reduce((s,t)=>s+t.rObtenido,0)/arr.length).toFixed(3);
+      // Y dentro de cada régimen, qué setup anduvo mejor
+      const porSetup = {};
+      for(const t of arr){ const k=t.tipoSetup||'sin dato'; (porSetup[k]=porSetup[k]||[]).push(t.rObtenido); }
+      const mejorSetup = Object.entries(porSetup)
+        .filter(([,v])=>v.length>=3)
+        .map(([k,v])=>({ setup:k, ops:v.length, expectancy:+(v.reduce((a,b)=>a+b,0)/v.length).toFixed(2) }))
+        .sort((a,b)=>b.expectancy-a.expectancy)[0] || null;
+      return {
+        regimen, operaciones: arr.length,
+        winRate: +(gan.length/arr.length*100).toFixed(1),
+        expectancy,
+        mejorSetup,
+        confianza: arr.length>=30?'alta':arr.length>=15?'media':'baja',
+        veredicto: expectancy>=0.3?'🥇 muy favorable':expectancy>=0.1?'🥈 favorable':expectancy>-0.1?'➖ neutro':'⚠️ desfavorable',
+      };
+    })
+    .sort((a,b)=>b.expectancy-a.expectancy);
+
+  const malos = filas.filter(f=>f.expectancy<=-0.1 && f.confianza!=='baja');
+  return {
+    listo: true,
+    operaciones: conDatos.length,
+    filas,
+    nota: malos.length
+      ? `⚠️ ${malos.length} régimen(es) muestran expectancy negativa. Saber CUÁNDO no operar suele valer más que agregar otro indicador.`
+      : 'Ningún régimen muestra pérdida clara todavía. Con más operaciones se va a poder distinguir mejor.',
+  };
+}
+
+// ═══ MFE/MAE SEPARADO POR RESULTADO ═══
+// Responde dos preguntas concretas que sirven para calibrar stop y breakeven:
+//   ¿Cuánto retrocede normalmente una operación GANADORA antes de despegar?
+//     -> si el stop está más cerca que ese retroceso, se están cortando operaciones buenas.
+//   ¿Cuánto llega a avanzar una PERDEDORA antes de darse vuelta?
+//     -> si avanzan bastante, conviene un objetivo parcial más cerca o mover el stop antes.
+function analisisMfeMaePorResultado(closedTrades){
+  const conDatos = (closedTrades||[]).filter(t =>
+    t.registro?.mfe != null && t.registro?.mae != null && t.pnlPct != null);
+  if(conDatos.length < 10) return { listo:false, operaciones: conDatos.length,
+    nota:`Hacen falta al menos 10 operaciones con MFE/MAE. Hay ${conDatos.length}.` };
+
+  const ganadoras = conDatos.filter(t => t.pnlPct > 0);
+  const perdedoras = conDatos.filter(t => t.pnlPct <= 0);
+  const stat = arr => {
+    if(!arr.length) return null;
+    const ord = [...arr].sort((a,b)=>a-b);
+    return {
+      promedio: +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2),
+      mediana: +ord[Math.floor(ord.length/2)].toFixed(2),
+      percentil75: +ord[Math.floor(ord.length*0.75)].toFixed(2),
+      maximo: +Math.max(...arr).toFixed(2),
+    };
+  };
+
+  const maeGanadoras = stat(ganadoras.map(t=>Math.abs(t.registro.mae)));
+  const mfeGanadoras = stat(ganadoras.map(t=>t.registro.mfe));
+  const mfePerdedoras = stat(perdedoras.map(t=>t.registro.mfe));
+  const maePerdedoras = stat(perdedoras.map(t=>Math.abs(t.registro.mae)));
+
+  const recomendaciones = [];
+  if(maeGanadoras && ganadoras.length >= 8){
+    recomendaciones.push(`Las operaciones que terminaron GANANDO retrocedieron ${maeGanadoras.promedio}R en promedio antes de despegar (el 75% no pasó de ${maeGanadoras.percentil75}R).`);
+    if(maeGanadoras.percentil75 >= 0.85) recomendaciones.push(`⚠️ Ese retroceso está muy cerca del stop de 1R: es probable que se estén cortando operaciones que iban a funcionar.`);
+  }
+  if(mfePerdedoras && perdedoras.length >= 8){
+    recomendaciones.push(`Las que terminaron PERDIENDO llegaron a avanzar ${mfePerdedoras.promedio}R antes de darse vuelta (el 75% llegó hasta ${mfePerdedoras.percentil75}R).`);
+    if(mfePerdedoras.promedio >= 0.8) recomendaciones.push(`⚠️ Avanzan bastante antes de girar: un objetivo parcial más cerca o mover el stop antes convertiría varias de estas en ganadoras o en empate.`);
+  }
+
+  return {
+    listo: true,
+    operaciones: conDatos.length,
+    ganadoras: { cantidad: ganadoras.length, retrocesoAntes: maeGanadoras, recorridoTotal: mfeGanadoras },
+    perdedoras: { cantidad: perdedoras.length, avanceAntesDeGirar: mfePerdedoras, retroceso: maePerdedoras },
+    recomendaciones,
+    nota: 'Estas son las dos preguntas que más sirven para calibrar el stop y el breakeven — pero con menos de 30 operaciones son orientativas.',
+  };
+}
+
+// ═══ CORRELACIÓN ENTRE OPERACIONES ABIERTAS ═══
+// Cinco LONG en cinco altcoins distintas NO son cinco apuestas independientes: si BTC cae, caen
+// todas juntas. El riesgo real es mucho mayor que la suma de los riesgos individuales.
+function analizarCorrelacion(tesisAbiertas, contexto = {}){
+  const activas = (tesisAbiertas||[]).filter(t => t.entry);
+  if(activas.length < 2) return { hayRiesgo:false, operaciones: activas.length, nota:'Con menos de 2 operaciones abiertas no hay riesgo de correlación.' };
+
+  const longs = activas.filter(t => t.dir === 'LONG').length;
+  const shorts = activas.filter(t => t.dir === 'SHORT').length;
+  const capChico = activas.filter(t => (t.tag||'').includes('cap chico')).length;
+  const alertas = [];
+  let nivel = 'bajo';
+
+  // 1) Todas del mismo lado
+  const mismoLado = Math.max(longs, shorts);
+  const pctMismoLado = mismoLado/activas.length*100;
+  if(activas.length >= 3 && pctMismoLado >= 80){
+    alertas.push(`${mismoLado} de ${activas.length} operaciones son ${longs>shorts?'LONG':'SHORT'}. Si el mercado se da vuelta, se ven afectadas todas juntas: el riesgo real es mayor que la suma de los individuales.`);
+    nivel = activas.length >= 5 ? 'alto' : 'medio';
+  }
+
+  // 2) Casi todas cap chico: se mueven en bloque con el apetito de riesgo
+  if(activas.length >= 3 && capChico/activas.length >= 0.8){
+    alertas.push(`${capChico} de ${activas.length} son monedas de cap chico, que suelen moverse en bloque cuando cambia el apetito de riesgo.`);
+    if(nivel === 'bajo') nivel = 'medio';
+  }
+
+  // 3) BTC en contra de la mayoría
+  if(contexto.btcCambio24h != null && activas.length >= 3){
+    const btcBaja = contexto.btcCambio24h < -2;
+    const btcSube = contexto.btcCambio24h > 2;
+    if((btcBaja && longs >= activas.length*0.7) || (btcSube && shorts >= activas.length*0.7)){
+      alertas.push(`BTC ${btcBaja?'está cayendo':'está subiendo'} ${Math.abs(contexto.btcCambio24h).toFixed(1)}% y la mayoría de las operaciones abiertas van al lado contrario. Las altcoins suelen seguir a BTC.`);
+      nivel = 'alto';
+    }
+  }
+
+  // 4) Riesgo total acumulado
+  const riesgoTotal = activas.length * (contexto.riesgoPorOperacion ?? 2);
+  if(riesgoTotal > 10){
+    alertas.push(`Con ${activas.length} operaciones abiertas al ${contexto.riesgoPorOperacion ?? 2}% cada una, hay ${riesgoTotal.toFixed(0)}% del capital expuesto. Si están correlacionadas, pueden perderse casi todas juntas.`);
+    nivel = 'alto';
+  }
+
+  return {
+    hayRiesgo: alertas.length > 0,
+    nivel,
+    operaciones: activas.length,
+    longs, shorts, capChico,
+    riesgoTotalPct: +riesgoTotal.toFixed(1),
+    alertas,
+    resumen: alertas.length
+      ? `${nivel==='alto'?'🚨':'⚠️'} Riesgo de correlación ${nivel}: ${alertas.length} factor(es) detectados.`
+      : 'Las operaciones abiertas están razonablemente diversificadas.',
+  };
+}
+
+// ═══ PROTECCIÓN DEL MOTOR (kill switch de datos) ═══
+// Antes de mandar cualquier señal, comprueba que los datos tengan sentido. Un precio absurdo o
+// desactualizado puede producir una señal perfectamente formada pero completamente equivocada.
+// Es el tipo de fallo más peligroso: no crashea, simplemente produce basura convincente.
+function verificarDatosSanos(data, opciones = {}){
+  const problemas = [];
+  const velas = data?.candles || [];
+  const precio = data?.price;
+
+  // 1) Precio válido
+  if(!Number.isFinite(precio) || precio <= 0) problemas.push('El precio no es un número válido.');
+
+  // 2) Velas suficientes
+  if(velas.length < 30) problemas.push(`Solo hay ${velas.length} velas: no alcanza para calcular los indicadores.`);
+
+  if(velas.length >= 10 && Number.isFinite(precio)){
+    const ultima = velas.at(-1);
+
+    // 3) El precio actual no puede estar lejísimos de la última vela
+    if(Number.isFinite(ultima?.c) && ultima.c > 0){
+      const desvio = Math.abs(precio - ultima.c)/ultima.c*100;
+      if(desvio > 20) problemas.push(`El precio actual ($${precio}) está ${desvio.toFixed(0)}% lejos del cierre de la última vela ($${ultima.c}). Alguna de las dos fuentes está mal.`);
+    }
+
+    // 4) Datos desactualizados: la última vela no puede ser de hace horas
+    if(ultima?.t){
+      const horasViejo = (Date.now() - ultima.t)/3600000;
+      const maxHoras = opciones.maxHorasDesactualizado ?? 6;
+      if(horasViejo > maxHoras) problemas.push(`La última vela es de hace ${horasViejo.toFixed(1)} horas. Los datos están desactualizados.`);
+    }
+
+    // 5) Velas incoherentes: el máximo tiene que ser mayor al mínimo, y el cierre estar adentro
+    const incoherentes = velas.slice(-30).filter(v =>
+      !Number.isFinite(v.h) || !Number.isFinite(v.l) || v.h < v.l ||
+      v.c > v.h*1.001 || v.c < v.l*0.999 || v.o > v.h*1.001 || v.o < v.l*0.999
+    ).length;
+    if(incoherentes > 0) problemas.push(`${incoherentes} vela(s) con valores incoherentes (máximo menor al mínimo, o cierre fuera del rango).`);
+
+    // 6) Spread anormal: si el rango de la última vela es enorme, el libro está roto o hubo un pico
+    if(Number.isFinite(ultima?.h) && Number.isFinite(ultima?.l) && ultima.l > 0){
+      const rangoPct = (ultima.h - ultima.l)/ultima.l*100;
+      const maxRango = opciones.maxRangoVelaPct ?? 40;
+      if(rangoPct > maxRango) problemas.push(`La última vela tiene un rango de ${rangoPct.toFixed(0)}%. Puede ser un pico de datos malos o un movimiento imposible de operar.`);
+    }
+
+    // 7) Volumen cero sostenido: la moneda no se está operando
+    const sinVolumen = velas.slice(-10).filter(v => !v.v || v.v <= 0).length;
+    if(sinVolumen >= 7) problemas.push(`${sinVolumen} de las últimas 10 velas sin volumen. La moneda prácticamente no se opera.`);
+
+    // 8) Precios repetidos: señal de datos congelados
+    const cierres = velas.slice(-10).map(v=>v.c);
+    if(new Set(cierres).size === 1) problemas.push('Las últimas 10 velas tienen exactamente el mismo cierre: los datos parecen congelados.');
+  }
+
+  return {
+    sano: problemas.length === 0,
+    problemas,
+    mensaje: problemas.length
+      ? `🛑 NO OPERAR — protección del motor: ${problemas.join(' ')}`
+      : null,
+  };
+}
+
+// ═══ DETECTOR DE ACTIVIDAD ANÓMALA ═══
+// No identifica QUIÉN mueve el dinero — para eso haría falta Arkham o Nansen, que son de pago.
+// Lo que SÍ se puede con datos gratuitos es detectar que ALGO RARO está pasando: movimientos que
+// no encajan con el comportamiento normal de esa moneda.
+// La idea: alguien grande operando deja huellas aunque no sepamos quién es. Volumen que aparece
+// de la nada, posiciones que se abren de golpe, precio que se mueve sin volumen que lo justifique.
+function detectActividadAnomala(candles, contexto = {}){
+  if(!candles || candles.length < 60) return null;
+
+  const señales = [];
+  let puntaje = 0;
+  const ultima = candles.at(-1);
+  const v50 = candles.slice(-50);
+
+  // 1) VOLUMEN FUERA DE LO NORMAL
+  // Se compara contra la desviación típica, no contra el promedio: así detecta lo verdaderamente
+  // raro y no cualquier vela un poco más grande.
+  const vols = v50.map(c=>c.v).filter(v=>v>0);
+  if(vols.length >= 30){
+    const media = vols.reduce((a,b)=>a+b,0)/vols.length;
+    const desv = Math.sqrt(vols.reduce((s,v)=>s+Math.pow(v-media,2),0)/vols.length);
+    if(desv > 0){
+      const z = (ultima.v - media)/desv;
+      if(z >= 4){ puntaje += 3; señales.push({ tipo:'volumen', nivel:'extremo', texto:`Volumen ${z.toFixed(1)} desviaciones sobre lo normal — es un movimiento muy fuera de lo habitual para esta moneda.` }); }
+      else if(z >= 2.5){ puntaje += 2; señales.push({ tipo:'volumen', nivel:'alto', texto:`Volumen ${z.toFixed(1)} desviaciones sobre lo normal.` }); }
+    }
+  }
+
+  // 2) VOLUMEN SIN MOVIMIENTO DE PRECIO
+  // Mucho volumen y el precio casi no se mueve: alguien está absorbiendo órdenes.
+  // Es una de las huellas más claras de un participante grande acumulando o distribuyendo.
+  const rango = ultima.h - ultima.l;
+  const cuerpo = Math.abs(ultima.c - ultima.o);
+  const volPromedio = vols.length ? vols.reduce((a,b)=>a+b,0)/vols.length : 0;
+  if(volPromedio > 0 && ultima.v > volPromedio*2.5 && rango > 0 && cuerpo/rango < 0.25){
+    puntaje += 3;
+    señales.push({ tipo:'absorción', nivel:'alto',
+      texto:`Volumen ${(ultima.v/volPromedio).toFixed(1)}x el promedio pero el precio casi no se movió. Alguien está absorbiendo las órdenes — suele preceder un movimiento.` });
+  }
+
+  // 3) MOVIMIENTO DE PRECIO SIN VOLUMEN
+  // Lo contrario: el precio se mueve fuerte con poco volumen. En monedas chicas suele significar
+  // que el libro está vacío y basta poca plata para mover el precio.
+  const cambioPct = Math.abs((ultima.c - ultima.o)/ultima.o*100);
+  if(volPromedio > 0 && cambioPct > 3 && ultima.v < volPromedio*0.6){
+    puntaje += 2;
+    señales.push({ tipo:'libro vacío', nivel:'medio',
+      texto:`El precio se movió ${cambioPct.toFixed(1)}% con volumen por debajo del promedio. El libro de órdenes está fino: con poca plata se mueve mucho, y eso se corta en cualquier momento.` });
+  }
+
+  // 4) SALTO REPENTINO DEL INTERÉS ABIERTO
+  // Si el OI sube de golpe, hay dinero nuevo entrando a posiciones. Combinado con precio plano,
+  // es señal de que alguien está armando una posición grande.
+  if(contexto.oiCambioPct != null){
+    if(Math.abs(contexto.oiCambioPct) >= 15){
+      puntaje += 2;
+      señales.push({ tipo:'interés abierto', nivel:'alto',
+        texto:`El interés abierto ${contexto.oiCambioPct>0?'subió':'bajó'} ${Math.abs(contexto.oiCambioPct).toFixed(0)}% de golpe. ${contexto.oiCambioPct>0?'Están abriendo posiciones nuevas en masa.':'Están cerrando posiciones en masa.'}` });
+    }
+  }
+
+  // 5) FUNDING EXTREMO
+  // Un funding muy alto significa que hay demasiada gente del mismo lado pagando por estar ahí.
+  // Es la antesala típica de una liquidación en cadena.
+  if(contexto.funding != null){
+    const f = contexto.funding;
+    if(Math.abs(f) >= 0.08){
+      puntaje += 3;
+      señales.push({ tipo:'funding', nivel:'extremo',
+        texto:`Funding en ${f.toFixed(3)}%: hay muchísima gente ${f>0?'en largo':'en corto'} pagando por mantener la posición. Ese desbalance suele terminar en liquidaciones en cadena.` });
+    } else if(Math.abs(f) >= 0.05){
+      puntaje += 2;
+      señales.push({ tipo:'funding', nivel:'alto', texto:`Funding en ${f.toFixed(3)}%, bastante desbalanceado hacia ${f>0?'los largos':'los cortos'}.` });
+    }
+  }
+
+  // 6) CAMBIO BRUSCO EN EL POSICIONAMIENTO DE LOS GRANDES
+  // Si el ratio long/short de los top traders se da vuelta rápido, los que más información
+  // manejan están cambiando de opinión.
+  if(contexto.ratioAnterior != null && contexto.ratioActual != null && contexto.ratioAnterior > 0){
+    const cambio = (contexto.ratioActual - contexto.ratioAnterior)/contexto.ratioAnterior*100;
+    if(Math.abs(cambio) >= 20){
+      puntaje += 2;
+      señales.push({ tipo:'posicionamiento', nivel:'alto',
+        texto:`Los traders grandes cambiaron su posicionamiento un ${Math.abs(cambio).toFixed(0)}% ${cambio>0?'hacia largos':'hacia cortos'} en poco tiempo.` });
+    }
+  }
+
+  // 7) MECHA LARGA CON VOLUMEN — barrido de liquidez
+  // El precio va a buscar stops, los toma, y vuelve. La huella clásica de una cacería.
+  const mechaArriba = ultima.h - Math.max(ultima.o, ultima.c);
+  const mechaAbajo = Math.min(ultima.o, ultima.c) - ultima.l;
+  if(rango > 0 && volPromedio > 0 && ultima.v > volPromedio*2){
+    if(mechaArriba/rango > 0.6){
+      puntaje += 2;
+      señales.push({ tipo:'barrido', nivel:'alto',
+        texto:`Mecha larga hacia arriba con volumen alto: el precio subió a buscar stops y volvió. Barrido de liquidez.` });
+    } else if(mechaAbajo/rango > 0.6){
+      puntaje += 2;
+      señales.push({ tipo:'barrido', nivel:'alto',
+        texto:`Mecha larga hacia abajo con volumen alto: el precio bajó a buscar stops y volvió. Barrido de liquidez.` });
+    }
+  }
+
+  // 8) SECUENCIA DE VELAS GRANDES SEGUIDAS
+  // Varias velas fuertes del mismo lado con volumen creciente: alguien está entrando en serio.
+  const ultimas5 = candles.slice(-5);
+  const mismaDireccion = ultimas5.every(c => c.c > c.o) || ultimas5.every(c => c.c < c.o);
+  const volCreciente = ultimas5.slice(1).every((c,i) => c.v >= ultimas5[i].v * 0.9);
+  if(mismaDireccion && volCreciente && volPromedio > 0 && ultimas5.at(-1).v > volPromedio*1.5){
+    puntaje += 2;
+    señales.push({ tipo:'acumulación', nivel:'medio',
+      texto:`Cinco velas seguidas ${ultimas5[0].c>ultimas5[0].o?'alcistas':'bajistas'} con volumen creciendo. Parece entrada sostenida, no una operación suelta.` });
+  }
+
+  if(!señales.length) return { hayAlgo:false, puntaje:0, señales:[], resumen:'Actividad normal, sin nada fuera de lo habitual.' };
+
+  const nivel = puntaje >= 7 ? 'MUY ALTA' : puntaje >= 4 ? 'ALTA' : 'MODERADA';
+  return {
+    hayAlgo: true,
+    puntaje,
+    nivel,
+    señales,
+    resumen: `${nivel === 'MUY ALTA' ? '🚨' : nivel === 'ALTA' ? '⚠️' : 'ℹ️'} Actividad inusual (${nivel.toLowerCase()}): ${señales.map(s=>s.tipo).join(', ')}.`,
+    detalle: señales.map(s=>s.texto).join(' '),
+    // Aclaración deliberada: esto NO dice quién está operando.
+    aclaracion: 'Esto detecta que algo fuera de lo normal está pasando, pero no identifica quién lo hace. Para saber qué billeteras están detrás haría falta Arkham o Nansen, que son de pago.',
+  };
+}
+
+// ═══ COSTE REAL DE OPERACIÓN ═══
+// Un backtest puede verse hermoso y perder plata en la práctica. En cap chico especialmente:
+// el spread es ancho, la liquidez es poca y el slippage se come una parte del movimiento.
+// Esta función descuenta comisiones, funding y slippage estimado para mostrar el resultado NETO.
+// Valores por defecto: comisión taker de Binance futuros (0,05% por lado) y slippage conservador
+// para monedas chicas. Se pueden ajustar si medís los tuyos reales.
+const COSTES = {
+  comisionPorLado: 0.0005,   // 0,05% al abrir + 0,05% al cerrar
+  slippageCapChico: 0.0015,  // 0,15% estimado por lado en monedas de baja liquidez
+  slippageNormal: 0.0003,    // 0,03% en pares líquidos
+  fundingPorDia: 0.0003,     // ~0,01% cada 8hs, aproximado
+};
+
+function calcularCosteReal(trade, opciones = {}){
+  const cfg = { ...COSTES, ...opciones };
+  const esCapChico = (trade.tag||'').includes('cap chico');
+  const slip = esCapChico ? cfg.slippageCapChico : cfg.slippageNormal;
+
+  // Cuántas veces se entra y sale: apertura + TP1 parcial + cierre final
+  const operacionesParciales = trade.partialTaken ? 3 : 2;
+  const comisionTotal = cfg.comisionPorLado * operacionesParciales;
+  const slippageTotal = slip * operacionesParciales;
+
+  // Funding: solo si la operación duró más de 8 horas
+  let horasAbierta = null, costeFunding = 0;
+  if(trade.entryTs && trade.closedAt) horasAbierta = (trade.closedAt - trade.entryTs)/3600000;
+  else if(trade.registro?.horasHastaConfirmar != null && trade.closedAt && trade.detectedAt){
+    horasAbierta = (trade.closedAt - trade.detectedAt)/3600000 - trade.registro.horasHastaConfirmar;
+  }
+  if(horasAbierta && horasAbierta > 8) costeFunding = cfg.fundingPorDia * (horasAbierta/24);
+
+  const costeTotalPct = (comisionTotal + slippageTotal + costeFunding) * 100;
+  const brutoPct = trade.pnlPct ?? 0;
+  const netoPct = +(brutoPct - costeTotalPct).toFixed(3);
+
+  return {
+    brutoPct: +brutoPct.toFixed(3),
+    comisionPct: +(comisionTotal*100).toFixed(3),
+    slippagePct: +(slippageTotal*100).toFixed(3),
+    fundingPct: +(costeFunding*100).toFixed(3),
+    costeTotalPct: +costeTotalPct.toFixed(3),
+    netoPct,
+    // Si el resultado cambia de signo al descontar costes, es una señal de alarma
+    cambiaDeSigno: (brutoPct > 0 && netoPct <= 0),
+    horasAbierta: horasAbierta != null ? +horasAbierta.toFixed(1) : null,
+  };
+}
+
+// Resumen de costes sobre todas las operaciones: cuánto se lleva la ejecución.
+function resumenCostes(closedTrades, opciones = {}){
+  const trades = (closedTrades||[]).filter(t => t.pnlPct != null);
+  if(trades.length < 5) return { listo:false, nota:`Hacen falta al menos 5 operaciones. Hay ${trades.length}.` };
+
+  const detalles = trades.map(t => calcularCosteReal(t, opciones));
+  const suma = campo => +detalles.reduce((s,d)=>s+d[campo],0).toFixed(2);
+  const brutoTotal = suma('brutoPct'), netoTotal = suma('netoPct'), costeTotal = suma('costeTotalPct');
+  const cambianSigno = detalles.filter(d=>d.cambiaDeSigno).length;
+  const ganadorasBruto = detalles.filter(d=>d.brutoPct>0).length;
+  const ganadorasNeto = detalles.filter(d=>d.netoPct>0).length;
+
+  return {
+    listo: true,
+    operaciones: trades.length,
+    brutoTotal, netoTotal, costeTotal,
+    costePromedioPorOperacion: +(costeTotal/trades.length).toFixed(3),
+    winRateBruto: +(ganadorasBruto/trades.length*100).toFixed(1),
+    winRateNeto: +(ganadorasNeto/trades.length*100).toFixed(1),
+    operacionesQueCambianDeSigno: cambianSigno,
+    conclusion: (()=>{
+      const partes = [];
+      partes.push(`Los costes de ejecución se llevan ${costeTotal.toFixed(1)} puntos porcentuales en total (${(costeTotal/trades.length).toFixed(2)}% por operación).`);
+      if(cambianSigno > 0) partes.push(`⚠️ ${cambianSigno} operación(es) que aparecían como ganadoras terminan en pérdida al descontar costes.`);
+      if(brutoTotal > 0 && netoTotal <= 0) partes.push(`⚠️ El resultado pasa de ${brutoTotal.toFixed(1)}% bruto a ${netoTotal.toFixed(1)}% neto: la ventaja desaparece con los costes reales.`);
+      else if(netoTotal > 0) partes.push(`El resultado sigue siendo positivo después de costes: ${netoTotal.toFixed(1)}%.`);
+      return partes.join(' ');
+    })(),
+    nota: 'Comisión 0,05% por lado, slippage 0,15% en cap chico y funding aproximado. Son estimaciones — si medís los tuyos reales, se pueden ajustar.',
+  };
+}
+
+// ═══ WALK-FORWARD / FUERA DE MUESTRA ═══
+// El problema que resuelve: si el Research Center mira TODO el historial y encuentra que "BOS en
+// horario 12-18h gana 70%", puede estar describiendo casualidades de ese historial en particular.
+// La única forma de saber si un patrón es real es encontrarlo en una parte de los datos y
+// comprobarlo en OTRA que nunca se miró.
+// Divide las operaciones por fecha: las primeras para investigar, las últimas para validar.
+function validarFueraDeMuestra(closedTrades, proporcionEntrenamiento = 0.7){
+  const ordenadas = (closedTrades||[])
+    .filter(t => t.closedAt && t.pnlPct != null)
+    .sort((a,b) => a.closedAt - b.closedAt);
+
+  if(ordenadas.length < 30){
+    return { listo:false, operaciones: ordenadas.length,
+      nota:`Hacen falta al menos 30 operaciones para dividir en muestra de investigación y validación. Hay ${ordenadas.length}.` };
+  }
+
+  const corte = Math.floor(ordenadas.length * proporcionEntrenamiento);
+  const entrenamiento = ordenadas.slice(0, corte);
+  const validacion = ordenadas.slice(corte);
+
+  const wr = arr => arr.length ? +(arr.filter(t=>t.pnlPct>0).length/arr.length*100).toFixed(1) : null;
+  const wrGlobalEnt = wr(entrenamiento);
+
+  // Se buscan patrones SOLO en la parte de entrenamiento
+  const buscarPatrones = (arr, base) => {
+    const encontrados = [];
+    const agrupar = (etiqueta, fn) => {
+      const g = {};
+      for(const t of arr){ const k = fn(t); if(k==null) continue; (g[k]=g[k]||[]).push(t); }
+      for(const [clave, sub] of Object.entries(g)){
+        if(sub.length < 8) continue;
+        const w = wr(sub);
+        // El umbral se adapta al tamaño del grupo: con pocas operaciones hace falta una diferencia
+        // más grande para que signifique algo. Un umbral fijo de 15 puntos era ciego con muestras
+        // chicas (dejaba pasar diferencias reales de 11 puntos sobre 24 operaciones).
+        const umbral = sub.length >= 40 ? 8 : sub.length >= 20 ? 10 : 15;
+        if(Math.abs(w - base) >= umbral) encontrados.push({ etiqueta, clave, winRate:w, diferencia:+(w-base).toFixed(1), operaciones:sub.length, umbralUsado:umbral });
+      }
+    };
+    agrupar('Camino', t => t.tipoSetup ?? null);
+    agrupar('Dirección', t => t.dir ?? null);
+    agrupar('Fase', t => t.marketPhase ?? null);
+    agrupar('Liquidez', t => t.registro?.liquidezAFavor ?? null);
+    return encontrados;
+  };
+
+  const patrones = buscarPatrones(entrenamiento, wrGlobalEnt);
+  const wrGlobalVal = wr(validacion);
+
+  // Cada patrón encontrado se comprueba en la parte que nunca se miró
+  const resultados = patrones.map(p => {
+    const enValidacion = validacion.filter(t => {
+      const v = p.etiqueta==='Camino' ? t.tipoSetup
+              : p.etiqueta==='Dirección' ? t.dir
+              : p.etiqueta==='Fase' ? t.marketPhase
+              : t.registro?.liquidezAFavor;
+      return v === p.clave;
+    });
+    if(enValidacion.length < 5){
+      return { ...p, validado:null, wrValidacion:null, veredicto:'Sin casos suficientes en la muestra de validación.' };
+    }
+    const wVal = wr(enValidacion);
+    const difVal = +(wVal - wrGlobalVal).toFixed(1);
+    // Se considera validado si mantiene la misma dirección y al menos la mitad de la ventaja
+    const mismaDireccion = Math.sign(difVal) === Math.sign(p.diferencia);
+    const mantiene = mismaDireccion && Math.abs(difVal) >= Math.abs(p.diferencia)*0.5;
+    return {
+      ...p,
+      wrValidacion: wVal,
+      difValidacion: difVal,
+      opsValidacion: enValidacion.length,
+      validado: mantiene,
+      veredicto: mantiene
+        ? `✅ SE MANTIENE: en investigación daba ${p.diferencia>0?'+':''}${p.diferencia} puntos, en validación ${difVal>0?'+':''}${difVal}. El patrón parece real.`
+        : mismaDireccion
+        ? `🟡 SE DEBILITA: la ventaja bajó de ${p.diferencia>0?'+':''}${p.diferencia} a ${difVal>0?'+':''}${difVal} puntos. Puede ser parcialmente real.`
+        : `❌ NO SE MANTIENE: en investigación daba ${p.diferencia>0?'+':''}${p.diferencia} y en validación ${difVal>0?'+':''}${difVal}. Era ruido del período analizado.`,
+    };
+  });
+
+  const validados = resultados.filter(r => r.validado === true);
+  return {
+    listo: true,
+    operaciones: ordenadas.length,
+    entrenamiento: { operaciones: entrenamiento.length, winRate: wrGlobalEnt },
+    validacion: { operaciones: validacion.length, winRate: wrGlobalVal },
+    patronesEncontrados: patrones.length,
+    resultados,
+    validados: validados.length,
+    conclusion: !patrones.length
+      ? 'No se encontró ningún patrón en la muestra de investigación, así que no hay nada para validar.'
+      : validados.length
+      ? `De ${patrones.length} patrones encontrados, ${validados.length} se mantuvieron en datos que nunca se miraron. Esos son los únicos en los que confiaría para cambiar el motor.`
+      : `⚠️ Ninguno de los ${patrones.length} patrones encontrados se sostuvo fuera de muestra. Eso sugiere que eran casualidades del período analizado, no ventajas reales.`,
+    nota: 'La muestra de validación nunca se usa para buscar patrones, solo para comprobarlos. Un patrón que no sobrevive acá no debería cambiar nada del motor.',
+  };
+}
+
+// ═══ COMBINACIONES DE COMPONENTES ═══
+// Un componente puede no aportar solo, pero sí cuando coincide con otro. Esta función mide los
+// PARES: qué pasa cuando Tendencia y Estructura empujan juntos, comparado con cuando va uno solo.
+// Es lo que eventualmente podría justificar cambiar los pesos — pero solo con muestra suficiente.
+function combinacionDioses(closedTrades, minMuestra = 10){
+  const conR = (closedTrades||[])
+    .filter(t => t.registro?.componentes?.length && t.registro?.gestion?.stopPct > 0 && t.pnlPct != null)
+    .map(t => ({ ...t, rObtenido: +(t.pnlPct/t.registro.gestion.stopPct).toFixed(3) }));
+
+  if(conR.length < minMuestra*2){
+    return { listo:false, operaciones: conR.length,
+      nota:`Hacen falta al menos ${minMuestra*2} operaciones con componentes registrados. Hay ${conR.length}.` };
+  }
+
+  // Un componente "empujó" si su aporte fue significativo Y a favor de la dirección de la operación
+  const empujo = (t, nombre) => {
+    const cp = t.registro.componentes.find(x=>x.n===nombre);
+    if(!cp || Math.abs(cp.aporte) < 0.3) return false;
+    return t.dir==='LONG' ? cp.aporte > 0 : cp.aporte < 0;
+  };
+  const nombres = [...new Set(conR.flatMap(t=>t.registro.componentes.map(cp=>cp.n)))];
+  const expect = arr => arr.length ? +(arr.reduce((s,t)=>s+t.rObtenido,0)/arr.length).toFixed(3) : null;
+
+  // Individuales
+  const individuales = nombres.map(n => {
+    const con = conR.filter(t=>empujo(t,n));
+    return con.length >= minMuestra ? { componentes:[n], operaciones:con.length, expectancy:expect(con) } : null;
+  }).filter(Boolean);
+
+  // Pares
+  const pares = [];
+  for(let i=0;i<nombres.length;i++){
+    for(let j=i+1;j<nombres.length;j++){
+      const con = conR.filter(t => empujo(t,nombres[i]) && empujo(t,nombres[j]));
+      if(con.length < minMuestra) continue;
+      const e = expect(con);
+      const soloA = individuales.find(x=>x.componentes[0]===nombres[i])?.expectancy;
+      const soloB = individuales.find(x=>x.componentes[0]===nombres[j])?.expectancy;
+      const mejorSolo = (soloA!=null && soloB!=null) ? Math.max(soloA, soloB) : (soloA ?? soloB);
+      pares.push({
+        componentes: [nombres[i], nombres[j]],
+        operaciones: con.length,
+        expectancy: e,
+        mejorIndividual: mejorSolo,
+        // Sinergia: ¿juntos rinden más que el mejor de los dos por separado?
+        sinergia: mejorSolo!=null ? +(e - mejorSolo).toFixed(3) : null,
+        confianza: con.length >= 40 ? 'alta' : con.length >= 20 ? 'media' : 'baja',
+      });
+    }
+  }
+  pares.sort((a,b)=>b.expectancy-a.expectancy);
+
+  const conSinergia = pares.filter(p => p.sinergia != null && p.sinergia >= 0.15 && p.confianza !== 'baja');
+  return {
+    listo: true,
+    operaciones: conR.length,
+    individuales: individuales.sort((a,b)=>b.expectancy-a.expectancy),
+    pares,
+    nota: conSinergia.length
+      ? `${conSinergia.length} combinación(es) rinden más juntas que por separado. Eso sí sería un argumento para revisar pesos — pero con muestra mayor.`
+      : 'Ninguna combinación muestra sinergia clara todavía. Los componentes parecen aportar de forma independiente.',
+  };
+}
+
+// ═══ SIMULADOR DE OBJETIVOS (TP) ═══
+// Igual que el de stops pero al revés: prueba distintos múltiplos de R como objetivo, usando el
+// MFE registrado. Si el MFE de una operación fue 1.4R, un TP a 1.2R se habría alcanzado y uno a
+// 2R no. Contempla el porcentaje que se cierra en cada objetivo, no solo si se toca.
+function simularTPs(closedTrades, multiplicadores = [0.8, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5]){
+  const conDatos = (closedTrades||[]).filter(t =>
+    t.registro?.mfe != null && t.registro?.mae != null && t.registro?.gestion?.stopPct != null);
+
+  if(conDatos.length < 10){
+    return { listo:false, operaciones: conDatos.length,
+      nota:`Hacen falta al menos 10 operaciones con MFE registrado. Hay ${conDatos.length}.` };
+  }
+
+  const filas = multiplicadores.map(tp => {
+    let sumaR = 0, alcanzados = 0, stopeados = 0;
+    for(const t of conDatos){
+      const maeR = Math.abs(t.registro.mae), mfeR = t.registro.mfe;
+      // Si el retroceso superó 1R (el stop), la operación muere antes
+      if(maeR >= 1.0){ sumaR -= 1; stopeados++; continue; }
+      if(mfeR >= tp){
+        // Se toma 50% en el objetivo y el resto se asume cerrado en breakeven
+        sumaR += tp * 0.5;
+        alcanzados++;
+      }
+      // Si no llegó al objetivo ni al stop, se asume cierre neutro
+    }
+    return {
+      tpEnR: tp,
+      alcanzados,
+      pctAlcanzado: +(alcanzados/conDatos.length*100).toFixed(1),
+      stopeados,
+      expectancy: +(sumaR/conDatos.length).toFixed(3),
+      resultadoTotalR: +sumaR.toFixed(2),
+    };
+  });
+
+  const mejor = filas.reduce((a,b)=> b.expectancy > a.expectancy ? b : a);
+  const actual = filas.find(f=>f.tpEnR === 1.0) || filas[0];
+  const dif = +(mejor.expectancy - actual.expectancy).toFixed(3);
+
+  return {
+    listo: true,
+    operaciones: conDatos.length,
+    filas, mejor, actual,
+    recomendarCambio: conDatos.length >= 30 && Math.abs(dif) >= 0.10,
+    conclusion: conDatos.length < 30
+      ? `Con ${conDatos.length} operaciones no alcanza para recomendar un cambio de objetivo. Hacen falta al menos 30.`
+      : Math.abs(dif) < 0.10
+      ? `Ningún objetivo mejora de forma clara al actual (diferencia de ${dif}R). Sin evidencia para cambiarlo.`
+      : `Un TP1 a ${mejor.tpEnR}R habría dado ${dif>0?'+':''}${dif}R más por operación (se alcanza el ${mejor.pctAlcanzado}% de las veces, contra ${actual.pctAlcanzado}% del actual).`,
+    advertencia: 'Asume que el resto de la posición cierra en breakeven y que el recorrido habría sido igual. Aproximación para orientar, no para decidir sola.',
+  };
+}
+
+// ═══ MONTE CARLO ═══
+// El win rate y el resultado final dependen mucho del ORDEN en que aparecieron las operaciones.
+// Si las 5 perdedoras cayeron juntas al principio, el drawdown fue grande; si estuvieron repartidas,
+// mucho menor. Esta simulación baraja el orden miles de veces y muestra la distribución real de
+// resultados posibles — incluido el peor caso razonable, que es lo que importa para sobrevivir.
+function monteCarlo(closedTrades, iteraciones = 2000){
+  const rs = (closedTrades||[])
+    .filter(t => t.pnlUsd != null && t.registro?.gestion?.stopPct)
+    .map(t => {
+      // Resultado en múltiplos de R: cuánto se ganó respecto a lo que se arriesgaba
+      const riesgoPct = t.registro.gestion.stopPct;
+      return riesgoPct > 0 && t.pnlPct != null ? +(t.pnlPct/riesgoPct).toFixed(3) : null;
+    })
+    .filter(x => x != null);
+
+  if(rs.length < 20){
+    return { listo:false, operaciones: rs.length,
+      nota:`Hacen falta al menos 20 operaciones para que Monte Carlo tenga sentido. Hay ${rs.length}.` };
+  }
+
+  const capitalesFinales = [];
+  const drawdowns = [];
+  const peoresRachas = [];
+
+  for(let it=0; it<iteraciones; it++){
+    // Se baraja el orden (Fisher-Yates)
+    const orden = [...rs];
+    for(let i=orden.length-1; i>0; i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [orden[i], orden[j]] = [orden[j], orden[i]];
+    }
+    let capital = 100, pico = 100, dd = 0, rachaActual = 0, peorRacha = 0;
+    for(const r of orden){
+      capital += capital * 0.02 * r; // 2% de riesgo por operación
+      pico = Math.max(pico, capital);
+      dd = Math.max(dd, (pico-capital)/pico);
+      if(r < 0){ rachaActual++; peorRacha = Math.max(peorRacha, rachaActual); }
+      else rachaActual = 0;
+    }
+    capitalesFinales.push(capital);
+    drawdowns.push(dd*100);
+    peoresRachas.push(peorRacha);
+  }
+
+  const percentil = (arr, p) => {
+    const o = [...arr].sort((a,b)=>a-b);
+    return +o[Math.floor(o.length*p)].toFixed(2);
+  };
+  const prom = arr => +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2);
+
+  const perdieron = capitalesFinales.filter(x => x < 100).length;
+  const ruina = capitalesFinales.filter(x => x < 50).length; // perder la mitad del capital
+
+  return {
+    listo: true,
+    operaciones: rs.length,
+    iteraciones,
+    capital: {
+      peor: percentil(capitalesFinales, 0.01),
+      malo: percentil(capitalesFinales, 0.05),
+      mediana: percentil(capitalesFinales, 0.5),
+      bueno: percentil(capitalesFinales, 0.95),
+    },
+    drawdown: {
+      tipico: percentil(drawdowns, 0.5),
+      malo: percentil(drawdowns, 0.95),
+      peor: percentil(drawdowns, 0.99),
+    },
+    peorRachaTipica: Math.round(prom(peoresRachas)),
+    peorRachaPosible: Math.max(...peoresRachas),
+    probPerder: +(perdieron/iteraciones*100).toFixed(1),
+    probRuina: +(ruina/iteraciones*100).toFixed(1),
+    conclusion: (()=>{
+      const med = percentil(capitalesFinales, 0.5);
+      const ddMalo = percentil(drawdowns, 0.95);
+      const partes = [];
+      partes.push(med >= 100
+        ? `En la mitad de los escenarios el capital termina en ${med} o más.`
+        : `⚠️ En la mitad de los escenarios el capital termina en ${med} — o sea, perdiendo.`);
+      partes.push(`El drawdown puede llegar a ${ddMalo}% en 1 de cada 20 secuencias.`);
+      partes.push(`Hay que estar preparado para ${Math.round(prom(peoresRachas))} pérdidas seguidas como algo normal (hasta ${Math.max(...peoresRachas)} en el peor caso).`);
+      if(ruina/iteraciones > 0.05) partes.push(`⚠️ En el ${(ruina/iteraciones*100).toFixed(1)}% de los escenarios se pierde más de la mitad del capital.`);
+      return partes.join(' ');
+    })(),
+  };
+}
+
+// ═══ POST-MORTEM DE UNA OPERACIÓN ═══
+// Después de cerrar, responde: ¿qué esperaba el bot, qué pasó, qué componente acertó y cuál falló?
+// Todo sale de datos registrados — no infiere ni inventa nada. Si un dato no está, lo dice.
+function postMortem(trade, historial = []){
+  if(!trade) return null;
+  const r = trade.registro || {};
+  const g = r.gestion || {};
+  const gano = trade.pnlPct > 0;
+  const secciones = [];
+  const aciertos = [];
+  const fallos = [];
+
+  // 1) Qué esperaba vs qué pasó
+  const esperado = g.rTp1!=null ? `alcanzar al menos ${g.rTp1}R (TP1)` : 'alcanzar TP1';
+  const logrado = r.mfe!=null ? `${r.mfe}R a favor` : 'sin dato de recorrido';
+  secciones.push(`Esperaba ${esperado}. Llegó a ${logrado}${r.mae!=null?`, con un retroceso máximo de ${Math.abs(r.mae)}R`:''}.`);
+
+  // 2) Qué componente acertó y cuál falló
+  // Un componente "acertó" si empujó hacia la dirección que terminó siendo correcta.
+  if(r.componentes?.length){
+    const direccionCorrecta = gano ? 1 : -1; // 1 = la dirección de la tesis funcionó
+    for(const cp of r.componentes){
+      if(Math.abs(cp.aporte) < 0.2) continue; // no empujó lo suficiente para juzgarlo
+      const empujoAFavor = trade.dir==='LONG' ? cp.aporte > 0 : cp.aporte < 0;
+      if((empujoAFavor && gano) || (!empujoAFavor && !gano)) aciertos.push(cp.n);
+      else fallos.push(cp.n);
+    }
+  }
+
+  // 3) ¿El stop fue demasiado corto?
+  let notaStop = null;
+  if(!gano && r.mfe!=null && r.mfe >= 0.8){
+    notaStop = `⚠️ Llegó a ${r.mfe}R a favor antes de girar y tocar el stop. Con un objetivo parcial más cerca, esta operación podía cerrarse en positivo.`;
+  } else if(!gano && r.mae!=null && Math.abs(r.mae) <= 1.05 && g.stopPct){
+    notaStop = `El stop estaba a ${g.stopPct}% y el precio lo tocó casi justo. Si la tesis era correcta pero el stop quedó ajustado, conviene revisarlo con más casos.`;
+  }
+
+  // 4) ¿La fase estaba en contra?
+  let notaFase = null;
+  if(trade.marketPhase){
+    const faseContra = (trade.dir==='LONG' && ['CLÍMAX','DISTRIBUCIÓN','MARKDOWN'].includes(trade.marketPhase))
+                    || (trade.dir==='SHORT' && ['CAPITULACIÓN','ACUMULACIÓN','EXPANSIÓN ALCISTA'].includes(trade.marketPhase));
+    if(faseContra) notaFase = `⚠️ La fase del mercado era ${trade.marketPhase}, que va en contra de un ${trade.dir}.`;
+  }
+
+  // 5) ¿La liquidez estaba en contra?
+  const notaLiquidez = r.liquidezAFavor === 'en contra'
+    ? '⚠️ La liquidez dominante estaba en contra de la operación.' : null;
+
+  // 6) ¿Entró por válvula de escape?
+  const notaEscape = r.porValvulaEscape
+    ? '⚠️ Entró por válvula de escape (la tesis llevaba más de 8hs esperando), no por una confirmación fresca.' : null;
+
+  // 7) Comparación con operaciones parecidas
+  let notaHistorial = null;
+  if(historial.length >= 10){
+    const par = buscarTesisParecidas(historial, trade, 60);
+    if(par.encontradas >= 5) notaHistorial = `Operaciones parecidas: ${par.resumen}`;
+  }
+
+  return {
+    symbol: trade.symbol,
+    resultado: gano ? 'GANADA' : 'PERDIDA',
+    pnlPct: trade.pnlPct,
+    esperadoVsReal: secciones[0],
+    componentesAcertaron: aciertos,
+    componentesFallaron: fallos,
+    notas: [notaStop, notaFase, notaLiquidez, notaEscape, notaHistorial].filter(Boolean),
+    // Texto listo para mostrar
+    texto: [
+      `${gano?'✅':'❌'} ${trade.symbol} ${trade.dir} — ${gano?'GANADA':'PERDIDA'} (${trade.pnlPct>=0?'+':''}${trade.pnlPct}%)`,
+      secciones[0],
+      aciertos.length ? `Acertaron: ${aciertos.join(', ')}.` : null,
+      fallos.length ? `Fallaron: ${fallos.join(', ')}.` : null,
+      ...[notaStop, notaFase, notaLiquidez, notaEscape, notaHistorial].filter(Boolean),
+    ].filter(Boolean).join('\n'),
+  };
+}
+
+// ═══ RESEARCH CENTER ═══
+// Analiza todas las operaciones cerradas y busca patrones reales: qué caminos funcionan, en qué
+// horarios, con qué score, en qué fase de mercado. Genera HIPÓTESIS, no cambios automáticos.
+// Deliberadamente NO modifica el motor: propone, y la decisión de aplicar algo es humana.
+// Motivo: probamos cambios de pesos varias veces y casi todos empeoraron. Un sistema que se
+// ajusta solo encontraría "mejoras" que son ruido estadístico y las aplicaría sin que nadie mire.
+const MUESTRA_MINIMA = 10; // debajo de esto, cualquier porcentaje es ruido
+
+function _wr(arr){ return arr.length ? +(arr.filter(t=>t.pnlPct>0).length/arr.length*100).toFixed(1) : null; }
+
+function generarReporteResearch(closedTrades, opciones = {}){
+  const trades = (closedTrades||[]).filter(t => t.pnlPct!=null);
+  const wrGlobal = _wr(trades);
+  const hallazgos = [];
+  const advertencias = [];
+
+  if(trades.length < MUESTRA_MINIMA){
+    return {
+      fecha: new Date().toISOString(),
+      operaciones: trades.length,
+      winRateGlobal: wrGlobal,
+      hallazgos: [],
+      advertencias: [`Solo hay ${trades.length} operaciones cerradas. Hacen falta al menos ${MUESTRA_MINIMA} para que cualquier patrón signifique algo. Hasta entonces, este reporte no puede sacar conclusiones.`],
+      listoParaConcluir: false,
+    };
+  }
+
+  // Agrupa por un campo y devuelve solo los grupos con muestra suficiente
+  function analizarPor(campo, etiqueta, transformar){
+    const grupos = {};
+    for(const t of trades){
+      const clave = transformar ? transformar(t) : (t[campo] ?? 'Sin dato');
+      if(clave==null) continue;
+      (grupos[clave] = grupos[clave] || []).push(t);
+    }
+    for(const [clave, arr] of Object.entries(grupos)){
+      if(arr.length < MUESTRA_MINIMA) continue;
+      const wr = _wr(arr);
+      const diff = +(wr - wrGlobal).toFixed(1);
+      // Solo se reporta si la diferencia es grande de verdad (15 puntos o más)
+      if(Math.abs(diff) >= 15){
+        hallazgos.push({
+          tipo: etiqueta,
+          valor: clave,
+          operaciones: arr.length,
+          winRate: wr,
+          diferencia: diff,
+          direccion: diff > 0 ? 'mejor' : 'peor',
+          hipotesis: diff > 0
+            ? `Cuando ${etiqueta.toLowerCase()} es "${clave}", el win rate sube a ${wr}% (${diff > 0 ? '+' : ''}${diff} puntos sobre el promedio de ${wrGlobal}%). Vale la pena investigar si conviene darle más peso.`
+            : `Cuando ${etiqueta.toLowerCase()} es "${clave}", el win rate cae a ${wr}% (${diff} puntos bajo el promedio). Vale la pena investigar si conviene filtrarlo o restarle peso.`,
+          confianza: arr.length >= 30 ? 'alta' : arr.length >= 20 ? 'media' : 'baja',
+        });
+      }
+    }
+  }
+
+  analizarPor('tipoSetup', 'Camino de confirmación');
+  analizarPor('dir', 'Dirección');
+  analizarPor('tag', 'Tipo de moneda');
+  analizarPor('marketPhase', 'Fase del mercado');
+  analizarPor(null, 'Rango de score', t => t.score==null ? null : t.score>=8.5 ? '8.5 o más' : t.score>=8 ? '8.0 a 8.4' : t.score>=7.6 ? '7.6 a 7.9' : 'menos de 7.6');
+  analizarPor(null, 'Horario (UTC)', t => t.horaConfirmacion==null ? null : t.horaConfirmacion<6 ? 'madrugada (0-5h)' : t.horaConfirmacion<12 ? 'mañana (6-11h)' : t.horaConfirmacion<18 ? 'tarde (12-17h)' : 'noche (18-23h)');
+  analizarPor(null, 'Calidad de datos', t => t.dataQuality==null ? null : t.dataQuality>=85 ? 'alta (85+)' : t.dataQuality>=65 ? 'aceptable (65-84)' : 'baja (menos de 65)');
+
+  // Dimensiones nuevas, que vienen del registro completo que ahora guarda cada operación.
+  // Son justamente las preguntas que quedaron abiertas: ¿la liquidez en contra hace perder más?
+  // ¿las entradas por válvula de escape son peores? ¿el Estocástico extremo importa?
+  analizarPor(null, 'Liquidez', t => t.registro?.liquidezAFavor ?? null);
+  analizarPor(null, 'Entrada por válvula de escape', t => t.registro?.porValvulaEscape==null ? null : (t.registro.porValvulaEscape ? 'sí (tesis vieja)' : 'no (confirmó rápido)'));
+  analizarPor(null, 'Estocástico al entrar', t => t.registro?.estocastico==null ? null : t.registro.estocastico>=80 ? 'sobrecomprado (80+)' : t.registro.estocastico<=20 ? 'sobrevendido (20-)' : 'zona media');
+  analizarPor(null, 'Divergencia', t => t.registro?.divergencia ?? (t.registro ? 'sin divergencia' : null));
+  analizarPor(null, 'Fuerza del volumen', t => t.registro?.fuerzaVolumen==null ? null : t.registro.fuerzaVolumen>=60 ? 'compradora (60%+)' : t.registro.fuerzaVolumen<=40 ? 'vendedora (40%-)' : 'pareja');
+
+  // APORTE DE CADA COMPONENTE: compara el win rate cuando un componente empujó fuerte
+  // contra cuando no aportó. Es la medición que faltaba para saber cuánto vale cada Dios.
+  const conRegistro = trades.filter(t => t.registro?.componentes?.length);
+  const aporteComponentes = [];
+  if(conRegistro.length >= MUESTRA_MINIMA*2){
+    const nombres = [...new Set(conRegistro.flatMap(t => t.registro.componentes.map(cp=>cp.n)))];
+    for(const nombre of nombres){
+      const conAporte = conRegistro.filter(t => {
+        const cp = t.registro.componentes.find(x=>x.n===nombre);
+        return cp && Math.abs(cp.aporte) >= 0.3;
+      });
+      const sinAporte = conRegistro.filter(t => {
+        const cp = t.registro.componentes.find(x=>x.n===nombre);
+        return cp && Math.abs(cp.aporte) < 0.1;
+      });
+      if(conAporte.length < MUESTRA_MINIMA || sinAporte.length < MUESTRA_MINIMA) continue;
+      const wrCon = _wr(conAporte), wrSin = _wr(sinAporte);
+      const edge = +(wrCon - wrSin).toFixed(1);
+      aporteComponentes.push({
+        componente: nombre,
+        conAporte: conAporte.length, winRateConAporte: wrCon,
+        sinAporte: sinAporte.length, winRateSinAporte: wrSin,
+        edge,
+        veredicto: edge >= 10 ? 'APORTA — cuando empuja fuerte, se gana más'
+                 : edge <= -10 ? 'RESTA — cuando empuja fuerte, se gana MENOS'
+                 : 'NEUTRO — no cambia el resultado',
+      });
+    }
+    aporteComponentes.sort((a,b)=>Math.abs(b.edge)-Math.abs(a.edge));
+  }
+
+  // Pregunta central del proyecto: ¿la fase de confirmación en 15m agrega valor?
+  // Compara las que confirmaron contra las que expiraron y se simularon.
+  const confirmadas = trades.filter(t => t.entry!=null);
+  const expiradas = (closedTrades||[]).filter(t => t.wouldHaveWon!=null);
+  let valorConfirmacion = null;
+  if(confirmadas.length >= MUESTRA_MINIMA && expiradas.length >= MUESTRA_MINIMA){
+    const wrConf = _wr(confirmadas);
+    const wrExp = +(expiradas.filter(t=>t.wouldHaveWon).length/expiradas.length*100).toFixed(1);
+    const ventaja = +(wrConf - wrExp).toFixed(1);
+    valorConfirmacion = {
+      winRateConfirmadas: wrConf,
+      winRateDescartadas: wrExp,
+      ventaja,
+      veredicto: ventaja > 5
+        ? `La confirmación en 15m SUMA: las que pasaron el filtro ganaron ${ventaja} puntos más que las descartadas.`
+        : ventaja < -5
+        ? `⚠️ La confirmación en 15m RESTA: las descartadas habrían ganado ${Math.abs(ventaja)} puntos MÁS que las confirmadas. El filtro está sacando operaciones buenas.`
+        : 'La confirmación en 15m no muestra una diferencia clara todavía.',
+    };
+  } else {
+    advertencias.push(`Todavía no se puede evaluar si la confirmación en 15m aporta: hacen falta ${MUESTRA_MINIMA}+ confirmadas y ${MUESTRA_MINIMA}+ expiradas (hay ${confirmadas.length} y ${expiradas.length}).`);
+  }
+
+  // ═══ ANÁLISIS DE GESTIÓN: ¿los múltiplos de R están bien elegidos? ═══
+  // Responde con datos si 1R/1.6R/2.5R son los objetivos correctos para estas monedas, o si
+  // habría que moverlos. Hoy esos números son una hipótesis razonable, no una verdad medida.
+  const conGestion = trades.filter(t => t.registro?.gestion?.stopPct != null);
+  let analisisGestion = null;
+  if(conGestion.length >= MUESTRA_MINIMA){
+    const prom = arr => arr.length ? +(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2) : null;
+    const conMfe = conGestion.filter(t => t.registro.mfe != null);
+    const mfes = conMfe.map(t => t.registro.mfe);
+    const maes = conMfe.filter(t=>t.registro.mae!=null).map(t => Math.abs(t.registro.mae));
+    const stops = conGestion.map(t => t.registro.gestion.stopPct);
+
+    // ¿Cuántas operaciones llegaron a cada múltiplo?
+    const llegoA = r => conMfe.length ? +(conMfe.filter(t=>t.registro.mfe >= r).length / conMfe.length * 100).toFixed(0) : null;
+
+    analisisGestion = {
+      operaciones: conGestion.length,
+      stopPromedio: prom(stops),
+      stopMinimo: stops.length ? +Math.min(...stops).toFixed(2) : null,
+      stopMaximo: stops.length ? +Math.max(...stops).toFixed(2) : null,
+      mfePromedio: prom(mfes),
+      maePromedio: prom(maes),
+      alcance: { '1R': llegoA(1), '1.6R': llegoA(1.6), '2.5R': llegoA(2.5) },
+      conclusion: (()=>{
+        const mfeP = prom(mfes), maeP = prom(maes);
+        if(mfeP == null) return 'Todavía sin datos de MFE suficientes.';
+        const partes = [];
+        partes.push(`El movimiento promedio a favor llega a ${mfeP}R.`);
+        if(mfeP < 1.6) partes.push(`Como TP2 está en 1.6R, la mayoría de las operaciones no llega — convendría acercarlo.`);
+        else if(mfeP > 2.5) partes.push(`El precio suele pasar de 2.5R, así que TP3 podría estar dejando ganancia sobre la mesa.`);
+        else partes.push(`Los objetivos actuales (1R/1.6R/2.5R) están en un rango razonable.`);
+        if(maeP != null) partes.push(`El retroceso promedio antes de girar es ${maeP}R${maeP > 0.7 ? ' — el stop está cerca de ese límite, conviene revisarlo' : ''}.`);
+        return partes.join(' ');
+      })(),
+    };
+  } else {
+    advertencias.push(`Todavía no se puede evaluar si los múltiplos de R (1R/1.6R/2.5R) son correctos: hacen falta ${MUESTRA_MINIMA}+ operaciones con datos de gestión (hay ${conGestion.length}).`);
+  }
+
+  // ═══ MFE POR CATEGORÍA ═══
+  // Responde si conviene tener TP distintos según el tipo de operación. Puede pasar que un BOS
+  // recorra 2.4R en promedio y una reversión solo 1.2R — en ese caso, usar los mismos objetivos
+  // para las dos es dejar ganancia en una y no llegar nunca en la otra.
+  // OJO: esto MIDE, no cambia nada. Cualquier ajuste de TP tiene que salir de acá con muestra real.
+  const mfePorCategoria = [];
+  if(conGestion.length >= MUESTRA_MINIMA*2){
+    const conMfeCat = conGestion.filter(t => t.registro?.mfe != null);
+    const agrupar = (etiqueta, fn) => {
+      const grupos = {};
+      for(const t of conMfeCat){
+        const k = fn(t);
+        if(k==null) continue;
+        (grupos[k] = grupos[k] || []).push(t.registro.mfe);
+      }
+      for(const [clave, mfes] of Object.entries(grupos)){
+        if(mfes.length < MUESTRA_MINIMA) continue;
+        const ordenados = [...mfes].sort((a,b)=>a-b);
+        const mediana = ordenados[Math.floor(ordenados.length/2)];
+        mfePorCategoria.push({
+          categoria: etiqueta,
+          valor: clave,
+          operaciones: mfes.length,
+          mfePromedio: +(mfes.reduce((a,b)=>a+b,0)/mfes.length).toFixed(2),
+          mfeMediana: +mediana.toFixed(2),
+          // Porcentaje que alcanzó cada objetivo actual
+          llegoA1R: +(mfes.filter(x=>x>=1).length/mfes.length*100).toFixed(0),
+          llegoA16R: +(mfes.filter(x=>x>=1.6).length/mfes.length*100).toFixed(0),
+          llegoA25R: +(mfes.filter(x=>x>=2.5).length/mfes.length*100).toFixed(0),
+        });
+      }
+    };
+    agrupar('Camino de confirmación', t => t.tipoSetup ?? null);
+    agrupar('Dirección', t => t.dir ?? null);
+    agrupar('Fase del mercado', t => t.marketPhase ?? null);
+    agrupar('Tipo de moneda', t => t.tag ? 'cap chico' : 'normal');
+    mfePorCategoria.sort((a,b)=>b.mfePromedio-a.mfePromedio);
+  }
+
+  hallazgos.sort((a,b)=>Math.abs(b.diferencia)-Math.abs(a.diferencia));
+  if(!hallazgos.length) advertencias.push('No se encontró ningún patrón con diferencia significativa. Puede ser que no lo haya, o que falte muestra.');
+
+  return {
+    fecha: new Date().toISOString(),
+    operaciones: trades.length,
+    winRateGlobal: wrGlobal,
+    hallazgos,
+    aporteComponentes,
+    analisisGestion,
+    mfePorCategoria,
+    valorConfirmacion,
+    advertencias,
+    listoParaConcluir: trades.length >= 30,
+    nota: 'Estas son HIPÓTESIS, no conclusiones. Antes de cambiar cualquier peso del motor hay que validarlas con más datos: un patrón sobre 10-20 operaciones puede ser casualidad.',
+  };
+}
+
+// ═══ BIBLIOTECA DE TESIS ═══
+// Permite buscar entre todas las operaciones cerradas con filtros, y sobre todo encontrar las
+// PARECIDAS a una tesis actual. La idea: antes de abrir, poder responder "¿cómo salieron las otras
+// veces que se dio esta misma configuración?".
+// No decide nada por sí sola — es una herramienta de consulta.
+function buscarEnBiblioteca(closedTrades, filtros = {}){
+  let res = [...(closedTrades||[])];
+  if(filtros.symbol)     res = res.filter(t => t.symbol === filtros.symbol);
+  if(filtros.dir)        res = res.filter(t => t.dir === filtros.dir);
+  if(filtros.setup)      res = res.filter(t => (t.tipoSetup||'').includes(filtros.setup));
+  if(filtros.scoreMin!=null) res = res.filter(t => (t.score||0) >= filtros.scoreMin);
+  if(filtros.scoreMax!=null) res = res.filter(t => (t.score||0) <= filtros.scoreMax);
+  if(filtros.soloGanadas) res = res.filter(t => t.pnlPct > 0);
+  if(filtros.soloPerdidas)res = res.filter(t => t.pnlPct <= 0);
+  if(filtros.tag)        res = res.filter(t => (t.tag||'').includes(filtros.tag));
+
+  const ganadas = res.filter(t=>t.pnlPct>0);
+  const gan = ganadas.reduce((s,t)=>s+(t.pnlUsd||0),0);
+  const per = Math.abs(res.filter(t=>t.pnlPct<=0).reduce((s,t)=>s+(t.pnlUsd||0),0));
+  return {
+    operaciones: res,
+    total: res.length,
+    winRate: res.length ? +(ganadas.length/res.length*100).toFixed(1) : null,
+    profitFactor: per>0 ? +(gan/per).toFixed(2) : (gan>0?Infinity:0),
+    pnlTotal: +res.reduce((s,t)=>s+(t.pnlUsd||0),0).toFixed(2),
+    suficienteMuestra: res.length >= 10,
+  };
+}
+
+// Busca operaciones históricas parecidas a una tesis actual, para ver cómo salieron.
+// La similitud se calcula sobre lo que de verdad define un setup: dirección, camino de
+// confirmación, rango de score y tipo de moneda.
+function buscarTesisParecidas(closedTrades, tesisActual, minSimilitud = 50){
+  const puntuadas = (closedTrades||[]).map(t => {
+    let sim = 0;
+    if(t.dir === tesisActual.dir) sim += 30;
+    if(t.tipoSetup && tesisActual.tipoSetup && t.tipoSetup === tesisActual.tipoSetup) sim += 30;
+    if(t.score!=null && tesisActual.score!=null && Math.abs(t.score - tesisActual.score) <= 0.5) sim += 20;
+    if((t.tag||'') === (tesisActual.tag||'')) sim += 10;
+    if(t.symbol === tesisActual.symbol) sim += 10;
+    return { ...t, similitud: sim };
+  }).filter(t => t.similitud >= minSimilitud)
+    .sort((a,b) => b.similitud - a.similitud);
+
+  if(!puntuadas.length) return { encontradas:0, suficienteMuestra:false, resumen:'No hay operaciones históricas parecidas todavía.' };
+  const ganadas = puntuadas.filter(t=>t.pnlPct>0).length;
+  const wr = +(ganadas/puntuadas.length*100).toFixed(1);
+  return {
+    encontradas: puntuadas.length,
+    winRate: wr,
+    similares: puntuadas.slice(0,5),
+    suficienteMuestra: puntuadas.length >= 10,
+    resumen: puntuadas.length >= 10
+      ? `De ${puntuadas.length} operaciones parecidas, ganaron ${ganadas} (${wr}%).`
+      : `Solo ${puntuadas.length} operaciones parecidas hasta ahora (${wr}% ganadas) — muy poca muestra para sacar conclusiones.`,
+  };
+}
+
 function computeStatsDesglosadas(closedTrades){
   function agrupar(campo){
     const grupos = {};
@@ -2717,11 +4728,11 @@ function computeFilterEffectiveness(closedTrades, expiredTheses){
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
-  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas,
+  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
-  fetchCapitalFlowContext, fetchUnlockRisk, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
+  fetchCapitalFlowContext, fetchUnlockRisk, fetchUsdStrength, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
   tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, detectLiquidezPorHorizonte, detectIFVG, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
