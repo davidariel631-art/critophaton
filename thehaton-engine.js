@@ -3674,55 +3674,57 @@ function analisisMfeMaePorResultado(closedTrades){
 // todas juntas. El riesgo real es mucho mayor que la suma de los riesgos individuales.
 function analizarCorrelacion(tesisAbiertas, contexto = {}){
   const activas = (tesisAbiertas||[]).filter(t => t.entry);
-  if(activas.length < 2) return { hayRiesgo:false, operaciones: activas.length, nota:'Con menos de 2 operaciones abiertas no hay riesgo de correlación.' };
+  if(activas.length < 3) return { hayRiesgo:false, nivel:'bajo', operaciones: activas.length, alertas:[], resumen:'Pocas operaciones abiertas, sin riesgo de correlación.' };
 
   const longs = activas.filter(t => t.dir === 'LONG').length;
   const shorts = activas.filter(t => t.dir === 'SHORT').length;
-  const capChico = activas.filter(t => (t.tag||'').includes('cap chico')).length;
   const alertas = [];
   let nivel = 'bajo';
 
-  // 1) Todas del mismo lado
+  // CORREGIDO: antes esto bloqueaba el 100% de las tesis nuevas. Dos errores de diseño:
+  //   1) Alertaba porque "casi todas son cap chico" — pero el UNIVERSO del bot ES cap chico.
+  //      Es como avisar "cuidado, todas tus operaciones de cripto son de cripto". Se sacó.
+  //   2) El riesgo total se comparaba contra 10%, y con 24 operaciones abiertas siempre daba alto.
+  //      Ahora el umbral es proporcional y mucho más alto.
+  // Lo que SÍ es correlación real: que todas apunten al mismo lado, o que vayan contra BTC.
+
+  // 1) Todas del mismo lado — esto sí es riesgo real
   const mismoLado = Math.max(longs, shorts);
   const pctMismoLado = mismoLado/activas.length*100;
-  if(activas.length >= 3 && pctMismoLado >= 80){
-    alertas.push(`${mismoLado} de ${activas.length} operaciones son ${longs>shorts?'LONG':'SHORT'}. Si el mercado se da vuelta, se ven afectadas todas juntas: el riesgo real es mayor que la suma de los individuales.`);
-    nivel = activas.length >= 5 ? 'alto' : 'medio';
+  if(activas.length >= 5 && pctMismoLado >= 90){
+    alertas.push(`${mismoLado} de ${activas.length} operaciones son ${longs>shorts?'LONG':'SHORT'}. Si el mercado se da vuelta, se ven afectadas todas juntas.`);
+    nivel = 'medio';
   }
 
-  // 2) Casi todas cap chico: se mueven en bloque con el apetito de riesgo
-  if(activas.length >= 3 && capChico/activas.length >= 0.8){
-    alertas.push(`${capChico} de ${activas.length} son monedas de cap chico, que suelen moverse en bloque cuando cambia el apetito de riesgo.`);
-    if(nivel === 'bajo') nivel = 'medio';
-  }
-
-  // 3) BTC en contra de la mayoría
-  if(contexto.btcCambio24h != null && activas.length >= 3){
-    const btcBaja = contexto.btcCambio24h < -2;
-    const btcSube = contexto.btcCambio24h > 2;
-    if((btcBaja && longs >= activas.length*0.7) || (btcSube && shorts >= activas.length*0.7)){
-      alertas.push(`BTC ${btcBaja?'está cayendo':'está subiendo'} ${Math.abs(contexto.btcCambio24h).toFixed(1)}% y la mayoría de las operaciones abiertas van al lado contrario. Las altcoins suelen seguir a BTC.`);
+  // 2) BTC yendo en contra de la mayoría — el riesgo más concreto para altcoins
+  if(contexto.btcCambio24h != null && activas.length >= 4){
+    const btcBaja = contexto.btcCambio24h < -3;
+    const btcSube = contexto.btcCambio24h > 3;
+    if((btcBaja && longs >= activas.length*0.8) || (btcSube && shorts >= activas.length*0.8)){
+      alertas.push(`BTC ${btcBaja?'cayendo':'subiendo'} ${Math.abs(contexto.btcCambio24h).toFixed(1)}% y ${btcBaja?longs:shorts} de ${activas.length} operaciones van al lado contrario. Las altcoins suelen seguir a BTC.`);
       nivel = 'alto';
     }
   }
 
-  // 4) Riesgo total acumulado
-  const riesgoTotal = activas.length * (contexto.riesgoPorOperacion ?? 2);
-  if(riesgoTotal > 10){
-    alertas.push(`Con ${activas.length} operaciones abiertas al ${contexto.riesgoPorOperacion ?? 2}% cada una, hay ${riesgoTotal.toFixed(0)}% del capital expuesto. Si están correlacionadas, pueden perderse casi todas juntas.`);
+  // 3) Demasiadas operaciones abiertas a la vez. El umbral ahora es la cantidad, no el % teórico:
+  // más de 30 posiciones simultáneas es difícil de gestionar aunque cada una arriesgue poco.
+  const maxSimultaneas = contexto.maxSimultaneas ?? 30;
+  if(activas.length > maxSimultaneas){
+    alertas.push(`Hay ${activas.length} operaciones abiertas al mismo tiempo (el límite razonable es ${maxSimultaneas}).`);
     nivel = 'alto';
   }
 
+  const riesgoTotal = activas.length * (contexto.riesgoPorOperacion ?? 2);
   return {
     hayRiesgo: alertas.length > 0,
     nivel,
     operaciones: activas.length,
-    longs, shorts, capChico,
+    longs, shorts,
     riesgoTotalPct: +riesgoTotal.toFixed(1),
     alertas,
     resumen: alertas.length
-      ? `${nivel==='alto'?'🚨':'⚠️'} Riesgo de correlación ${nivel}: ${alertas.length} factor(es) detectados.`
-      : 'Las operaciones abiertas están razonablemente diversificadas.',
+      ? `${nivel==='alto'?'🚨':'⚠️'} Riesgo de correlación ${nivel}: ${alertas.join(' ')}`
+      : `Operaciones razonablemente repartidas (${longs} LONG / ${shorts} SHORT).`,
   };
 }
 
