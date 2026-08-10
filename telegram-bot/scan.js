@@ -1142,11 +1142,21 @@ async function confirmTheses(state, capitalFlow){
 
       // ═══ RIESGO DE CORRELACIÓN ═══
       // Cinco LONG en cinco altcoins no son cinco apuestas independientes.
+      // Solo bloquea si el riesgo es alto Y la operación va en la MISMA dirección que la mayoría.
+      // Antes bloqueaba cualquier tesis con riesgo alto, y como el riesgo siempre daba alto, el bot
+      // quedaba paralizado: en una corrida real bloqueó 22 de 25 tesis.
+      // Una operación en dirección contraria a la mayoría en realidad REDUCE la correlación.
       const correl = analizarCorrelacion(acc.theses, { riesgoPorOperacion: 2, btcCambio24h: btcReference?.changePct ?? null });
       if(correl.nivel === 'alto'){
-        journal(thesis, `⚠️ Riesgo de correlación alto: ${correl.alertas[0]} Se sigue observando en vez de sumar otra operación del mismo lado.`);
-        stillWatching.push(thesis);
-        continue;
+        const mayoria = correl.longs > correl.shorts ? 'LONG' : 'SHORT';
+        const sumaAlRiesgo = thesis.dir === mayoria;
+        if(sumaAlRiesgo){
+          journal(thesis, `⚠️ Riesgo de correlación alto y esta operación es ${thesis.dir}, igual que la mayoría (${correl.longs} LONG / ${correl.shorts} SHORT). ${correl.alertas[0]} Se sigue observando para no concentrar más de un solo lado.`);
+          stillWatching.push(thesis);
+          continue;
+        }
+        // Si va al lado contrario, se deja pasar y solo se anota
+        journal(thesis, `ℹ️ Hay riesgo de correlación, pero esta operación es ${thesis.dir} y la mayoría va ${mayoria}: en realidad ayuda a repartir el riesgo.`);
       }
 
       // ═══ FILTRO DE SOBRE-EXTENSIÓN PARABÓLICA ═══
