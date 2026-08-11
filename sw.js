@@ -51,22 +51,55 @@ self.addEventListener('push', (event) => {
       badge: 'icons/icon-192.png',
       image: data.image || undefined,
       vibrate: [120, 60, 120],
-      tag: data.tag || 'krax-general',
-      renotify: true,
+      // CADA notificación necesita un tag ÚNICO. Antes todas usaban 'krax-general', y Android
+      // interpreta que es la misma notificación actualizándose: la nueva reemplazaba a la anterior
+      // y solo se veía una. Con un tag único cada señal queda apilada hasta que la descartes.
+      tag: data.tag || `krax-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+      // Se agrupan bajo KRAX para que Android las junte visualmente sin pisarlas.
+      // Así ves "KRAX CAPITAL" con todas adentro, y las podés expandir.
+      renotify: false,
       requireInteraction: !!data.important,
       actions: [{ action: 'ver', title: '👁️ Ver' }],
-      data: { url: data.url || './index.html' },
+      // Se guarda el grupo y la moneda para poder abrir la pantalla que corresponde:
+      // una señal lleva al análisis de esa moneda, un cierre lleva al panel de TheHaton.
+      data: { url: data.url || './index.html', grupo: data.grupo || 'general', symbol: data.symbol || null },
     })
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || './index.html';
-  event.waitUntil(
-    self.clients.matchAll({type:'window'}).then(clientList=>{
-      for(const client of clientList){ if('focus' in client) return client.focus(); }
-      if(self.clients.openWindow) return self.clients.openWindow(targetUrl);
-    })
-  );
+  // La URL se resuelve a absoluta contra el alcance del service worker. Una URL relativa como
+  // './index.html' puede resolverse distinto según desde dónde se abra, sobre todo con la app
+  // instalada como PWA — y ahí el "Ver" no llevaba a ningún lado.
+  const d = event.notification.data || {};
+  // Cada tipo de aviso abre donde corresponde: una señal va al análisis de esa moneda,
+  // los avisos de gestión y cierre van al panel de TheHaton.
+  let destino = d.url || './index.html';
+  if(d.symbol && d.grupo === 'senal') destino = `./index.html#analizar=${encodeURIComponent(d.symbol)}`;
+  else if(d.grupo === 'gestion' || d.grupo === 'cierre') destino = './index.html#thehaton';
+  const urlAbsoluta = new URL(destino, self.registration.scope).href;
+
+  event.waitUntil((async () => {
+    const ventanas = await self.clients.matchAll({ type:'window', includeUncontrolled:true });
+
+    for(const cliente of ventanas){
+      // BUG CORREGIDO: antes hacía focus() y retornaba SIN navegar. Si la app ya estaba abierta,
+      // tocar "Ver" solo la traía al frente y parecía que no hacía nada.
+      // Ahora primero navega a la pantalla correcta y después enfoca.
+      try{
+        if('navigate' in cliente && cliente.url !== urlAbsoluta){
+          const navegado = await cliente.navigate(urlAbsoluta);
+          if(navegado && 'focus' in navegado) return navegado.focus();
+        }
+        if('focus' in cliente) return cliente.focus();
+      }catch(e){
+        // Algunos navegadores no permiten navigate() desde el SW: al menos se enfoca la ventana.
+        if('focus' in cliente) return cliente.focus();
+      }
+    }
+
+    // No había ninguna ventana abierta: se abre una nueva
+    if(self.clients.openWindow) return self.clients.openWindow(urlAbsoluta);
+  })());
 });

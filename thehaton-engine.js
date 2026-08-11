@@ -4311,15 +4311,24 @@ function postMortem(trade, historial = []){
   if(!trade) return null;
   const r = trade.registro || {};
   const g = r.gestion || {};
-  const gano = trade.pnlPct > 0;
+  // El resultado se juzga por la plata REAL, no solo por el precio de salida.
+  // Una operación que tomó ganancia en TP1 y después cerró el resto en breakeven GANÓ,
+  // aunque el precio final sea igual al de entrada. Antes esto se reportaba como PERDIDA.
+  const pnlReal = Number.isFinite(trade.pnlUsd) ? trade.pnlUsd : null;
+  const gano = pnlReal != null ? pnlReal > 0 : trade.pnlPct > 0;
+  const empate = pnlReal != null ? Math.abs(pnlReal) < 0.01 : Math.abs(trade.pnlPct||0) < 0.01;
   const secciones = [];
   const aciertos = [];
   const fallos = [];
 
-  // 1) Qué esperaba vs qué pasó
-  const esperado = g.rTp1!=null ? `alcanzar al menos ${g.rTp1}R (TP1)` : 'alcanzar TP1';
+  // 1) Qué esperaba vs qué pasó — reconociendo si TP1 se alcanzó de verdad
   const logrado = r.mfe!=null ? `${r.mfe}R a favor` : 'sin dato de recorrido';
-  secciones.push(`Esperaba ${esperado}. Llegó a ${logrado}${r.mae!=null?`, con un retroceso máximo de ${Math.abs(r.mae)}R`:''}.`);
+  if(trade.alcanzoTp1){
+    secciones.push(`Alcanzó TP1 y se tomó la ganancia parcial. Llegó a ${logrado}${r.mae!=null?`, con un retroceso máximo de ${Math.abs(r.mae)}R`:''}. ${trade.motivoCierre==='stop tras toma parcial' ? 'El resto cerró en el stop, que ya estaba en el punto de entrada.' : ''}`);
+  } else {
+    const esperado = g.rTp1!=null ? `alcanzar al menos ${g.rTp1}R (TP1)` : 'alcanzar TP1';
+    secciones.push(`Esperaba ${esperado}. Llegó a ${logrado}${r.mae!=null?`, con un retroceso máximo de ${Math.abs(r.mae)}R`:''}.`);
+  }
 
   // 2) Qué componente acertó y cuál falló
   // Un componente "acertó" si empujó hacia la dirección que terminó siendo correcta.
@@ -4335,7 +4344,7 @@ function postMortem(trade, historial = []){
 
   // 3) ¿El stop fue demasiado corto?
   let notaStop = null;
-  if(!gano && r.mfe!=null && r.mfe >= 0.8){
+  if(!gano && !trade.alcanzoTp1 && r.mfe!=null && r.mfe >= 0.8){
     notaStop = `⚠️ Llegó a ${r.mfe}R a favor antes de girar y tocar el stop. Con un objetivo parcial más cerca, esta operación podía cerrarse en positivo.`;
   } else if(!gano && r.mae!=null && Math.abs(r.mae) <= 1.05 && g.stopPct){
     notaStop = `El stop estaba a ${g.stopPct}% y el precio lo tocó casi justo. Si la tesis era correcta pero el stop quedó ajustado, conviene revisarlo con más casos.`;
@@ -4366,7 +4375,9 @@ function postMortem(trade, historial = []){
 
   return {
     symbol: trade.symbol,
-    resultado: gano ? 'GANADA' : 'PERDIDA',
+    resultado: empate ? 'EMPATE' : gano ? 'GANADA' : 'PERDIDA',
+    pnlUsd: pnlReal,
+    alcanzoTp1: !!trade.alcanzoTp1,
     pnlPct: trade.pnlPct,
     esperadoVsReal: secciones[0],
     componentesAcertaron: aciertos,
@@ -4374,7 +4385,7 @@ function postMortem(trade, historial = []){
     notas: [notaStop, notaFase, notaLiquidez, notaEscape, notaHistorial].filter(Boolean),
     // Texto listo para mostrar
     texto: [
-      `${gano?'✅':'❌'} ${trade.symbol} ${trade.dir} — ${gano?'GANADA':'PERDIDA'} (${trade.pnlPct>=0?'+':''}${trade.pnlPct}%)`,
+      `${empate?'➖':gano?'✅':'❌'} ${trade.symbol} ${trade.dir} — ${empate?'CERRADA EN EMPATE':gano?'GANADA':'PERDIDA'} (${pnlReal!=null?`${pnlReal>=0?'+':''}${pnlReal.toFixed(2)} USDT`:`${trade.pnlPct>=0?'+':''}${trade.pnlPct}%`})`,
       secciones[0],
       aciertos.length ? `Acertaron: ${aciertos.join(', ')}.` : null,
       fallos.length ? `Fallaron: ${fallos.join(', ')}.` : null,
