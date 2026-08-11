@@ -399,6 +399,7 @@
         🔄 Hay una versión nueva de KRAX — tocá para actualizar
       </div>
       <button class="avatar-btn" id="notifBtn" style="margin-right:8px;background:var(--panel2);" title="Activar notificaciones">🔔</button>
+      <button class="avatar-btn" id="notifTestBtn" style="margin-right:8px;background:var(--panel2);" title="Probar notificaciones en este dispositivo">🧪</button>
       <button class="avatar-btn" id="avatarBtn">👤</button>
       <div class="avatar-dropdown" id="avatarDropdown">
         <div id="authLoggedOut">
@@ -1925,6 +1926,46 @@ function showNotifResult(icon, text){
   document.getElementById('notifResultText').textContent = text;
   document.getElementById('notifResultSheet').classList.add('open');
 }
+// ═══ PRUEBA DE NOTIFICACIONES ═══
+// Permite comprobar en el mismo dispositivo si las notificaciones llegan, sin esperar una señal.
+// Manda tres seguidas para verificar además que NO se pisen entre ellas.
+async function probarNotificaciones(){
+  try{
+    if(Notification.permission !== 'granted'){
+      showNotifResult('⚠️', 'Este dispositivo no tiene permiso para notificaciones. Tocá la campanita para activarlas.');
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      showNotifResult('⚠️', 'Este dispositivo no está suscripto. Tocá la campanita para activar las notificaciones acá.');
+      return;
+    }
+    // Se muestran localmente (sin pasar por el servidor) para aislar el problema:
+    // si estas SÍ aparecen pero las del bot no, el problema está en el envío, no en el dispositivo.
+    const ejemplos = [
+      { t:'🔴 Señal: SPK SHORT', b:'Entrada $0.014570 · Score 6.8/10' },
+      { t:'🟢 Señal: BLESS LONG', b:'Entrada $0.014100 · Score 7.1/10' },
+      { t:'💰 TP1 alcanzado: BICO', b:'+0.51 USDT · Stop movido a breakeven' },
+    ];
+    for(let i=0;i<ejemplos.length;i++){
+      await reg.showNotification(ejemplos[i].t, {
+        body: ejemplos[i].b,
+        icon: 'icons/krax-notification.png',
+        badge: 'icons/krax-badge.png',
+        tag: `krax-prueba-${Date.now()}-${i}`,   // tag único: así se apilan en vez de pisarse
+        renotify: false,
+        data: { url:'./index.html', grupo:'prueba' },
+      });
+      await new Promise(r=>setTimeout(r, 350));
+    }
+    const host = (()=>{ try{ return new URL(sub.endpoint).hostname; }catch(e){ return '—'; } })();
+    showNotifResult('✅', `Se enviaron 3 notificaciones de prueba a este dispositivo (${host}). Si las ves apiladas una debajo de otra, está todo bien acá. Si no aparecen, revisá los permisos del sistema.`);
+  }catch(e){
+    showNotifResult('⚠️', 'No se pudieron mostrar: ' + e.message);
+  }
+}
+
 document.getElementById('notifResultClose').addEventListener('click', ()=> document.getElementById('notifResultSheet').classList.remove('open'));
 document.getElementById('notifSheetClose').addEventListener('click', ()=> document.getElementById('notifSheet').classList.remove('open'));
 
@@ -1953,16 +1994,36 @@ document.getElementById('notifSheetActivate').addEventListener('click', async ()
     if(permission!=='granted'){ updateNotifBtnState(); return; }
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
+
+    // ═══ RENOVAR SUSCRIPCIONES VIEJAS ═══
+    // Una suscripción existente puede estar vencida o hecha con otra clave VAPID. En ese caso
+    // getSubscription() la devuelve igual, se vuelve a guardar, y la app dice "activadas" — pero
+    // el servidor de push la rechaza con 410 y nunca llega nada. Por eso pasaba que en la compu
+    // funcionaba y en el teléfono no.
+    if(sub){
+      const claveActual = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      const claveSub = sub.options?.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
+      const distinta = !claveSub || claveSub.length !== claveActual.length ||
+                       !claveActual.every((b,i)=>b===claveSub[i]);
+      if(distinta){
+        try{ await sub.unsubscribe(); }catch(e){}
+        sub = null;
+      }
+    }
     if(!sub){
       sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
     }
     if(window.fb) await window.fb.savePushSubscription(sub.toJSON());
     localStorage.setItem('krax_push_subscribed', '1');
-    showNotifResult('✅', 'Notificaciones activadas. Te vamos a avisar de las señales de TheHaton aunque tengas la app cerrada.');
+
+    // Se muestra el endpoint para poder identificar el dispositivo si hay que diagnosticar
+    const host = (()=>{ try{ return new URL(sub.endpoint).hostname; }catch(e){ return 'desconocido'; } })();
+    showNotifResult('✅', `Notificaciones activadas en este dispositivo (${host}). Te vamos a avisar de las señales aunque tengas la app cerrada.`);
   }catch(e){ console.error('Error activando notificaciones:', e); showNotifResult('⚠️', 'No se pudo activar: ' + e.message); }
   updateNotifBtnState();
 });
 updateNotifBtnState();
+document.getElementById('notifTestBtn')?.addEventListener('click', probarNotificaciones);
 
 document.getElementById('changePhotoBtn').addEventListener('click', ()=> document.getElementById('photoFileInput').click());
 document.getElementById('avatarPreviewBtn').addEventListener('click', ()=> document.getElementById('photoFileInput').click());
