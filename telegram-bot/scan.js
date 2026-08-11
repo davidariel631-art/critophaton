@@ -442,12 +442,27 @@ async function sendPushToAll(title, body, url, grupo, symbol){
   // para que las junte visualmente por tipo: señales, gestión de operaciones y cierres.
   const tag = `krax-${grupo||'general'}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
   const payload = JSON.stringify({ title, body, url: url||'./index.html', tag, grupo: grupo||'general', symbol: symbol||null });
+  // ═══ DIAGNÓSTICO ═══
+  // Antes los errores se tragaban en silencio: si el teléfono no recibía nada, no había forma de
+  // saber si era porque no estaba suscripto, porque la suscripción venció, o porque fallaba el envío.
+  if(!subs.length){
+    console.log(`  📵 Push "${title}": no hay ningún dispositivo suscripto.`);
+    return;
+  }
+  let ok = 0, vencidas = 0, errores = [];
   await Promise.all(subs.map(sub =>
-    webpush.sendNotification(sub, payload).catch(e=>{
-      // Un error 410/404 significa que esa suscripción ya no existe (usuario desinstaló, etc.) — normal, se ignora.
-      if(e.statusCode!==410 && e.statusCode!==404) console.error('Error mandando push:', e.message);
-    })
+    webpush.sendNotification(sub, payload)
+      .then(()=>{ ok++; })
+      .catch(e=>{
+        // 410/404 = la suscripción ya no existe (app desinstalada, permisos revocados, o venció)
+        if(e.statusCode===410 || e.statusCode===404){ vencidas++; }
+        else errores.push(`${e.statusCode||'?'}: ${e.message}`);
+      })
   ));
+  const detalle = [`${ok}/${subs.length} enviadas`];
+  if(vencidas) detalle.push(`${vencidas} suscripción(es) vencida(s) — ese dispositivo tiene que volver a activar las notificaciones`);
+  if(errores.length) detalle.push(`errores: ${errores.slice(0,2).join(' | ')}`);
+  console.log(`  📲 Push "${title}": ${detalle.join(' · ')}`);
 }
 
 // ---------- Estado / memoria compartida (única para toda la plataforma) ----------
@@ -1898,16 +1913,62 @@ async function confirmTheses(state, capitalFlow){
 // ---------- Fase 3: gestionar tesis activas (TP/SL, breakeven) ----------
 // Chequea el rango real (máximo/mínimo) de precio desde la última vez que se revisó esta tesis,
 // no solo el precio del instante actual — así no se pierden mechas que tocan TP/SL entre corridas.
-async function fetchPriceRange(symbol, sinceTs){
+// ═══ RANGO DE PRECIO DESDE LA ENTRADA ═══
+// BUG CORREGIDO (caso INX): antes esta función usaba
+//     effectiveSince = Math.min(sinceTs, Date.now() - 6 horas)
+// Math.min elige el MÁS VIEJO de los dos, así que una operación abierta hace 30 minutos igual
+// miraba 6 horas hacia atrás. Cualquier mínimo ANTERIOR a la entrada contaba como si hubiera
+// ocurrido durante la operación, y el bot cerraba por "stop tocado" sin que el precio hubiera
+// bajado nunca después de entrar.
+// La prueba de que era esto: el post-mortem de INX decía "retroceso máximo de 0R" — el MAE, que
+// sí mide desde la entrada, nunca registró un movimiento en contra. Dos partes del mismo sistema
+// midiendo lo mismo y dando resultados opuestos.
+//
+// Ahora la ventana NUNCA empieza antes de `entryTs`. El colchón por corridas atrasadas se
+// mantiene, pero acotado a lo que pasó DESPUÉS de abrir la operación.
+async function fetchPriceRange(symbol, sinceTs, entryTs){
   try{
     const d = await fetchTokenData(symbol, '15m');
     if(!d.candles || !d.candles.length) return null;
-    const marginMs = 20*60*1000; // margen para no perder la vela justo en el borde
-    const minLookbackMs = 6*3600*1000; // colchón mínimo: GitHub Actions a veces salta o atrasa corridas programadas
-    const effectiveSince = Math.min(sinceTs, Date.now()-minLookbackMs);
-    const relevant = d.candles.filter(c => c.t >= (effectiveSince - marginMs));
-    const scope = relevant.length ? relevant : d.candles.slice(-24); // fallback: últimas 6hs aprox (24 velas de 15m)
-    return { high: Math.max(...scope.map(c=>c.h)), low: Math.min(...scope.map(c=>c.l)), last: d.price };
+
+    const marginMs = 20*60*1000;          // margen para no perder la vela justo en el borde
+    const minLookbackMs = 6*3600*1000;    // colchón: GitHub Actions a veces atrasa corridas
+    let desde = Math.min(sinceTs, Date.now()-minLookbackMs) - marginMs;
+
+    // El límite duro: nunca antes de que la operación existiera
+    if(Number.isFinite(entryTs)) desde = Math.max(desde, entryTs);
+
+    const relevant = d.candles.filter(c => c.t >= desde);
+    // Si no hay velas posteriores todavía (operación muy reciente), se usa solo la última:
+    // antes el fallback agarraba las últimas 24 velas, que es justo lo que causaba el problema.
+    const scope = relevant.length ? relevant : d.candles.slice(-1);
+
+    // La vela que CONTIENE la entrada incluye minutos previos a que se abriera la operación.
+    // Su mínimo puede ser de antes de entrar, así que para esa vela se usa el precio de entrada
+    // como referencia conservadora en lugar de su mínimo/máximo real.
+    const velaEntrada = Number.isFinite(entryTs)
+      ? scope.find(c => c.t <= entryTs && (c.t + 15*60*1000) > entryTs) : null;
+
+    const highs = [], lows = [];
+    for(const c of scope){
+      if(velaEntrada && c.t === velaEntrada.t){
+        // Solo se considera el tramo posterior a la entrada dentro de esa vela.
+        // Sin el detalle minuto a minuto, lo correcto es no asumir nada: se usa el cierre.
+        highs.push(Math.max(c.c, d.price ?? c.c));
+        lows.push(Math.min(c.c, d.price ?? c.c));
+      } else {
+        highs.push(c.h); lows.push(c.l);
+      }
+    }
+    if(!highs.length) return null;
+
+    return {
+      high: Math.max(...highs),
+      low: Math.min(...lows),
+      last: d.price,
+      // Datos de auditoría: para poder demostrar después qué se midió y desde cuándo
+      desde, velas: scope.length, excluyoVelaEntrada: !!velaEntrada,
+    };
   }catch(e){ return null; }
 }
 
@@ -1931,8 +1992,27 @@ async function manageActiveTheses(state){
     if(thesis.originalUnits==null) thesis.originalUnits = thesis.units;
 
     const sinceTs = thesis.lastCheckedAt || thesis.confirmedAt || thesis.detectedAt;
-    const range = await fetchPriceRange(thesis.symbol, sinceTs);
+    // Se pasa el momento exacto de la entrada: la ventana de medición nunca puede empezar antes.
+    const range = await fetchPriceRange(thesis.symbol, sinceTs, thesis.confirmedAt);
     const price = range?.last ?? null;
+
+    // ═══ AUDITORÍA DE EJECUCIÓN ═══
+    // Registra QUÉ se midió y desde cuándo, para poder demostrar después si el stop se tocó
+    // de verdad o si fue un falso positivo. Sin esto había que mirar TradingView y adivinar.
+    if(range && thesis.entry){
+      thesis.auditoria = thesis.auditoria || { minDesdeEntrada: null, maxDesdeEntrada: null, eventos: [] };
+      const a = thesis.auditoria;
+      a.minDesdeEntrada = a.minDesdeEntrada == null ? range.low : Math.min(a.minDesdeEntrada, range.low);
+      a.maxDesdeEntrada = a.maxDesdeEntrada == null ? range.high : Math.max(a.maxDesdeEntrada, range.high);
+      a.ultimaMedicion = { ts: Date.now(), desde: range.desde, velas: range.velas, low: range.low, high: range.high, precio: range.last };
+      a.slTocadoDesdeEntrada = thesis.dir==='LONG' ? a.minDesdeEntrada <= thesis.stop : a.maxDesdeEntrada >= thesis.stop;
+      a.tp1TocadoDesdeEntrada = thesis.dir==='LONG' ? a.maxDesdeEntrada >= thesis.tp1 : a.minDesdeEntrada <= thesis.tp1;
+      // Se guardan los últimos 20 eventos de precio, para reconstruir el recorrido
+      if(range.last != null){
+        a.eventos.push({ ts: Date.now(), precio: +range.last.toFixed(8) });
+        if(a.eventos.length > 20) a.eventos = a.eventos.slice(-20);
+      }
+    }
 
     // ═══ MFE / MAE ═══
     // MFE = hasta dónde llegó a favor. MAE = hasta dónde llegó en contra.
@@ -2006,6 +2086,23 @@ async function manageActiveTheses(state){
       let hitTP1=false, hitSL=false;
       if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitSL=true; else if(range.high>=thesis.tp1) hitTP1=true; }
       else { if(range.high>=thesis.stop) hitSL=true; else if(range.low<=thesis.tp1) hitTP1=true; }
+
+      // ═══ VERIFICACIÓN CRUZADA ANTES DE CERRAR POR STOP ═══
+      // El MFE/MAE mide desde la entrada de forma independiente. Si dice que el precio NUNCA fue
+      // en contra pero el rango dice que tocó el stop, hay una contradicción: alguno de los dos
+      // está mal. En ese caso no se cierra, se espera a la próxima corrida.
+      // Esto es lo que habría evitado el cierre falso de INX, donde el post-mortem decía
+      // "retroceso máximo de 0R" y aun así se cerró por stop.
+      if(hitSL && thesis.registro && thesis.registro.mae === 0 && thesis.registro.mfe > 0.2){
+        journal(thesis, `⚠️ Contradicción detectada: el rango de precios dice que tocó el stop ($${thesis.stop.toFixed(6)}), pero el seguimiento desde la entrada registró 0 de retroceso y ${thesis.registro.mfe}R a favor. No se cierra: se vuelve a verificar en la próxima corrida.`);
+        hitSL = false;
+        thesis.contradiccionesStop = (thesis.contradiccionesStop||0) + 1;
+        // Si se repite tres veces, es que el rango tiene razón y el MAE no se está actualizando
+        if(thesis.contradiccionesStop >= 3){
+          journal(thesis, `La contradicción se repitió 3 veces: se acepta el stop como válido.`);
+          hitSL = true;
+        }
+      }
 
       if(hitTP1){
         // 40% en TP1 (no 50% como antes) — deja más corriendo para TP2 y TP3, que ahora sí se usan.
