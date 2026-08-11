@@ -17,6 +17,9 @@ const BINANCE = 'https://api.binance.com';
 const FUTURES = 'https://fapi.binance.com';
 const GECKO = 'https://api.geckoterminal.com/api/v2';
 
+// MEXC futuros usa nombres de intervalo propios, distintos al spot
+const MEXC_FUT_TF = { '15m':'Min15', '1h':'Min60', '4h':'Hour4', '1d':'Day1', '1mo':'Month1' };
+
 const TF_MAP = {
   '15m': {binance:'15m', okx:'15m', bybit:'15', mexc:'15m', gate:'15m', kucoin:'15min', kucoinSec:900,  gecko:{timeframe:'minute', aggregate:15}},
   '1h':  {binance:'1h',  okx:'1H',  bybit:'60', mexc:'60m', gate:'1h',  kucoin:'1hour', kucoinSec:3600, gecko:{timeframe:'hour',   aggregate:1}},
@@ -94,8 +97,46 @@ async function fetchOpenInterestTrend(symbolRaw, tf){
     const rows = await fetchJSON(`${FUTURES}/futures/data/openInterestHist?symbol=${pair}&period=${period}&limit=8`);
     if(!Array.isArray(rows) || rows.length<2) return null;
     const values = rows.map(r=>parseFloat(r.sumOpenInterest));
-    return { trend: classifyTrend(values, 3), values };
-  }catch(e){ return null; } // el símbolo puede no tener mercado de futuros -> sin dato, no rompe nada
+    return { trend: classifyTrend(values, 3), values, fuente:'Binance' };
+  }catch(e){
+    // Si Binance no la lista, se prueba MEXC futuros
+    return await fetchOpenInterestMEXC(symbolRaw);
+  } // el símbolo puede no tener mercado de futuros -> sin dato, no rompe nada
+}
+
+// ═══ FUNDING DESDE MEXC (respaldo cuando la moneda no está en Binance) ═══
+// Muchas monedas chicas solo cotizan en MEXC futuros. Antes, para esas, el funding y el interés
+// abierto simplemente no existían y el Dios Derivados quedaba sin datos.
+async function fetchFundingMEXC(symbolRaw){
+  const sym = normalizarSimbolo(symbolRaw);
+  const pair = `${sym}_USDT`;
+  try{
+    // MEXC devuelve el histórico de funding paginado, de más reciente a más antiguo
+    const res = await fetchJSON(`https://contract.mexc.com/api/v1/contract/funding_rate/history?symbol=${pair}&page_num=1&page_size=6`);
+    const lista = res?.data?.resultList;
+    if(!Array.isArray(lista) || lista.length < 2) return null;
+    const values = lista.map(r=>parseFloat(r.fundingRate)).filter(Number.isFinite).reverse();
+    if(values.length < 2) return null;
+    const actual = values.at(-1);
+    const previo = values.slice(0,-1).reduce((a,b)=>a+b,0)/(values.length-1);
+    return {
+      current: actual,
+      trend: actual > previo*1.15 ? 'RISING' : actual < previo*0.85 ? 'FALLING' : 'STABLE',
+      values,
+      fuente: 'MEXC',
+    };
+  }catch(e){ return null; }
+}
+
+// Interés abierto desde MEXC, mismo motivo que el funding
+async function fetchOpenInterestMEXC(symbolRaw){
+  const sym = normalizarSimbolo(symbolRaw);
+  const pair = `${sym}_USDT`;
+  try{
+    const res = await fetchJSON(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair}`);
+    const oi = res?.data?.holdVol;
+    return oi != null ? { value: parseFloat(oi), fuente: 'MEXC' } : null;
+  }catch(e){ return null; }
 }
 
 async function fetchFundingTrend(symbolRaw){
@@ -105,8 +146,11 @@ async function fetchFundingTrend(symbolRaw){
     const rows = await fetchJSON(`${FUTURES}/fapi/v1/fundingRate?symbol=${pair}&limit=6`);
     if(!Array.isArray(rows) || rows.length<2) return null;
     const values = rows.map(r=>parseFloat(r.fundingRate));
-    return { trend: classifyTrend(values, 15), values }; // funding se mueve en % muy chicos, tolerancia relativa más amplia
-  }catch(e){ return null; }
+    return { trend: classifyTrend(values, 15), values, fuente:'Binance' }; // funding se mueve en % muy chicos, tolerancia relativa más amplia
+  }catch(e){
+    // Si Binance no lista la moneda, se prueba MEXC futuros: ahí están casi todas las chicas.
+    return await fetchFundingMEXC(symbolRaw);
+  }
 }
 
 // Ratio Long/Short de los "top traders" (posiciones grandes) — dato real de Binance Futures, gratis, sin key.
@@ -279,6 +323,50 @@ async function tryMEXC(symbolRaw, tf, variante){
     vol24h: parseFloat(ticker.quoteVolume||0), candles, funding:null, oi:null, dexUrl:null, contract:null,
   };
 }
+// ═══ MEXC FUTUROS ═══
+// El spot de MEXC (api.mexc.com) NO tiene muchas de las monedas chicas: están solo en el mercado
+// de futuros perpetuos (contract.mexc.com), que es donde se opera de verdad.
+// Por eso una moneda que existe en MEXC podía no encontrarse: se buscaba en el mercado equivocado.
+// Además esta fuente trae el FUNDING, que Binance no puede dar para monedas que no lista.
+async function tryMEXCFutures(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}_${quote}`;               // los futuros usan guion bajo: BTC_USDT
+  const interval = MEXC_FUT_TF[tf] || 'Hour4';
+  const ahora = Math.floor(Date.now()/1000);
+  const segundos = { '15m':900, '1h':3600, '4h':14400, '1d':86400, '1mo':2592000 }[tf] || 14400;
+  const desde = ahora - segundos*220;
+
+  const res = await fetchJSON(`https://contract.mexc.com/api/v1/contract/kline/${pair}?interval=${interval}&start=${desde}&end=${ahora}`);
+  const d = res?.data;
+  // La respuesta viene en columnas paralelas (time[], open[], high[]...), no en filas
+  if(!d || !Array.isArray(d.time) || d.time.length < 20) throw new Error('MEXC futuros sin datos');
+  const candles = d.time.map((t,i)=>({
+    t: t*1000, o:+d.open[i], h:+d.high[i], l:+d.low[i], c:+d.close[i], v:+(d.vol?.[i] ?? 0),
+  })).filter(v=>Number.isFinite(v.c)).sort((a,b)=>a.t-b.t);
+  if(candles.length < 20) throw new Error('MEXC futuros con muy pocas velas');
+
+  // Datos del contrato: precio actual, variación y funding
+  let price = candles.at(-1).c, change24h = 0, funding = null, oi = null;
+  try{
+    const tk = await fetchJSON(`https://contract.mexc.com/api/v1/contract/ticker?symbol=${pair}`);
+    const t = tk?.data;
+    if(t){
+      price = parseFloat(t.lastPrice ?? price);
+      change24h = parseFloat(t.riseFallRate ?? 0) * 100;  // viene como fracción
+      funding = t.fundingRate != null ? parseFloat(t.fundingRate) : null;
+      oi = t.holdVol != null ? parseFloat(t.holdVol) : null;
+    }
+  }catch(e){ /* sin ticker se usan los datos de las velas */ }
+
+  return {
+    source:'MEXC Futuros', symbol: pair, displayName: sym,
+    price, change24h,
+    vol24h: candles.slice(-24).reduce((s,v)=>s+v.v,0),
+    candles, funding, oi, dexUrl:null, contract:null,
+  };
+}
+
 async function tryGate(symbolRaw, tf, variante){
   const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
   const quote = variante?.quote ?? 'USDT';
@@ -386,7 +474,8 @@ async function fetchTokenData(query, tf){
     { sym: '1000000' + symBase, quote: 'USDT' },
   ];
 
-  const sources = [tryBinance, tryMEXC, tryOKX, tryBybit, tryGate, tryKuCoin];
+  // MEXC Futuros va temprano: es donde están las monedas chicas que el spot no tiene.
+  const sources = [tryBinance, tryMEXCFutures, tryMEXC, tryOKX, tryBybit, tryGate, tryKuCoin];
   const fallos = [];
   // Se prueba fuente por fuente, y dentro de cada una las variantes del símbolo.
   // La primera variante (USDT con el nombre exacto) cubre la enorme mayoría de los casos,
@@ -2527,7 +2616,8 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
 
   // ---- Sello de calidad de datos: qué le faltó a este análisis, para no confundir "score bajo" con "datos incompletos" ----
   const missingData = [];
-  if(data.source!=='Binance') missingData.push('Open Interest y Funding (solo disponibles para pares de Binance)');
+  // Binance y MEXC Futuros dan funding e interés abierto; el resto de las fuentes no.
+  if(data.source!=='Binance' && data.source!=='MEXC Futuros') missingData.push('Open Interest y Funding (esta fuente no los provee)');
   else{
     if(!marketContext?.oiTrend) missingData.push('Open Interest');
     if(!marketContext?.fundingTrend) missingData.push('Funding (tendencia)');
@@ -4427,6 +4517,13 @@ function postMortem(trade, historial = []){
     componentesAcertaron: aciertos,
     componentesFallaron: fallos,
     notas: [notaStop, notaFase, notaLiquidez, notaEscape, notaHistorial].filter(Boolean),
+    // Auditoría de ejecución: demuestra con números si el stop se tocó de verdad
+    auditoria: trade.auditoria ? {
+      minDesdeEntrada: trade.auditoria.minDesdeEntrada,
+      maxDesdeEntrada: trade.auditoria.maxDesdeEntrada,
+      slTocado: trade.auditoria.slTocadoDesdeEntrada,
+      tp1Tocado: trade.auditoria.tp1TocadoDesdeEntrada,
+    } : null,
     // Texto listo para mostrar
     texto: [
       `${empate?'➖':gano?'✅':'❌'} ${trade.symbol} ${trade.dir} — ${empate?'CERRADA EN EMPATE':gano?'GANADA':'PERDIDA'} (${pnlReal!=null?`${pnlReal>=0?'+':''}${pnlReal.toFixed(2)} USDT`:`${trade.pnlPct>=0?'+':''}${trade.pnlPct}%`})`,
@@ -4434,6 +4531,17 @@ function postMortem(trade, historial = []){
       aciertos.length ? `Acertaron: ${aciertos.join(', ')}.` : null,
       fallos.length ? `Fallaron: ${fallos.join(', ')}.` : null,
       ...[notaStop, notaFase, notaLiquidez, notaEscape, notaHistorial].filter(Boolean),
+      // Auditoría con números concretos, para no tener que mirar el gráfico y adivinar
+      (()=>{ const a = trade.auditoria;
+        if(!a || a.minDesdeEntrada == null) return null;
+        const fmt = v => v==null ? '—' : (v>=1 ? v.toFixed(4) : v.toPrecision(6));
+        return `\n🔎 <b>AUDITORÍA</b>\n` +
+          `Entrada: $${fmt(trade.entry)} · Stop: $${fmt(trade.stop)}\n` +
+          `Desde la entrada — mínimo: $${fmt(a.minDesdeEntrada)} · máximo: $${fmt(a.maxDesdeEntrada)}\n` +
+          `¿Tocó el stop después de entrar? ${a.slTocadoDesdeEntrada ? '✅ sí' : '❌ NO'}` +
+          `${!a.slTocadoDesdeEntrada && trade.motivoCierre?.includes('stop') ? ' ⚠️ pero se cerró por stop — revisar' : ''}\n` +
+          `¿Tocó TP1? ${a.tp1TocadoDesdeEntrada ? '✅ sí' : '❌ no'}`;
+      })(),
     ].filter(Boolean).join('\n'),
   };
 }
