@@ -47,9 +47,12 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || 'KRAX Capital', {
       body: data.body || '',
-      icon: 'icons/icon-192.png',
-      badge: 'icons/icon-192.png',
-      image: data.image || undefined,
+      // El logo de KRAX a color, que se ve dentro de la notificación
+      icon: 'icons/krax-notification.png',
+      // El badge va a la barra de estado y Android lo convierte a SILUETA monocromática.
+      // Por eso es una versión blanca sobre transparente: si tuviera color o fondo, el sistema
+      // lo mostraría como un cuadrado gris genérico.
+      badge: 'icons/krax-badge.png',
       vibrate: [120, 60, 120],
       // CADA notificación necesita un tag ÚNICO. Antes todas usaban 'krax-general', y Android
       // interpreta que es la misma notificación actualizándose: la nueva reemplazaba a la anterior
@@ -59,7 +62,12 @@ self.addEventListener('push', (event) => {
       // Así ves "KRAX CAPITAL" con todas adentro, y las podés expandir.
       renotify: false,
       requireInteraction: !!data.important,
-      actions: [{ action: 'ver', title: '👁️ Ver' }],
+      // Al expandir la notificación se ve la marca. Solo en señales, para no cargar los avisos
+      // de gestión que llegan más seguido.
+      // Una sola propiedad `image`: si el payload trae una, se usa esa; si no, el banner de
+      // marca en las señales. Antes había dos declaraciones y la segunda anulaba a la primera.
+      image: data.image || (data.grupo === 'senal' ? 'icons/krax-banner.png' : undefined),
+      actions: [{ action:'ver', title: data.grupo === 'senal' ? '👁 Ver análisis' : '👁 Ver gestión' }],
       // Se guarda el grupo y la moneda para poder abrir la pantalla que corresponde:
       // una señal lleva al análisis de esa moneda, un cierre lleva al panel de TheHaton.
       data: { url: data.url || './index.html', grupo: data.grupo || 'general', symbol: data.symbol || null },
