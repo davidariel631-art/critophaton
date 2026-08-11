@@ -435,10 +435,13 @@ async function fetchPushSubscribers(){
   }catch(e){ console.error('Error trayendo suscripciones push:', e.message); return []; }
 }
 
-async function sendPushToAll(title, body, url){
+async function sendPushToAll(title, body, url, grupo, symbol){
   if(!VAPID_PRIVATE_KEY) return; // sin la clave privada (secret de GitHub) no se puede firmar el push, se omite en silencio
   const subs = await fetchPushSubscribers();
-  const payload = JSON.stringify({title, body, url: url||'./index.html'});
+  // Cada notificación lleva un tag ÚNICO para que Android no reemplace la anterior, y un grupo
+  // para que las junte visualmente por tipo: señales, gestión de operaciones y cierres.
+  const tag = `krax-${grupo||'general'}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+  const payload = JSON.stringify({ title, body, url: url||'./index.html', tag, grupo: grupo||'general', symbol: symbol||null });
   await Promise.all(subs.map(sub =>
     webpush.sendNotification(sub, payload).catch(e=>{
       // Un error 410/404 significa que esa suscripción ya no existe (usuario desinstaló, etc.) — normal, se ignora.
@@ -558,11 +561,33 @@ function journal(thesis, note){
 // pnlPct — o sea que el Research Center no podía analizarlas. Esta función garantiza que todos
 // registren exactamente los mismos campos y disparen el post-mortem.
 function cerrarOperacion(acc, thesis, exit, pnlUsd, motivo, sendPromises){
-  const pnlPct = (thesis.entry && exit)
-    ? +((exit-thesis.entry)/thesis.entry*100*(thesis.dir==='LONG'?1:-1)).toFixed(3)
-    : null;
+  // ═══ pnlPct CONTANDO LAS GANANCIAS PARCIALES ═══
+  // BUG CORREGIDO (caso INX): antes solo comparaba el precio de salida final contra la entrada.
+  // Si una operación alcanzaba TP1, tomaba el 40% con ganancia real, y después el resto cerraba
+  // en breakeven, el cálculo daba 0% — ignorando la plata ya realizada.
+  // Eso hacía que el post-mortem dijera "PERDIDA" sobre una operación que ganó, y que el Research
+  // Center la contara como perdedora, ensuciando todas las estadísticas.
+  // Ahora se usa el resultado REAL en dólares como referencia cuando existe.
+  let pnlPct = null;
+  if(thesis.entry && exit){
+    const pctTramoFinal = (exit-thesis.entry)/thesis.entry*100*(thesis.dir==='LONG'?1:-1);
+    if(thesis.partialTaken && Number.isFinite(pnlUsd) && thesis.originalUnits > 0){
+      // Con toma parcial, el porcentaje se deriva del resultado real en dólares sobre el tamaño
+      // original de la posición — así refleja lo que efectivamente entró a la cuenta.
+      const valorPosicionOriginal = thesis.originalUnits * thesis.entry;
+      pnlPct = valorPosicionOriginal > 0
+        ? +(pnlUsd / valorPosicionOriginal * 100).toFixed(3)
+        : +pctTramoFinal.toFixed(3);
+    } else {
+      pnlPct = +pctTramoFinal.toFixed(3);
+    }
+  }
   const cerrada = {
     ...thesis, exit,
+    // Datos que el post-mortem necesita para no confundir "cerró en breakeven" con "perdió"
+    alcanzoTp1: !!thesis.partialTaken,
+    pnlPctTramoFinal: thesis.entry && exit
+      ? +((exit-thesis.entry)/thesis.entry*100*(thesis.dir==='LONG'?1:-1)).toFixed(3) : null,
     result: pnlUsd>=0 ? 'win' : 'loss',
     pnl: +pnlUsd.toFixed(4),
     pnlUsd: +pnlUsd.toFixed(4),
@@ -1839,8 +1864,7 @@ async function confirmTheses(state, capitalFlow){
         ));
         sendPromises.push(sendPushToAll(
           `${thesis.dir==='LONG'?'🟢':'🔴'} Señal: ${thesis.symbol} ${thesis.dir}`,
-          `Entrada $${entryPrice.toFixed(6)} · Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`
-        ));
+          `Entrada $${entryPrice.toFixed(6)} · Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`, null, 'senal', thesis.symbol));
         stillWatching.push(thesis); // CRÍTICO: sin esto, la tesis recién confirmada se perdía al reemplazar acc.theses al final
       } else {
         journal(thesis, `Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando.`);
@@ -2001,7 +2025,7 @@ async function manageActiveTheses(state){
           `El 60% restante sigue corriendo hacia TP2 (40%) y TP3 (20%).\nCapital: ${acc.capital.toFixed(2)} USDT`
         ));
         hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 50% y el stop pasó a breakeven');
-        sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`));
+        sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`, null, 'gestion', thesis.symbol));
         stillOpen.push(thesis);
       } else if(hitSL){
         const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
@@ -2014,7 +2038,7 @@ async function manageActiveTheses(state){
           `🛑 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
           `PERDIÓ (${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
         ));
-        sendPromises.push(sendPushToAll(`🛑 Stop tocado: ${thesis.symbol}`, `${pnl.toFixed(2)} USDT`));
+        sendPromises.push(sendPushToAll(`🛑 Stop tocado: ${thesis.symbol}`, `${pnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
       } else {
         stillOpen.push(thesis);
       }
@@ -2040,7 +2064,7 @@ async function manageActiveTheses(state){
           `Volvió al punto de entrada (breakeven en lo que quedaba)\n` +
           `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
         ));
-        sendPromises.push(sendPushToAll(`⚖️ Breakeven: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
+        sendPromises.push(sendPushToAll(`⚖️ Breakeven: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
         continue;
       }
       if(hitTP2 && thesis.tp3!=null){
@@ -2057,7 +2081,7 @@ async function manageActiveTheses(state){
           `TP2 alcanzado: $${thesis.tp2.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
           `El 20% final sigue corriendo hacia TP3 ($${thesis.tp3.toFixed(6)}).\nCapital: ${acc.capital.toFixed(2)} USDT`
         ));
-        sendPromises.push(sendPushToAll(`💰 TP2 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · 20% corriendo a TP3`));
+        sendPromises.push(sendPushToAll(`💰 TP2 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · 20% corriendo a TP3`, null, 'gestion', thesis.symbol));
         stillOpen.push(thesis);
         continue;
       }
@@ -2071,7 +2095,7 @@ async function manageActiveTheses(state){
         sendPromises.push(sendTelegram(
           `🚀 <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\nTP2 alcanzado ✅\nResultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
         ));
-        sendPromises.push(sendPushToAll(`🚀 TP2 (cierre total): ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
+        sendPromises.push(sendPushToAll(`🚀 TP2 (cierre total): ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
         continue;
       }
       stillOpen.push(thesis);
@@ -2096,7 +2120,7 @@ async function manageActiveTheses(state){
         `${hitTP3?'TP3 alcanzado ✅ (objetivo final)':'Volvió al punto de entrada (breakeven en el tramo final)'}\n` +
         `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
       ));
-      sendPromises.push(sendPushToAll(`${hitTP3?'🎯':'⚖️'} Cierre final: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`));
+      sendPromises.push(sendPushToAll(`${hitTP3?'🎯':'⚖️'} Cierre final: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
     } else {
       stillOpen.push(thesis);
     }
