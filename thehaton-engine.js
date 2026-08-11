@@ -52,9 +52,10 @@ async function fetchJSON(url){
   }
 }
 
-async function tryBinance(symbolRaw, tf){
-  const sym = normalizarSimbolo(symbolRaw);
-  const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+async function tryBinance(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = sym.endsWith(quote) ? sym : sym + quote;
   const interval = TF_MAP[tf].binance;
   const klines = await fetchJSON(`${BINANCE}/api/v3/klines?symbol=${pair}&interval=${interval}&limit=220`);
   const ticker = await fetchJSON(`${BINANCE}/api/v3/ticker/24hr?symbol=${pair}`);
@@ -227,9 +228,10 @@ async function tryGecko(query, tf){
   };
 }
 
-async function tryOKX(symbolRaw, tf){
-  const sym = normalizarSimbolo(symbolRaw);
-  const instId = `${sym}-USDT`;
+async function tryOKX(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const instId = `${sym}-${quote}`;
   const bar = TF_MAP[tf].okx;
   const res = await fetchJSON(`https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=220`);
   if(!res.data || !res.data.length) throw new Error('OKX sin datos');
@@ -243,9 +245,10 @@ async function tryOKX(symbolRaw, tf){
     vol24h: parseFloat(t?.volCcy24h || 0), candles, funding:null, oi:null, dexUrl:null, contract:null,
   };
 }
-async function tryBybit(symbolRaw, tf){
-  const sym = normalizarSimbolo(symbolRaw);
-  const pair = `${sym}USDT`;
+async function tryBybit(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}${quote}`;
   const interval = TF_MAP[tf].bybit;
   const res = await fetchJSON(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${pair}&interval=${interval}&limit=200`);
   const list = res.result?.list;
@@ -260,9 +263,10 @@ async function tryBybit(symbolRaw, tf){
     vol24h: parseFloat(t?.turnover24h || 0), candles, funding:null, oi:null, dexUrl:null, contract:null,
   };
 }
-async function tryMEXC(symbolRaw, tf){
-  const sym = normalizarSimbolo(symbolRaw);
-  const pair = `${sym}USDT`;
+async function tryMEXC(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}${quote}`;
   const interval = TF_MAP[tf].mexc;
   const klines = await fetchJSON(`https://api.mexc.com/api/v3/klines?symbol=${pair}&interval=${interval}&limit=220`);
   if(!Array.isArray(klines) || !klines.length) throw new Error('MEXC sin datos');
@@ -275,9 +279,10 @@ async function tryMEXC(symbolRaw, tf){
     vol24h: parseFloat(ticker.quoteVolume||0), candles, funding:null, oi:null, dexUrl:null, contract:null,
   };
 }
-async function tryGate(symbolRaw, tf){
-  const sym = normalizarSimbolo(symbolRaw);
-  const pair = `${sym}_USDT`;
+async function tryGate(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}_${quote}`;
   const interval = TF_MAP[tf].gate;
   const rows = await fetchJSON(`https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${pair}&interval=${interval}&limit=220`);
   if(!Array.isArray(rows) || !rows.length) throw new Error('Gate.io sin datos');
@@ -290,9 +295,10 @@ async function tryGate(symbolRaw, tf){
     vol24h: candles.at(-1).v, candles, funding:null, oi:null, dexUrl:null, contract:null,
   };
 }
-async function tryKuCoin(symbolRaw, tf){
-  const sym = normalizarSimbolo(symbolRaw);
-  const pair = `${sym}-USDT`;
+async function tryKuCoin(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}-${quote}`;
   const type = TF_MAP[tf].kucoin;
   const secPerCandle = TF_MAP[tf].kucoinSec;
   const endAt = Math.floor(Date.now()/1000);
@@ -367,18 +373,56 @@ async function fetchTokenData(query, tf){
   // una reintentaba con 4 proxies (10s cada uno), la espera total terminaba siendo la de la MÁS LENTA
   // en fallar del todo, no la de la primera en responder bien. Orden actualizado: Binance primero
   // (la más completa), MEXC segundo (mejor cobertura de altcoins chicas), después el resto.
+  // ═══ VARIANTES DEL SÍMBOLO ═══
+  // Antes se buscaba SOLO el par contra USDT y con el nombre exacto. Eso dejaba afuera:
+  //   · monedas que cotizan únicamente contra USDC (cada vez más comunes)
+  //   · las que el exchange lista con prefijo numérico: 1000PEPE, 1000SATS, 1MBABYDOGE
+  // Ahora se prueban las variantes antes de darla por inexistente.
+  const symBase = normalizarSimbolo(query);
+  const variantes = [
+    { sym: symBase, quote: 'USDT' },
+    { sym: symBase, quote: 'USDC' },
+    { sym: '1000' + symBase, quote: 'USDT' },
+    { sym: '1000000' + symBase, quote: 'USDT' },
+  ];
+
   const sources = [tryBinance, tryMEXC, tryOKX, tryBybit, tryGate, tryKuCoin];
   const fallos = [];
+  // Se prueba fuente por fuente, y dentro de cada una las variantes del símbolo.
+  // La primera variante (USDT con el nombre exacto) cubre la enorme mayoría de los casos,
+  // así que las demás casi nunca se llegan a probar y no ralentizan la búsqueda normal.
   for(const src of sources){
-    try{
-      // 6 segundos por fuente: si no responde en ese tiempo, se pasa a la siguiente en vez de
-      // quedarse colgado. Con 6 fuentes, el peor caso pasa de varios minutos a ~36 segundos.
-      const _t0 = Date.now();
-      const data = await conTiempoLimite(src(query, tf), 6000, src.name);
-      if(data.candles && data.candles.length>=30){ registrarAPI(src.name, true, Date.now()-_t0); return data; }
-      registrarAPI(src.name, false, null, 'sin velas suficientes');
-      fallos.push(`${src.name}: sin velas suficientes`);
-    }catch(e){ registrarAPI(src.name, false, null, e.message); fallos.push(`${src.name}: ${e.message}`); }
+    for(const variante of variantes){
+      const esPrincipal = (variante === variantes[0]);
+      const etiqueta = esPrincipal ? src.name : `${src.name} (${variante.sym}/${variante.quote})`;
+      try{
+        // 6 segundos por fuente: si no responde en ese tiempo, se pasa a la siguiente en vez de
+        // quedarse colgado. Con 6 fuentes, el peor caso pasa de varios minutos a ~36 segundos.
+        const _t0 = Date.now();
+        const data = await conTiempoLimite(src(query, tf, variante), 6000, etiqueta);
+        // El mínimo baja de 30 a 20 velas: una moneda recién listada puede tener pocas y antes
+        // se descartaba aunque la fuente hubiera respondido bien. Se marca para que el motor
+        // sepa que los indicadores largos no van a ser confiables.
+        if(data.candles && data.candles.length>=20){
+          if(data.candles.length < 60) data.pocasVelas = true;
+          if(variante.quote !== 'USDT') data.parAlternativo = `${variante.sym}/${variante.quote}`;
+          if(variante.sym !== symBase) data.simboloReal = variante.sym;
+          registrarAPI(src.name, true, Date.now()-_t0);
+          return data;
+        }
+        if(esPrincipal){
+          registrarAPI(src.name, false, null, 'sin velas suficientes');
+          fallos.push(`${src.name}: sin velas suficientes`);
+        }
+      }catch(e){
+        if(esPrincipal){
+          registrarAPI(src.name, false, null, e.message);
+          fallos.push(`${src.name}: ${e.message}`);
+        }
+        // Si la fuente entera se cayó por timeout, no tiene sentido probar las otras variantes
+        if(String(e.message||'').includes('se agotó el tiempo')) break;
+      }
+    }
   }
   // ninguna fuente de exchanges centralizados lo tiene -> probamos DEXs (GeckoTerminal)
   try{
