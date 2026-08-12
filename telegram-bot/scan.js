@@ -29,7 +29,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -1596,6 +1596,12 @@ async function confirmTheses(state, capitalFlow){
             return rup ? `${tri.tipo}/${rup.sesgo}` : tri.tipo;
           }catch(e){ return null; } })(),
           // Qué dioses votaron a favor en el momento de entrar
+          // Presión on-chain: se guarda como EVIDENCIA, no suma al score. Dentro de unas semanas
+          // el Research Center va a poder decir si realmente predice algo.
+          onChain: await (async()=>{ try{
+            const oc = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir);
+            return oc ? { presion:oc.presion, direccion:oc.direccion, fuerza:oc.fuerza, acompana:oc.acompana } : null;
+          }catch(e){ return null; } })(),
           actividadAnomala: (()=>{ try{
             const a = detectActividadAnomala(data15.candles, { funding: data15.funding!=null?data15.funding*100:null });
             return a?.hayAlgo ? { nivel:a.nivel, puntaje:a.puntaje, tipos:a.señales.map(s=>s.tipo) } : null;
@@ -1626,7 +1632,10 @@ async function confirmTheses(state, capitalFlow){
         const rrTp1 = (Math.abs(setup.t1-entryPrice)/distance).toFixed(1);
         const rrTp2 = (Math.abs(setup.t2-entryPrice)/distance).toFixed(1);
         const rrTp3 = (Math.abs(setup.t3-entryPrice)/distance).toFixed(1);
-        const invalidacion = (analyst.invalidation||[])[0] || `Cierre de vela más allá del stop ($${setup.stop.toFixed(6)}).`;
+        // El texto tiene que coincidir con lo que hace el gestor: el stop se ejecuta cuando el
+        // precio TOCA el nivel, no cuando la vela cierra. Antes decía "cierre de vela" y eso no
+        // era lo que pasaba en la práctica.
+        const invalidacion = `El precio toca $${setup.stop.toFixed(6)} (el stop se ejecuta al tocar, como en el exchange).`;
 
         // Datos reales adicionales para el relato numerado — solo lo que realmente se puede conseguir
         // gratis (estructura, OI, funding, flujo spot/futuros, ratio Long/Short de traders grandes).
@@ -1679,6 +1688,15 @@ async function confirmTheses(state, capitalFlow){
         });
         if(anomalo?.hayAlgo){
           relato.push(`${anomalo.nivel==='MUY ALTA'?'🚨':'⚠️'} <b>Actividad inusual (${anomalo.nivel.toLowerCase()})</b>: ${anomalo.detalle}`);
+        }
+
+        // Presión on-chain: qué está pasando en los pools de DEX de verdad
+        const onchain = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir).catch(()=>null);
+        if(onchain){
+          const icono = onchain.acompana === 'acompaña' ? '🟢' : onchain.acompana === 'contradice' ? '🔴' : '⚪';
+          const detalles = onchain.señales.filter(s=>s.alerta || s.sesgo!=='neutro')
+            .map(s=>`${s.tipo}: ${s.valor}${s.alerta?` — ${s.alerta}`:''}`).join(' · ');
+          relato.push(`${icono} <b>On-chain</b>: ${onchain.resumen}${detalles?` (${detalles})`:''}`);
         }
 
         // Índice de fuerza del volumen — es la misma línea naranja que ya se dibuja en la sección
@@ -1962,9 +1980,16 @@ async function fetchPriceRange(symbol, sinceTs, entryTs){
     }
     if(!highs.length) return null;
 
+    // high/low son las MECHAS: es lo que decide, porque un stop real se ejecuta al tocar.
+    // maxClose/minClose se devuelven solo como dato de auditoría, para poder distinguir después
+    // "el stop se tocó con una mecha y el precio volvió" de "la vela cerró del otro lado".
+    // Esa distinción no cambia la decisión, pero sirve para saber si los stops quedan ajustados.
+    const cierres = scope.map(v => v.c).filter(Number.isFinite);
     return {
       high: Math.max(...highs),
       low: Math.min(...lows),
+      maxClose: cierres.length ? Math.max(...cierres) : null,
+      minClose: cierres.length ? Math.min(...cierres) : null,
       last: d.price,
       // Datos de auditoría: para poder demostrar después qué se midió y desde cuándo
       desde, velas: scope.length, excluyoVelaEntrada: !!velaEntrada,
@@ -2084,8 +2109,37 @@ async function manageActiveTheses(state){
     // Etapa 1: todavía no tomó ninguna ganancia parcial -> vigila Stop y TP1 (con el rango real, no solo el precio actual)
     if(!thesis.partialTaken){
       let hitTP1=false, hitSL=false;
-      if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitSL=true; else if(range.high>=thesis.tp1) hitTP1=true; }
-      else { if(range.high>=thesis.stop) hitSL=true; else if(range.low<=thesis.tp1) hitTP1=true; }
+      // ═══ STOP POR MECHA (igual que un stop real en el exchange) ═══
+      // REVERTIDO a propósito: había cambiado esto a "exigir cierre", y estaba mal.
+      // Un stop puesto en el exchange se ejecuta cuando el PRECIO TOCA el nivel, no cuando la
+      // vela cierra. Si el bot esperara el cierre, dejaría de reflejar lo que pasaría en la
+      // cuenta real: mostraría operaciones vivas que en el exchange ya estarían cerradas.
+      //
+      // El bug de INX era OTRO: se cerró por stop sin que ninguna vela hubiera llegado al nivel,
+      // porque la ventana de precios miraba hasta 6 horas ANTES de la entrada. Eso ya está
+      // arreglado en fetchPriceRange, que ahora nunca mira antes de `entryTs`.
+      if(thesis.dir==='LONG'){
+        if(range.low <= thesis.stop) hitSL = true;
+        else if(range.high >= thesis.tp1) hitTP1 = true;
+      } else {
+        if(range.high >= thesis.stop) hitSL = true;
+        else if(range.low <= thesis.tp1) hitTP1 = true;
+      }
+
+      // ═══ EVIDENCIA OBLIGATORIA PARA CERRAR POR STOP ═══
+      // No se acepta ningún "stop tocado" sin que el mínimo/máximo medido DESDE LA ENTRADA
+      // haya cruzado el nivel de verdad. Es la lección de INX: el sistema afirmaba algo que
+      // los datos no respaldaban.
+      if(hitSL){
+        const aud = thesis.auditoria;
+        const cruzoDeVerdad = thesis.dir === 'LONG'
+          ? (aud?.minDesdeEntrada != null ? aud.minDesdeEntrada <= thesis.stop : true)
+          : (aud?.maxDesdeEntrada != null ? aud.maxDesdeEntrada >= thesis.stop : true);
+        if(!cruzoDeVerdad){
+          journal(thesis, `⚠️ El rango dice que tocó el stop ($${thesis.stop.toFixed(6)}), pero el ${thesis.dir==='LONG'?'mínimo':'máximo'} medido desde la entrada es $${(thesis.dir==='LONG'?aud.minDesdeEntrada:aud.maxDesdeEntrada).toFixed(6)}, que no llega al nivel. No se cierra sin evidencia.`);
+          hitSL = false;
+        }
+      }
 
       // ═══ VERIFICACIÓN CRUZADA ANTES DE CERRAR POR STOP ═══
       // El MFE/MAE mide desde la entrada de forma independiente. Si dice que el precio NUNCA fue
