@@ -2166,6 +2166,7 @@ async function manageActiveTheses(state){
         thesis.units = thesis.units - exitUnits; // queda el 60% corriendo
         thesis.partialTaken = true;
         thesis.stop = thesis.entry; // mueve el stop al punto de entrada (breakeven)
+        thesis.breakEvenActivatedAt = Date.now();
         journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 40% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 60% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}) y TP3 ($${thesis.tp3?.toFixed?.(6)??'—'}).`);
         thesis.partialPnl = pnl;
         sendPromises.push(sendTelegram(
@@ -2198,10 +2199,9 @@ async function manageActiveTheses(state){
 
     // Etapa 2: ya tomó el 40% en TP1 -> vigila TP2 (otro 40%) o vuelta a breakeven (con el rango real)
     if(!thesis.secondPartialTaken){
-      let hitTP2=false, hitBE=false;
-      if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE=true; else if(range.high>=thesis.tp2) hitTP2=true; }
-      else { if(range.high>=thesis.stop) hitBE=true; else if(range.low<=thesis.tp2) hitTP2=true; }
-
+  let hitTP2=false, hitBE=false;
+  if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE=true; else if(range.high>=thesis.tp2) hitTP2=true; }
+  else { if(range.high>=thesis.stop) hitBE=true; else if(range.low<=thesis.tp2) hitTP2=true; }
       if(hitBE){
         // Sin tp3 (tesis viejas migradas) o sin TP2 tocado -> se cierra todo el resto acá, como antes.
         const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
