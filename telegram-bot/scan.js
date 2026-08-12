@@ -2176,7 +2176,7 @@ async function manageActiveTheses(state){
           `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el resto ya no puede terminar en pérdida.\n` +
           `El 60% restante sigue corriendo hacia TP2 (40%) y TP3 (20%).\nCapital: ${acc.capital.toFixed(2)} USDT`
         ));
-        hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 50% y el stop pasó a breakeven');
+        hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 40% y el stop pasó a breakeven');
         sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`, null, 'gestion', thesis.symbol));
         stillOpen.push(thesis);
       } else if(hitSL){
@@ -2200,8 +2200,25 @@ async function manageActiveTheses(state){
     // Etapa 2: ya tomó el 40% en TP1 -> vigila TP2 (otro 40%) o vuelta a breakeven (con el rango real)
     if(!thesis.secondPartialTaken){
   let hitTP2=false, hitBE=false;
-  if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE=true; else if(range.high>=thesis.tp2) hitTP2=true; }
-  else { if(range.high>=thesis.stop) hitBE=true; else if(range.low<=thesis.tp2) hitTP2=true; }
+
+  // Después de TP1, el BE solo puede activarse por precio ocurrido
+  // DESPUÉS de que TP1 fue registrado. Nunca usar el rango histórico
+  // anterior a la activación del breakeven.
+  const beSinceTs = thesis.breakevenActivatedAt || thesis.lastCheckedAt || thesis.confirmedAt;
+
+  const beRange = await fetchPriceRange(
+    thesis.symbol,
+    beSinceTs,
+    thesis.confirmedAt
+  );
+
+  if(thesis.dir==='LONG'){
+    if(beRange && beRange.low <= thesis.stop) hitBE=true;
+    else if(range.high >= thesis.tp2) hitTP2=true;
+  } else {
+    if(beRange && beRange.high >= thesis.stop) hitBE=true;
+    else if(range.low <= thesis.tp2) hitTP2=true;
+  }
       if(hitBE){
         // Sin tp3 (tesis viejas migradas) o sin TP2 tocado -> se cierra todo el resto acá, como antes.
         const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
