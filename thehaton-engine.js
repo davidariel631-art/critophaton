@@ -269,6 +269,7 @@ async function tryGecko(query, tf){
     vol24h: parseFloat(attrs.volume_usd?.h24 || 0), candles, funding:null, oi:null,
     dexUrl: `https://www.geckoterminal.com/${network}/pools/${poolAddr}`,
     contract: pool.relationships.base_token?.data?.id?.split('_').pop() || null,
+    network,  // hace falta para consultar la actividad on-chain de ese token
   };
 }
 
@@ -488,7 +489,10 @@ async function fetchTokenData(query, tf){
         // 6 segundos por fuente: si no responde en ese tiempo, se pasa a la siguiente en vez de
         // quedarse colgado. Con 6 fuentes, el peor caso pasa de varios minutos a ~36 segundos.
         const _t0 = Date.now();
-        const data = await conTiempoLimite(src(query, tf, variante), 6000, etiqueta);
+        // 9 segundos, no 6: desde el navegador cada pedido puede pasar por un proxy CORS,
+        // y con 6s la fuente se abandonaba antes de que el proxy respondiera. Es el motivo
+        // por el que la web no encontraba monedas que el bot sí encontraba.
+        const data = await conTiempoLimite(src(query, tf, variante), 9000, etiqueta);
         // El mínimo baja de 30 a 20 velas: una moneda recién listada puede tener pocas y antes
         // se descartaba aunque la fuente hubiera respondido bien. Se marca para que el motor
         // sepa que los indicadores largos no van a ser confiables.
@@ -3405,6 +3409,8 @@ function expectancyPorEstrategia(closedTrades, minMuestra = 10){
     ...agrupar('Liquidez', t => t.registro?.liquidezAFavor ?? null),
     ...agrupar('IFVG', t => t.registro?.ifvg ?? null),
     ...agrupar('Ruptura', t => t.registro?.rupturaTriangulo ?? null),
+    ...agrupar('On-chain', t => t.registro?.onChain?.acompana ?? null),
+    ...agrupar('Actividad anómala', t => t.registro?.actividadAnomala?.nivel ?? null),
   ].sort((a,b)=> b.expectancy - a.expectancy);
 
   const positivas = ranking.filter(x=>x.expectancy >= 0.1 && x.confianza !== 'baja');
@@ -3542,6 +3548,86 @@ function resumenCalidadDecisiones(closedTrades){
       return `➖ No hay diferencia clara entre decisiones buenas y débiles (${wrBuenas}% vs ${wrMalas}%). El criterio de calidad todavía no demuestra valor.`;
     })(),
     nota: `${ganóConMala} operación(es) ganaron con una decisión débil y ${perdióConBuena} perdieron con una decisión buena. Esos casos son ruido, no evidencia — no conviene sacar conclusiones de ellos.`,
+  };
+}
+
+// ═══ FOTO ANTES / DESPUÉS DE LOS ARREGLOS ═══
+// Compara las operaciones anteriores a una fecha contra las posteriores, en las dimensiones que
+// importan para saber si los arreglos sirvieron. A diferencia de compararVersiones, que mira
+// métricas generales, esta se enfoca en lo que se corrigió: stops falsos, ganancias parciales
+// mal contabilizadas, y las señales nuevas (on-chain, actividad anómala).
+function fotoAntesDespues(closedTrades, fechaCorte){
+  const trades = (closedTrades||[]).filter(t => t.closedAt && t.pnlPct != null);
+  const antes = trades.filter(t => t.closedAt < fechaCorte);
+  const despues = trades.filter(t => t.closedAt >= fechaCorte);
+
+  const foto = (arr) => {
+    if(!arr.length) return null;
+    const gan = arr.filter(t => (t.pnlUsd ?? t.pnlPct) > 0);
+    const per = arr.filter(t => (t.pnlUsd ?? t.pnlPct) <= 0);
+    const sumG = gan.reduce((s,t)=>s+Math.abs(t.pnlUsd ?? t.pnlPct),0);
+    const sumP = per.reduce((s,t)=>s+Math.abs(t.pnlUsd ?? t.pnlPct),0);
+    const conR = arr.filter(t => t.registro?.gestion?.stopPct > 0);
+    const mfes = arr.filter(t=>t.registro?.mfe!=null).map(t=>t.registro.mfe);
+    const maes = arr.filter(t=>t.registro?.mae!=null).map(t=>Math.abs(t.registro.mae));
+    const prom = a => a.length ? +(a.reduce((x,y)=>x+y,0)/a.length).toFixed(2) : null;
+    // Cuántas alcanzaron cada objetivo
+    const alcanzo = (r) => mfes.length ? +(mfes.filter(x=>x>=r).length/mfes.length*100).toFixed(0) : null;
+    return {
+      operaciones: arr.length,
+      winRate: +(gan.length/arr.length*100).toFixed(1),
+      gananciaMedia: gan.length ? +(sumG/gan.length).toFixed(2) : 0,
+      perdidaMedia: per.length ? +(sumP/per.length).toFixed(2) : 0,
+      ratio: (per.length && gan.length) ? +((sumG/gan.length)/(sumP/per.length)).toFixed(2) : null,
+      profitFactor: sumP > 0 ? +(sumG/sumP).toFixed(2) : (sumG>0?Infinity:0),
+      pnlTotal: +arr.reduce((s,t)=>s+(t.pnlUsd ?? 0),0).toFixed(2),
+      mfePromedio: prom(mfes), maePromedio: prom(maes),
+      llegoATp1: alcanzo(1.0), llegoATp2: alcanzo(1.6), llegoATp3: alcanzo(2.5),
+      // Lo específico de los arreglos
+      cerradasPorStop: arr.filter(t => (t.motivoCierre||'').includes('stop')).length,
+      conGananciaParcial: arr.filter(t => t.alcanzoTp1).length,
+      mechasQueNoCerraron: arr.reduce((s,t)=>s+(t.auditoria?.mechasQueTocaronStop||0),0),
+      // Las señales nuevas
+      onChainAcompana: arr.filter(t => t.registro?.onChain?.acompana === 'acompaña').length,
+      onChainContradice: arr.filter(t => t.registro?.onChain?.acompana === 'contradice').length,
+      conDatosCompletos: conR.length,
+    };
+  };
+
+  const a = foto(antes), d = foto(despues);
+  if(!a || !d) return { listo:false,
+    nota:`Hacen falta operaciones de los dos lados de la fecha. Hay ${antes.length} antes y ${despues.length} después.` };
+
+  const dif = (x,y) => (x==null||y==null) ? null : +(y-x).toFixed(2);
+  return {
+    listo: true,
+    antes: a, despues: d,
+    cambios: {
+      winRate: dif(a.winRate, d.winRate),
+      ratio: dif(a.ratio, d.ratio),
+      profitFactor: dif(a.profitFactor, d.profitFactor),
+      mfePromedio: dif(a.mfePromedio, d.mfePromedio),
+      llegoATp2: dif(a.llegoATp2, d.llegoATp2),
+    },
+    conclusion: (()=>{
+      if(d.operaciones < 20) return `Con ${d.operaciones} operaciones nuevas todavía es pronto. Hacen falta 30-40 para comparar en serio.`;
+      const partes = [];
+      const dRatio = dif(a.ratio, d.ratio);
+      if(dRatio != null){
+        partes.push(dRatio > 0.15
+          ? `El ratio ganancia/pérdida mejoró de ${a.ratio} a ${d.ratio}.`
+          : dRatio < -0.15 ? `⚠️ El ratio empeoró de ${a.ratio} a ${d.ratio}.`
+          : `El ratio se mantiene parecido (${a.ratio} → ${d.ratio}).`);
+      }
+      if(d.llegoATp2 != null && a.llegoATp2 != null){
+        partes.push(d.llegoATp2 > a.llegoATp2 + 10
+          ? `Más operaciones llegan a TP2 (${a.llegoATp2}% → ${d.llegoATp2}%).`
+          : d.llegoATp2 < 15 ? `⚠️ Solo el ${d.llegoATp2}% llega a TP2: los objetivos siguen quedando lejos.` : '');
+      }
+      if(d.mechasQueNoCerraron > 0) partes.push(`${d.mechasQueNoCerraron} mecha(s) tocaron el stop sin que la vela cerrara del otro lado — señal de que los stops pueden estar ajustados.`);
+      return partes.filter(Boolean).join(' ');
+    })(),
+    nota: 'La fecha de corte debería ser cuando se subieron los arreglos. Las operaciones anteriores incluyen cierres mal contabilizados.',
   };
 }
 
@@ -3925,6 +4011,111 @@ function verificarDatosSanos(data, opciones = {}){
   };
 }
 
+// ═══ PRESIÓN ON-CHAIN / SMART MONEY ═══
+// QUÉ ES Y QUÉ NO ES:
+// Esto NO es Arkham. No identifica billeteras ni dice "esta compra es de Jump Trading".
+// Lo que hace es leer la actividad REAL en los pools de DEX —compras contra ventas, cambios de
+// liquidez, volumen on-chain— y decir si esa actividad acompaña o contradice la tesis.
+// Los datos salen de GeckoTerminal, que ya está conectado y agrega transacciones on-chain reales.
+//
+// LIMITACIÓN IMPORTANTE: solo funciona para monedas con pools de DEX. Una moneda que cotiza
+// únicamente en exchanges centralizados no tiene actividad on-chain que leer, y la función
+// devuelve null en vez de inventar un número.
+//
+// NO SUMA AL SCORE. Es evidencia independiente que se registra en cada operación, para que
+// dentro de unas semanas el Research Center pueda responder si realmente predice algo.
+async function fetchOnChainPressure(contractAddress, network, dirTesis){
+  if(!contractAddress || !network) return null;
+  try{
+    const res = await fetchJSON(`${GECKO}/networks/${network}/tokens/${contractAddress}/pools?page=1`);
+    const pools = res?.data;
+    if(!Array.isArray(pools) || !pools.length) return null;
+
+    // Se usa el pool con más liquidez: es el que refleja la actividad real
+    const pool = pools
+      .filter(p => parseFloat(p.attributes?.reserve_in_usd) > 0)
+      .sort((a,b)=> parseFloat(b.attributes.reserve_in_usd) - parseFloat(a.attributes.reserve_in_usd))[0];
+    if(!pool) return null;
+    const a = pool.attributes;
+
+    const señales = [];
+    let puntaje = 0, medidas = 0;
+
+    // 1) COMPRAS vs VENTAS en las últimas horas.
+    // Es lo más parecido a "quién está moviendo el dinero" que se puede conseguir gratis:
+    // no sabemos quién, pero sí cuántas operaciones fueron de compra y cuántas de venta.
+    const tx = a.transactions || {};
+    const leerTramo = (t) => {
+      const b = parseInt(t?.buys ?? 0, 10), s = parseInt(t?.sells ?? 0, 10);
+      return (b + s) >= 20 ? { buys:b, sells:s, total:b+s, pctCompra: b/(b+s)*100 } : null;
+    };
+    const h24 = leerTramo(tx.h24), h6 = leerTramo(tx.h6), h1 = leerTramo(tx.h1);
+    const tramo = h6 || h24 || h1;
+    if(tramo){
+      medidas++;
+      const desvio = tramo.pctCompra - 50;
+      puntaje += Math.max(-1, Math.min(1, desvio/20));  // ±20 puntos porcentuales = señal completa
+      señales.push({
+        tipo: 'Compras vs ventas',
+        valor: `${tramo.buys} compras / ${tramo.sells} ventas (${tramo.pctCompra.toFixed(0)}% compradoras)`,
+        sesgo: desvio > 8 ? 'LONG' : desvio < -8 ? 'SHORT' : 'neutro',
+      });
+    }
+
+    // 2) ACELERACIÓN: si en la última hora hay mucha más actividad que el promedio del día,
+    // algo está pasando ahora. Combinado con el sesgo de compra/venta dice hacia dónde.
+    if(h1 && h24){
+      const esperadoPorHora = h24.total/24;
+      if(esperadoPorHora > 0){
+        const acel = h1.total/esperadoPorHora;
+        if(acel >= 2.5){
+          medidas++;
+          const dir = h1.pctCompra > 55 ? 'LONG' : h1.pctCompra < 45 ? 'SHORT' : 'neutro';
+          puntaje += dir==='LONG' ? 0.6 : dir==='SHORT' ? -0.6 : 0;
+          señales.push({ tipo:'Aceleración', valor:`${acel.toFixed(1)}x la actividad normal en la última hora`, sesgo:dir });
+        }
+      }
+    }
+
+    // 3) CAMBIO DE LIQUIDEZ: liquidez que entra al pool suele preceder movimiento;
+    // liquidez que se va es señal de que los proveedores se están retirando.
+    const liq = parseFloat(a.reserve_in_usd) || 0;
+    const vol24 = parseFloat(a.volume_usd?.h24) || 0;
+    if(liq > 0 && vol24 > 0){
+      medidas++;
+      const rotacion = vol24/liq;   // cuántas veces se dio vuelta la liquidez en un día
+      señales.push({
+        tipo: 'Rotación de liquidez',
+        valor: `${rotacion.toFixed(1)}x por día (liquidez $${(liq/1000).toFixed(0)}K, volumen $${(vol24/1000).toFixed(0)}K)`,
+        sesgo: 'neutro',
+        alerta: rotacion > 8 ? 'Rotación muy alta: mucho movimiento para la liquidez que hay, los precios se mueven fácil.'
+              : rotacion < 0.3 ? 'Rotación muy baja: pool dormido, poca actividad real.' : null,
+      });
+      if(liq < 50000) señales.push({ tipo:'Liquidez baja', valor:`Solo $${(liq/1000).toFixed(0)}K en el pool`, sesgo:'neutro',
+        alerta:'Con tan poca liquidez, una sola orden grande mueve el precio. Cuidado con el slippage.' });
+    }
+
+    if(!medidas) return null;
+
+    const presion = Math.max(-1, Math.min(1, puntaje/Math.max(1, medidas)));
+    const fuerza = Math.round(Math.abs(presion)*100);
+    const direccion = presion > 0.15 ? 'LONG' : presion < -0.15 ? 'SHORT' : 'NEUTRO';
+    const acompana = dirTesis && direccion !== 'NEUTRO'
+      ? (direccion === dirTesis ? 'acompaña' : 'contradice') : null;
+
+    return {
+      presion: +presion.toFixed(3),
+      direccion, fuerza, señales,
+      acompana,
+      liquidezUsd: liq,
+      resumen: direccion === 'NEUTRO'
+        ? 'La actividad on-chain no muestra un sesgo claro.'
+        : `La actividad on-chain apunta a ${direccion} con fuerza ${fuerza}/100${acompana ? ` — ${acompana} esta operación` : ''}.`,
+      aclaracion: 'Lee la actividad real de los pools de DEX (compras contra ventas, liquidez, volumen). No identifica quién opera: para eso haría falta Arkham o Nansen, que son de pago.',
+    };
+  }catch(e){ return null; }
+}
+
 // ═══ DETECTOR DE ACTIVIDAD ANÓMALA ═══
 // No identifica QUIÉN mueve el dinero — para eso haría falta Arkham o Nansen, que son de pago.
 // Lo que SÍ se puede con datos gratuitos es detectar que ALGO RARO está pasando: movimientos que
@@ -4283,6 +4474,24 @@ function combinacionDioses(closedTrades, minMuestra = 10){
       });
     }
   }
+  // COMBINACIONES CON EVIDENCIA EXTERNA
+  // Responde la pregunta concreta: "cuando el on-chain acompañaba Y el componente empujaba,
+  // ¿el resultado fue mejor que con el componente solo?". Es la única forma de saber si vale
+  // la pena darle peso al on-chain, en vez de asumirlo porque suena razonable.
+  for(const nombre of nombres){
+    const conAmbos = conR.filter(t => empujo(t, nombre) && t.registro?.onChain?.acompana === 'acompaña');
+    if(conAmbos.length < minMuestra) continue;
+    const e = expect(conAmbos);
+    const solo = individuales.find(x=>x.componentes[0]===nombre)?.expectancy;
+    pares.push({
+      componentes: [nombre, 'On-chain acompaña'],
+      operaciones: conAmbos.length,
+      expectancy: e,
+      mejorIndividual: solo ?? null,
+      sinergia: solo != null ? +(e - solo).toFixed(3) : null,
+      confianza: conAmbos.length >= 40 ? 'alta' : conAmbos.length >= 20 ? 'media' : 'baja',
+    });
+  }
   pares.sort((a,b)=>b.expectancy-a.expectancy);
 
   const conSinergia = pares.filter(p => p.sinergia != null && p.sinergia >= 0.15 && p.confianza !== 'baja');
@@ -4620,6 +4829,16 @@ function generarReporteResearch(closedTrades, opciones = {}){
   analizarPor(null, 'Divergencia', t => t.registro?.divergencia ?? (t.registro ? 'sin divergencia' : null));
   analizarPor(null, 'Fuerza del volumen', t => t.registro?.fuerzaVolumen==null ? null : t.registro.fuerzaVolumen>=60 ? 'compradora (60%+)' : t.registro.fuerzaVolumen<=40 ? 'vendedora (40%-)' : 'pareja');
 
+  // ON-CHAIN: la pregunta concreta es si acompañar o contradecir la tesis cambia el resultado.
+  // Si con muestra suficiente no hay diferencia, no hay que darle peso al score por más
+  // razonable que suene la idea.
+  analizarPor(null, 'On-chain', t => t.registro?.onChain?.acompana ?? (t.registro?.onChain ? 'neutro' : null));
+  analizarPor(null, 'Fuerza on-chain', t => {
+    const f = t.registro?.onChain?.fuerza;
+    return f == null ? null : f >= 50 ? 'clara (50+)' : f >= 25 ? 'moderada (25-49)' : 'débil (menos de 25)';
+  });
+  analizarPor(null, 'Actividad anómala', t => t.registro?.actividadAnomala?.nivel ?? (t.registro ? 'sin nada raro' : null));
+
   // APORTE DE CADA COMPONENTE: compara el win rate cuando un componente empujó fuerte
   // contra cuando no aportó. Es la medición que faltaba para saber cuánto vale cada Dios.
   const conRegistro = trades.filter(t => t.registro?.componentes?.length);
@@ -4893,7 +5112,7 @@ function computeFilterEffectiveness(closedTrades, expiredTheses){
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
-  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
+  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, fetchOnChainPressure, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, fotoAntesDespues, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,

@@ -619,6 +619,7 @@
         <div>
           <div id="recTag" class="rec-tag rec-none">NO OPERAR</div>
           <div class="subrow" id="tokenLabel">—</div>
+          <div id="derivadosPanel" style="display:none;margin-top:10px;"></div>
           <div id="anomaliaPanel" style="display:none;margin-top:10px;"></div>
           <div id="fasePanel" style="display:none;margin-top:10px;"></div>
           <div id="analistaPanel" style="display:none;margin-top:10px;"></div>
@@ -1146,7 +1147,10 @@ const CORS_PROXIES_WEB = [
   url => `https://proxy.corsfix.com/?${url}`,
   url => `https://api.cors.lol/url=${url}`,
 ];
-async function fetchWithTimeout(url, ms=10000){
+// El timeout baja de 10s a 3s por intento. Motivo: el motor corta cada FUENTE a los 6 segundos,
+// así que con 10s por intento + 4 proxies el proxy nunca llegaba a responder — el motor ya había
+// abandonado esa fuente. Con 3s entran el intento directo + un par de proxies dentro de la ventana.
+async function fetchWithTimeout(url, ms=3000){
   const controller = new AbortController();
   const t = setTimeout(()=>controller.abort(), ms);
   try{ return await fetch(url, {signal: controller.signal}); }
@@ -1155,14 +1159,21 @@ async function fetchWithTimeout(url, ms=10000){
 async function fetchJSON(url){
   try{
     const r = await fetchWithTimeout(url);
-    if(!r.ok) throw new Error('HTTP '+r.status); // error de la API misma: reintentar por proxy no sirve
-    return await r.json();
+    if(r.ok) return await r.json();
+    // 400/404 = la API respondió y dice que ese par no existe: reintentar por proxy no sirve.
+    // 451/403/429 = bloqueo geográfico o límite de pedidos: por proxy SÍ puede funcionar.
+    // Antes cualquier código de error cortaba sin probar proxies, y por eso desde el navegador
+    // no se encontraban monedas que el bot sí encontraba.
+    if(r.status === 400 || r.status === 404) throw new Error('HTTP '+r.status);
+    throw Object.assign(new Error('HTTP '+r.status), { reintentarPorProxy: true });
   }catch(e){
-    const isNetworkFailure = e instanceof TypeError || e.name==='AbortError' || /failed to fetch/i.test(e.message||'');
-    if(!isNetworkFailure) throw e;
-    for(const buildProxyUrl of CORS_PROXIES_WEB){
+    const esFalloDeRed = e instanceof TypeError || e.name === 'AbortError' || /failed to fetch/i.test(e.message||'');
+    if(!esFalloDeRed && !e.reintentarPorProxy) throw e;
+    // Solo 2 proxies: con 3s cada uno, entra dentro de la ventana de 6s del motor.
+    // Con los 4 de antes el motor abandonaba la fuente antes de que respondiera ninguno.
+    for(const buildProxyUrl of CORS_PROXIES_WEB.slice(0, 2)){
       try{
-        const r2 = await fetchWithTimeout(buildProxyUrl(url));
+        const r2 = await fetchWithTimeout(buildProxyUrl(url), 2500);
         if(!r2.ok) continue;
         return await r2.json();
       }catch(e2){ /* probamos el siguiente proxy */ }
@@ -1313,6 +1324,58 @@ function renderResults(data, result, setup){
       }
     }
   }catch(e){ /* el aviso es opcional, no interrumpe el análisis */ }
+
+  // ═══ DERIVADOS: OPEN INTEREST Y FUNDING ═══
+  // Antes el Open Interest estaba escondido detrás de un botón que había que tocar a mano.
+  // Ahora se consulta solo en cada análisis, porque es de los datos que más dicen: el OI
+  // subiendo es dinero nuevo entrando a posiciones; bajando es gente cerrando.
+  (async () => {
+    const dp = document.getElementById('derivadosPanel');
+    try{
+      const [oiTrend, fundTrend] = await Promise.all([
+        TheHatonEngine.fetchOpenInterestTrend(data.displayName, currentTF).catch(()=>null),
+        TheHatonEngine.fetchFundingTrend(data.displayName).catch(()=>null),
+      ]);
+      if(!oiTrend && !fundTrend && data.funding == null && data.oi == null){
+        // Sin datos de derivados: se dice por qué, en vez de dejar el panel vacío
+        dp.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:11px 13px;">
+          <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;">DERIVADOS</div>
+          <div style="font-size:11.5px;color:var(--sub);margin-top:5px;">Esta moneda no tiene mercado de futuros en las fuentes disponibles (Binance ni MEXC), así que no hay Open Interest ni funding para mostrar.</div>
+        </div>`;
+        dp.style.display = '';
+        return;
+      }
+      const filas = [];
+      if(oiTrend?.trend){
+        const t = oiTrend.trend;
+        const col = t==='RISING' ? 'var(--teal)' : t==='FALLING' ? 'var(--rose)' : 'var(--sub)';
+        const txt = t==='RISING' ? 'subiendo — está entrando dinero nuevo a posiciones'
+                  : t==='FALLING' ? 'bajando — se están cerrando posiciones'
+                  : 'estable';
+        filas.push(`<div class="indi-line" style="padding:6px 0;"><div class="il-k">Interés abierto</div><div class="il-v" style="color:${col};font-size:13px;">${txt}</div></div>`);
+      }
+      if(oiTrend?.fuente) filas.push(`<div style="font-size:10px;color:var(--sub);">Fuente: ${oiTrend.fuente}</div>`);
+      const f = fundTrend?.current ?? data.funding;
+      if(f != null){
+        const fp = f*100;
+        const col = Math.abs(fp) >= 0.05 ? 'var(--amber)' : 'var(--sub)';
+        const lectura = fp >= 0.05 ? 'muy positivo: hay demasiada gente en largo pagando por estar ahí'
+                      : fp <= -0.05 ? 'muy negativo: hay demasiada gente en corto pagando por estar ahí'
+                      : fp > 0 ? 'positivo, dentro de lo normal' : fp < 0 ? 'negativo, dentro de lo normal' : 'neutro';
+        filas.push(`<div class="indi-line" style="padding:6px 0;"><div class="il-k">Funding</div><div class="il-v" style="color:${col};font-size:13px;">${fp.toFixed(4)}% — ${lectura}</div></div>`);
+        if(Math.abs(fp) >= 0.08) filas.push(`<div style="font-size:11px;color:var(--rose);margin-top:4px;">⚠️ Un desbalance así suele terminar en liquidaciones en cadena.</div>`);
+      }
+      if(fundTrend?.trend && fundTrend.trend !== 'STABLE'){
+        filas.push(`<div style="font-size:11px;color:var(--sub);margin-top:3px;">El funding viene ${fundTrend.trend==='RISING'?'subiendo':'bajando'}.</div>`);
+      }
+      if(!filas.length){ dp.style.display='none'; return; }
+      dp.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--amber);border-radius:10px;padding:11px 13px;">
+        <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;margin-bottom:4px;">📡 DERIVADOS</div>
+        ${filas.join('')}
+      </div>`;
+      dp.style.display = '';
+    }catch(e){ dp.style.display='none'; }
+  })();
 
   // ═══ ACTIVIDAD ANÓMALA ═══
   // Detecta que algo raro está pasando sin identificar quién. Va arriba de todo porque cuando
