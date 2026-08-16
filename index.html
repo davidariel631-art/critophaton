@@ -3426,6 +3426,38 @@ document.getElementById('huntToggleBtn').addEventListener('click', async ()=>{
 
 // ================= THEHATON (cuenta virtual del bot) =================
 const THEHATON_STATE_URL = 'https://raw.githubusercontent.com/davidariel631-art/critophaton/main/telegram-bot/state.json';
+const THEHATON_HISTORIAL_BASE = 'https://raw.githubusercontent.com/davidariel631-art/critophaton/main/telegram-bot/historial';
+
+// ═══ CARGA DEL HISTORIAL COMPLETO ═══
+// El bot archiva las operaciones por mes en telegram-bot/historial/YYYY-MM.json, para que
+// state.json no crezca sin control (se lee y reescribe entero en cada corrida, cada 30 min).
+// Nada se borra: acá se vuelven a juntar todos los meses para tener la historia completa.
+let _historialCompleto = null;
+async function cargarHistorialCompleto(state){
+  if(_historialCompleto) return _historialCompleto;
+  const meses = state?.mesesArchivados || [];
+  const delMesActual = state?.account?.closedTrades || [];
+  if(!meses.length) return (_historialCompleto = delMesActual);
+
+  // Se traen todos los meses en paralelo, de a 6 para no saturar
+  const todas = [];
+  for(let i=0; i<meses.length; i+=6){
+    const lote = meses.slice(i, i+6);
+    const partes = await Promise.all(lote.map(async mes => {
+      try{
+        const r = await fetch(`${THEHATON_HISTORIAL_BASE}/${mes}.json?t=${Date.now()}`);
+        if(!r.ok) return null;
+        return await r.json();
+      }catch(e){ return null; }
+    }));
+    for(const p of partes){ if(p?.closedTrades) todas.push(...p.closedTrades); }
+  }
+  // Se suman las del mes en curso, que todavía están en state.json
+  todas.push(...delMesActual);
+  todas.sort((a,b)=>(a.closedAt||0)-(b.closedAt||0));
+  _historialCompleto = todas;
+  return todas;
+}
 // ═══════════════════════════════════════════════════════════════
 // THEHATON INTELLIGENCE
 // Le da interfaz a todo lo que el motor calcula pero antes no se podía ver desde ningún lado:
@@ -3443,7 +3475,9 @@ async function cargarIntel(){
     try{
       const res = await fetch(THEHATON_STATE_URL + '?t=' + Date.now());
       const state = res.ok ? await res.json() : null;
-      _intelTrades = state?.account?.closedTrades || [];
+      // Se cargan TODOS los meses archivados, no solo lo que quedó en state.json.
+      // Sin esto el panel analizaría únicamente el mes en curso.
+      _intelTrades = await cargarHistorialCompleto(state).catch(()=> state?.account?.closedTrades || []);
     }catch(e){ _intelTrades = []; }
   }
   status.textContent = _intelTrades.length
