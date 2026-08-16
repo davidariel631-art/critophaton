@@ -67,7 +67,15 @@ async function tryBinance(symbolRaw, tf, variante){
     const prem = await fetchJSON(`${FUTURES}/fapi/v1/premiumIndex?symbol=${pair}`);
     funding = parseFloat(prem.lastFundingRate);
   }catch(e){}
-  const candles = klines.map(k=>({t:k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}));
+  // El campo 9 es el volumen de quien COMPRÓ agrediendo el libro (taker buy). Restándolo del
+  // volumen total sale el volumen vendedor agresivo. Es flujo de órdenes real, viene gratis en
+  // cada vela y hasta ahora se estaba descartando.
+  const candles = klines.map(k=>({
+    t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5],
+    vc: +k[9] || 0,                        // volumen comprador agresivo
+    vv: Math.max(0, (+k[5]||0) - (+k[9]||0)), // volumen vendedor agresivo
+    ops: +k[8] || 0,                       // cantidad de operaciones
+  }));
   return {
     source:'Binance', symbol: pair, displayName: sym.replace('USDT',''),
     price: parseFloat(ticker.lastPrice), change24h: parseFloat(ticker.priceChangePercent),
@@ -3473,6 +3481,8 @@ function expectancyPorEstrategia(closedTrades, minMuestra = 10){
     ...agrupar('Actividad anómala', t => t.registro?.actividadAnomala?.nivel ?? null),
     ...agrupar('Estado de la cuenta', t => t.abiertaEnDrawdownAlto == null ? null : (t.abiertaEnDrawdownAlto ? 'drawdown alto' : 'cuenta sana')),
     ...agrupar('Wallets', t => t.registro?.wallets?.acompana ?? null),
+    ...agrupar('Libro de órdenes', t => t.registro?.libro?.sesgo ?? null),
+    ...agrupar('Flujo de órdenes', t => t.registro?.flujoOrdenes?.sesgo ?? null),
   ].sort((a,b)=> b.expectancy - a.expectancy);
 
   const positivas = ranking.filter(x=>x.expectancy >= 0.1 && x.confianza !== 'baja');
@@ -4070,6 +4080,122 @@ function verificarDatosSanos(data, opciones = {}){
     mensaje: problemas.length
       ? `🛑 NO OPERAR — protección del motor: ${problemas.join(' ')}`
       : null,
+  };
+}
+
+// ═══ LIBRO DE ÓRDENES ═══
+// La diferencia con lo que veníamos haciendo: hasta ahora la liquidez se RECONSTRUÍA a partir de
+// las velas (dónde hubo toques, dónde se acumuló volumen). Eso es inferir dónde PUDO haber
+// liquidez. El libro muestra las órdenes que están puestas AHORA MISMO.
+//
+// Es gratis y sin clave, tanto en Binance como en Bitunix.
+// LIMITACIÓN HONESTA: el libro es una foto del momento y se puede retirar en un segundo. Un muro
+// grande puede ser real o puede ser alguien tratando de asustar. Por eso se muestra como
+// contexto, no como una verdad fija.
+async function fetchLibroOrdenes(symbolRaw, fuente = 'Binance'){
+  const sym = normalizarSimbolo(symbolRaw);
+  try{
+    let bids = [], asks = [];
+    if(fuente === 'Bitunix'){
+      const r = await fetchJSON(`https://fapi.bitunix.com/api/v1/futures/market/depth?symbol=${sym}USDT&limit=100`);
+      bids = (r?.data?.bids||[]).map(x=>[+x[0], +x[1]]);
+      asks = (r?.data?.asks||[]).map(x=>[+x[0], +x[1]]);
+    } else {
+      const r = await fetchJSON(`${BINANCE}/api/v3/depth?symbol=${sym}USDT&limit=500`);
+      bids = (r?.bids||[]).map(x=>[+x[0], +x[1]]);
+      asks = (r?.asks||[]).map(x=>[+x[0], +x[1]]);
+    }
+    if(bids.length < 5 || asks.length < 5) return null;
+
+    const mejorCompra = bids[0][0], mejorVenta = asks[0][0];
+    const medio = (mejorCompra + mejorVenta)/2;
+    const spreadPct = (mejorVenta - mejorCompra)/medio*100;
+
+    // Solo se mira lo que está a ±2% del precio: más lejos casi nunca se ejecuta
+    const cerca = 0.02;
+    const bidsCerca = bids.filter(([p]) => p >= medio*(1-cerca));
+    const asksCerca = asks.filter(([p]) => p <= medio*(1+cerca));
+    const usdCompra = bidsCerca.reduce((s,[p,q]) => s + p*q, 0);
+    const usdVenta  = asksCerca.reduce((s,[p,q]) => s + p*q, 0);
+    const total = usdCompra + usdVenta;
+    if(total <= 0) return null;
+
+    // Desbalance: +1 = todo el peso del lado comprador, -1 = todo vendedor
+    const desbalance = (usdCompra - usdVenta)/total;
+
+    // MUROS: órdenes muy por encima del tamaño típico. Son los niveles donde el precio
+    // realmente puede frenar, porque hay que consumirlas para pasar.
+    const detectarMuros = (ordenes, lado) => {
+      const usds = ordenes.map(([p,q]) => p*q).filter(x=>x>0);
+      if(usds.length < 10) return [];
+      const media = usds.reduce((a,b)=>a+b,0)/usds.length;
+      const desv = Math.sqrt(usds.reduce((s,x)=>s+Math.pow(x-media,2),0)/usds.length);
+      if(desv <= 0) return [];
+      return ordenes
+        .map(([p,q]) => ({ precio:p, usd:p*q, z:((p*q)-media)/desv, lado,
+                           distPct: Math.abs(p-medio)/medio*100 }))
+        .filter(m => m.z >= 3 && m.usd >= 20000)   // 3 desviaciones y mínimo relevante
+        .sort((a,b) => b.usd - a.usd).slice(0, 3);
+    };
+    const muros = [...detectarMuros(bidsCerca, 'compra'), ...detectarMuros(asksCerca, 'venta')]
+      .sort((a,b) => a.distPct - b.distPct);
+
+    return {
+      fuente, precioMedio: medio,
+      spreadPct: +spreadPct.toFixed(4),
+      usdCompra: Math.round(usdCompra), usdVenta: Math.round(usdVenta),
+      desbalance: +desbalance.toFixed(3),
+      sesgo: desbalance > 0.2 ? 'COMPRADOR' : desbalance < -0.2 ? 'VENDEDOR' : 'EQUILIBRADO',
+      muros: muros.map(m => ({ ...m, precio:+m.precio.toFixed(8), usd:Math.round(m.usd), distPct:+m.distPct.toFixed(2) })),
+      // Un spread ancho avisa de un problema práctico: la orden se ejecuta peor de lo esperado
+      alertaSpread: spreadPct > 0.5 ? `Spread de ${spreadPct.toFixed(2)}%: el libro está fino, la orden se puede ejecutar bastante peor que el precio que ves.` : null,
+      resumen: (() => {
+        const p = [];
+        p.push(desbalance > 0.2
+          ? `Hay $${(usdCompra/1000).toFixed(0)}K de órdenes de compra contra $${(usdVenta/1000).toFixed(0)}K de venta cerca del precio: el libro pesa del lado comprador.`
+          : desbalance < -0.2
+          ? `Hay $${(usdVenta/1000).toFixed(0)}K de órdenes de venta contra $${(usdCompra/1000).toFixed(0)}K de compra cerca del precio: el libro pesa del lado vendedor.`
+          : `Las órdenes de compra y venta cerca del precio están parejas.`);
+        const primero = muros[0];
+        if(primero) p.push(`El muro más cercano es de ${primero.lado} en $${primero.precio}, a ${primero.distPct.toFixed(2)}%, con $${(primero.usd/1000).toFixed(0)}K: ahí el precio puede frenar.`);
+        return p.join(' ');
+      })(),
+      aclaracion: 'El libro es una foto del momento: las órdenes se pueden retirar en cualquier instante. Sirve para ver dónde hay peso ahora, no para dar por hecho que va a seguir ahí.',
+    };
+  }catch(e){ return null; }
+}
+
+// ═══ PRESIÓN DE FLUJO DE ÓRDENES ═══
+// Usa el volumen comprador/vendedor agresivo que viene en cada vela y hasta ahora se descartaba.
+// Es la versión medible de "quién está siendo más agresivo": el que compra al precio de venta
+// tiene más urgencia que el que espera en el libro.
+function calcularPresionFlujo(candles, velas = 24){
+  const v = (candles||[]).slice(-velas).filter(c => c.vc != null && c.v > 0);
+  if(v.length < 6) return null;
+
+  const totalComprador = v.reduce((s,c)=>s+c.vc, 0);
+  const totalVendedor = v.reduce((s,c)=>s+c.vv, 0);
+  const total = totalComprador + totalVendedor;
+  if(total <= 0) return null;
+  const pctComprador = totalComprador/total*100;
+
+  // La tendencia importa tanto como el nivel: comparar la última parte contra la primera
+  const mitad = Math.floor(v.length/2);
+  const pctDe = arr => { const a=arr.reduce((s,c)=>s+c.vc,0), b=arr.reduce((s,c)=>s+c.vv,0); return (a+b)>0 ? a/(a+b)*100 : 50; };
+  const primera = pctDe(v.slice(0, mitad)), ultima = pctDe(v.slice(mitad));
+  const cambio = ultima - primera;
+
+  const sesgo = pctComprador >= 57 ? 'COMPRADOR' : pctComprador <= 43 ? 'VENDEDOR' : 'EQUILIBRADO';
+  return {
+    pctComprador: +pctComprador.toFixed(1),
+    sesgo,
+    cambio: +cambio.toFixed(1),
+    tendencia: cambio > 6 ? 'los compradores vienen ganando terreno'
+             : cambio < -6 ? 'los vendedores vienen ganando terreno'
+             : 'sin cambio claro en las últimas velas',
+    velas: v.length,
+    resumen: `${pctComprador.toFixed(0)}% del volumen de las últimas ${v.length} velas fue de compradores agrediendo el libro${Math.abs(cambio)>6 ? ` — y ${cambio>0?'subiendo':'bajando'}` : ''}.`,
+    aclaracion: 'Mide quién ejecuta contra el libro (quien tiene urgencia), no las órdenes que esperan.',
   };
 }
 
@@ -4973,6 +5099,9 @@ function generarReporteResearch(closedTrades, opciones = {}){
   // Wallet Intelligence: ¿los flujos de wallets predicen algo? Es la pregunta que justifica
   // toda esta capa. Si con muestra suficiente no hay diferencia, no hay que darle peso al score.
   analizarPor(null, 'Wallets', t => t.registro?.wallets?.acompana ?? (t.registro?.wallets ? 'neutro' : null));
+  // Libro de órdenes y flujo real: ¿predicen algo o son ruido llamativo?
+  analizarPor(null, 'Libro de órdenes', t => t.registro?.libro?.sesgo ?? null);
+  analizarPor(null, 'Flujo de órdenes', t => t.registro?.flujoOrdenes?.sesgo ?? null);
   analizarPor(null, 'Flujo de exchange', t => {
     const w = t.registro?.wallets;
     if(!w || (w.entradaUsd == null && w.salidaUsd == null)) return null;
@@ -5255,7 +5384,7 @@ function computeFilterEffectiveness(closedTrades, expiredTheses){
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
-  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, fotoAntesDespues, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
+  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, fotoAntesDespues, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
