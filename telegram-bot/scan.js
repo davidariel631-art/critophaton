@@ -25,11 +25,12 @@
 
 import fs from 'fs';
 import webpush from 'web-push';
+import { analizarTransferencias, construirEvidenciaOnChain } from '../wallet-intelligence.js';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -1684,6 +1685,15 @@ async function confirmTheses(state, capitalFlow){
             const oc = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir);
             return oc ? { presion:oc.presion, direccion:oc.direccion, fuerza:oc.fuerza, acompana:oc.acompana } : null;
           }catch(e){ return null; } })(),
+          // Wallet Intelligence: evidencia para medir después si predice algo
+          wallets: await (async()=>{ try{
+            const tr = await fetchTransferenciasToken(data15.contract, data15.network, 24);
+            if(!tr?.length) return null;
+            const a = analizarTransferencias(tr.map(t=>({...t, valueUsd:t.cantidad*(data15.price||0)})), data15.network, { minUsd:5000 });
+            const ev = construirEvidenciaOnChain(a, thesis.dir);
+            return ev ? { direccion:ev.direccion, confianza:ev.confianza, acompana:ev.acompana,
+                          entradaUsd:ev.entradaUsd, salidaUsd:ev.salidaUsd, walletsNuevas:ev.walletsNuevas } : null;
+          }catch(e){ return null; } })(),
           actividadAnomala: (()=>{ try{
             const a = detectActividadAnomala(data15.candles, { funding: data15.funding!=null?data15.funding*100:null });
             return a?.hayAlgo ? { nivel:a.nivel, puntaje:a.puntaje, tipos:a.señales.map(s=>s.tipo) } : null;
@@ -1780,6 +1790,25 @@ async function confirmTheses(state, capitalFlow){
         });
         if(anomalo?.hayAlgo){
           relato.push(`${anomalo.nivel==='MUY ALTA'?'🚨':'⚠️'} <b>Actividad inusual (${anomalo.nivel.toLowerCase()})</b>: ${anomalo.detalle}`);
+        }
+
+        // ═══ WALLET INTELLIGENCE ═══
+        // Mira las transferencias individuales del token: quién manda a dónde, si es un depósito
+        // real a un exchange o plata moviéndose dentro del mismo exchange (que no cuenta).
+        // Solo funciona si hay clave de Alchemy configurada; si no, esta parte se saltea sola.
+        const wallets = await (async()=>{
+          try{
+            const transfers = await fetchTransferenciasToken(data15.contract, data15.network, 24);
+            if(!transfers?.length) return null;
+            // Las cantidades vienen en tokens: se pasan a dólares con el precio actual
+            const conUsd = transfers.map(t => ({ ...t, valueUsd: t.cantidad * (data15.price||0) }));
+            const analisis = analizarTransferencias(conUsd, data15.network, { minUsd: 5000 });
+            return construirEvidenciaOnChain(analisis, thesis.dir);
+          }catch(e){ return null; }
+        })();
+        if(wallets){
+          const ic = wallets.acompana === 'acompaña' ? '🟢' : wallets.acompana === 'contradice' ? '🔴' : '⚪';
+          relato.push(`${ic} <b>Wallets</b>: ${wallets.resumen} ${wallets.razones.slice(0,3).join(' · ')}.`);
         }
 
         // Presión on-chain: qué está pasando en los pools de DEX de verdad
