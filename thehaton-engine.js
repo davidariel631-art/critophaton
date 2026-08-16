@@ -3472,6 +3472,7 @@ function expectancyPorEstrategia(closedTrades, minMuestra = 10){
     ...agrupar('On-chain', t => t.registro?.onChain?.acompana ?? null),
     ...agrupar('Actividad anómala', t => t.registro?.actividadAnomala?.nivel ?? null),
     ...agrupar('Estado de la cuenta', t => t.abiertaEnDrawdownAlto == null ? null : (t.abiertaEnDrawdownAlto ? 'drawdown alto' : 'cuenta sana')),
+    ...agrupar('Wallets', t => t.registro?.wallets?.acompana ?? null),
   ].sort((a,b)=> b.expectancy - a.expectancy);
 
   const positivas = ranking.filter(x=>x.expectancy >= 0.1 && x.confianza !== 'baja');
@@ -4070,6 +4071,42 @@ function verificarDatosSanos(data, opciones = {}){
       ? `🛑 NO OPERAR — protección del motor: ${problemas.join(' ')}`
       : null,
   };
+}
+
+// ═══ WALLET INTELLIGENCE: TRAER LAS TRANSFERENCIAS ═══
+// Este es el único punto que habla con una API externa. Toda la inteligencia —clasificar
+// wallets, detectar depósitos, descartar movimientos internos— está en wallet-intelligence.js,
+// que no depende de ninguna fuente en particular.
+//
+// NECESITA UNA CLAVE DE ALCHEMY (gratis, 30M unidades al mes). Se guarda como secreto de
+// GitHub Actions igual que TELEGRAM_BOT_TOKEN. Sin clave, esta función devuelve null y el bot
+// sigue funcionando exactamente como antes, sin esta capa.
+const ALCHEMY_KEY = (typeof process !== 'undefined' && process.env?.ALCHEMY_API_KEY) || null;
+const ALCHEMY_REDES = { ethereum:'eth-mainnet', bsc:'bnb-mainnet', base:'base-mainnet', arbitrum:'arb-mainnet', polygon:'polygon-mainnet' };
+
+async function fetchTransferenciasToken(contrato, red, horas = 24){
+  if(!ALCHEMY_KEY || !contrato) return null;
+  const subdominio = ALCHEMY_REDES[red];
+  if(!subdominio) return null;   // red no soportada: mejor null que datos a medias
+  try{
+    const url = `https://${subdominio}.g.alchemy.com/v2/${ALCHEMY_KEY}`;
+    const cuerpo = {
+      jsonrpc:'2.0', id:1, method:'alchemy_getAssetTransfers',
+      params:[{ contractAddresses:[contrato], category:['erc20'], withMetadata:true,
+                excludeZeroValue:true, maxCount:'0x64', order:'desc' }],
+    };
+    const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cuerpo) });
+    if(!res.ok) return null;
+    const j = await res.json();
+    const transfers = j?.result?.transfers;
+    if(!Array.isArray(transfers)) return null;
+
+    const desde = Date.now() - horas*3600e3;
+    return transfers.map(t => {
+      const ts = t.metadata?.blockTimestamp ? new Date(t.metadata.blockTimestamp).getTime() : null;
+      return { from:t.from, to:t.to, hash:t.hash, ts, cantidad:Number(t.value)||0 };
+    }).filter(t => !t.ts || t.ts >= desde);
+  }catch(e){ return null; }
 }
 
 // ═══ PRESIÓN ON-CHAIN / SMART MONEY ═══
@@ -4933,6 +4970,15 @@ function generarReporteResearch(closedTrades, opciones = {}){
   // ¿El motor rinde distinto cuando la cuenta ya viene golpeada? Puede pasar por dos motivos:
   // el riesgo se reduce automáticamente en drawdown, o las condiciones de mercado que causaron
   // el drawdown siguen presentes. Vale la pena poder separarlo.
+  // Wallet Intelligence: ¿los flujos de wallets predicen algo? Es la pregunta que justifica
+  // toda esta capa. Si con muestra suficiente no hay diferencia, no hay que darle peso al score.
+  analizarPor(null, 'Wallets', t => t.registro?.wallets?.acompana ?? (t.registro?.wallets ? 'neutro' : null));
+  analizarPor(null, 'Flujo de exchange', t => {
+    const w = t.registro?.wallets;
+    if(!w || (w.entradaUsd == null && w.salidaUsd == null)) return null;
+    const neto = (w.salidaUsd||0) - (w.entradaUsd||0);
+    return neto > 50000 ? 'salidas dominan (acumulación)' : neto < -50000 ? 'entradas dominan (distribución)' : 'equilibrado';
+  });
   analizarPor(null, 'Estado de la cuenta', t => t.abiertaEnDrawdownAlto == null ? null
     : (t.abiertaEnDrawdownAlto ? 'abierta en drawdown alto' : 'cuenta sana'));
 
@@ -5209,7 +5255,7 @@ function computeFilterEffectiveness(closedTrades, expiredTheses){
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
-  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, fetchOnChainPressure, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, fotoAntesDespues, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
+  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, fotoAntesDespues, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
