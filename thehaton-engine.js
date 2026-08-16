@@ -2955,7 +2955,10 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     // Con dos objetivos, TP2 es el final: se acerca de 1.6R a 1.8R para que sea alcanzable.
     // Los datos reales mostraron que casi ninguna operación pasaba de 1R, así que un objetivo
     // final muy lejos equivale a cerrar siempre en breakeven.
-    if(esCapChico){ t1=price+R*1.0; t2=price+R*1.8; t3=Math.max(resistance, price+R*2.5); }
+    // TP1 a 1.15R, no a 1.0R. Motivo: el filtro exige un R:R mínimo de 1:1, así que con TP1
+    // exactamente en 1.0R los setups quedaban clavados en el borde — 11 de 13 en una prueba.
+    // Cualquier ajuste hacia abajo por un nivel real los tiraba abajo. Con 1.15R hay margen.
+    if(esCapChico){ t1=price+R*1.15; t2=price+R*1.8; t3=Math.max(resistance, price+R*2.5); }
     else { t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5); }
     // Los TP también buscan liquidez real, no solo un múltiplo matemático — si hay una zona de
     // liquidez real (POC) en el camino hacia arriba, a una distancia sensata, el objetivo más cercano
@@ -3011,7 +3014,7 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
       }
     }
     const R = stop-price;
-    if(esCapChico){ t1=price-R*1.0; t2=price-R*1.8; t3=Math.min(support, price-R*2.5); }
+    if(esCapChico){ t1=price-R*1.15; t2=price-R*1.8; t3=Math.min(support, price-R*2.5); }
     else { t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5); }
     // Mismo criterio que en LONG, mirado hacia abajo: si hay una zona real de liquidez a distancia
     // sensata, el objetivo más cercano se ajusta para apuntar ahí en vez de un múltiplo matemático.
@@ -3072,7 +3075,7 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
         // Mínimos alineados con lo que después exige el bot para confirmar (1.0R en TP1).
         // Antes acá se usaba 0,9R y el bot rechazaba con 1,0 — el ajuste podía crear un TP que
         // después tumbaba la operación entera.
-        t1 = ajustar(t1, 1.0);
+        t1 = ajustar(t1, 1.1);   // margen sobre el filtro de 1:1
         t2 = ajustar(t2, 1.5);
         t3 = ajustar(t3, 2.2);
 
