@@ -40,6 +40,7 @@ const DEX_NETWORKS = ['solana','base','eth'];
 const STATE_FILE = 'telegram-bot/state.json';
 const MAX_TRADES_PER_DAY = 4;
 const KILL_SWITCH_DRAWDOWN = 0.30; // si el drawdown supera esto, se pausa la apertura de operaciones nuevas hasta revisión manual
+
 const WORK_HOUR_START = 4;
 const WORK_HOUR_END = 15;
 const RISK_PCT = 0.02; // subido de 1% a 2% — probado con backtest real: sube la ganancia proporcional, sube también el drawdown máximo (hasta 23% en los peores casos probados). David lo eligió sabiendo ese trade-off.
@@ -518,6 +519,63 @@ function loadState(){
 }
 function saveState(state){
   fs.mkdirSync('telegram-bot', {recursive:true});
+  // ═══ ARCHIVO PERMANENTE POR MES ═══
+  // Nada se borra nunca. Pero tampoco se guarda todo en un solo archivo, porque state.json se lee
+  // y se reescribe COMPLETO en cada corrida (cada 30 min). Con 5 años de historia adentro, cada
+  // corrida movería 16 MB para agregar una línea, y el commit a GitHub se volvería lentísimo.
+  //
+  // La solución: el historial viejo se mueve a telegram-bot/historial/YYYY-MM.json, que se escribe
+  // una vez y no se vuelve a tocar. state.json queda liviano con lo que está activo.
+  // Para leer el historial completo se juntan todos los archivos de la carpeta.
+  try{
+    const dirHistorial = 'telegram-bot/historial';
+    if(!fs.existsSync(dirHistorial)) fs.mkdirSync(dirHistorial, { recursive:true });
+    const mesDe = ts => { const d = new Date(ts||Date.now()); return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}`; };
+    const mesActual = mesDe(Date.now());
+
+    // Se archiva todo lo que sea de un mes ANTERIOR al actual. Lo del mes en curso se queda en
+    // state.json hasta que el mes termine, para no reescribir el archivo del mes constantemente.
+    const porArchivar = {};
+    const guardarEn = (mes, clave, items) => {
+      if(!items?.length) return;
+      porArchivar[mes] = porArchivar[mes] || {};
+      porArchivar[mes][clave] = (porArchivar[mes][clave]||[]).concat(items);
+    };
+
+    const acc2 = state.account || {};
+    const viejasCerradas = (acc2.closedTrades||[]).filter(t => t.closedAt && mesDe(t.closedAt) !== mesActual);
+    const viejasExpiradas = (acc2.expiredTheses||[]).filter(t => t.expiredAt && mesDe(t.expiredAt) !== mesActual);
+    const viejasSombra = (state.shadowSignals||[]).filter(s => s.detectadaEn && mesDe(s.detectadaEn) !== mesActual);
+    const viejoDrawdown = (state.historialDrawdown||[]).filter(d => d.ts && mesDe(d.ts) !== mesActual);
+
+    for(const t of viejasCerradas) guardarEn(mesDe(t.closedAt), 'closedTrades', [t]);
+    for(const t of viejasExpiradas) guardarEn(mesDe(t.expiredAt), 'expiredTheses', [t]);
+    for(const s of viejasSombra) guardarEn(mesDe(s.detectadaEn), 'shadowSignals', [s]);
+    for(const d of viejoDrawdown) guardarEn(mesDe(d.ts), 'historialDrawdown', [d]);
+
+    for(const [mes, datos] of Object.entries(porArchivar)){
+      const ruta = `${dirHistorial}/${mes}.json`;
+      let previo = { closedTrades:[], expiredTheses:[], shadowSignals:[], historialDrawdown:[] };
+      try{ if(fs.existsSync(ruta)) previo = JSON.parse(fs.readFileSync(ruta,'utf8')); }catch(e){}
+      for(const clave of Object.keys(datos)){
+        previo[clave] = (previo[clave]||[]).concat(datos[clave]);
+      }
+      previo.mes = mes;
+      previo.actualizadoEn = new Date().toISOString();
+      fs.writeFileSync(ruta, JSON.stringify(previo, null, 2));
+      console.log(`  📁 Archivado en ${ruta}: ${Object.entries(datos).map(([k,v])=>`${v.length} ${k}`).join(', ')}`);
+    }
+
+    // Lo archivado se saca de state.json — pero NO se pierde, quedó en el archivo del mes
+    if(viejasCerradas.length) acc2.closedTrades = (acc2.closedTrades||[]).filter(t => !t.closedAt || mesDe(t.closedAt) === mesActual);
+    if(viejasExpiradas.length) acc2.expiredTheses = (acc2.expiredTheses||[]).filter(t => !t.expiredAt || mesDe(t.expiredAt) === mesActual);
+    if(viejasSombra.length) state.shadowSignals = (state.shadowSignals||[]).filter(s => !s.detectadaEn || mesDe(s.detectadaEn) === mesActual);
+    if(viejoDrawdown.length) state.historialDrawdown = (state.historialDrawdown||[]).filter(d => !d.ts || mesDe(d.ts) === mesActual);
+
+    // Índice de todos los meses archivados, para que la web sepa qué hay sin recorrer la carpeta
+    state.mesesArchivados = fs.readdirSync(dirHistorial).filter(x=>x.endsWith('.json')).map(x=>x.replace('.json','')).sort();
+  }catch(e){ console.error('Error archivando historial (no se pierde nada, se reintenta la próxima):', e.message); }
+
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 function updateSharedMemory(state, displayName, recommendation){
@@ -685,19 +743,39 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
   const acc = state.account;
   if(acc.peakCapital==null) acc.peakCapital = acc.capital;
   const drawdownNow = acc.peakCapital>0 ? (acc.peakCapital-acc.capital)/acc.peakCapital : 0;
-  if(drawdownNow >= KILL_SWITCH_DRAWDOWN){
+  // ═══ DRAWDOWN ALTO: AVISA Y REGISTRA, PERO NO FRENA ═══
+  // Antes esto hacía `return` y dejaba de abrir operaciones hasta que alguien lo reactivara a mano.
+  // Ahora sigue operando: si la cuenta llega a cero, el sistema archiva el historial y abre una
+  // cuenta nueva de 100 USDT solo — que es lo que ya hacía cuando el capital se agotaba.
+  //
+  // Lo importante es que TODO queda registrado: cada operación abierta en zona de drawdown alto
+  // se marca, así el Research Center puede después separar "cómo rindió el motor en condiciones
+  // normales" de "cómo rindió cuando la cuenta ya venía golpeada".
+  const enDrawdownAlto = drawdownNow >= KILL_SWITCH_DRAWDOWN;
+  if(enDrawdownAlto){
     const todayKey2 = todayKey();
+    // El registro se guarda siempre, aunque el aviso se mande una vez por día
+    state.historialDrawdown = state.historialDrawdown || [];
+    state.historialDrawdown.push({
+      ts: Date.now(), cuenta: acc.id,
+      capital: acc.capital, pico: acc.peakCapital,
+      drawdownPct: +(drawdownNow*100).toFixed(2),
+      operacionesCerradas: acc.closedTrades?.length || 0,
+      tesisAbiertas: acc.theses?.length || 0,
+    });
+    // Sin recorte: el historial del mes en curso se archiva completo al cambiar de mes.
+
     if(state.killSwitchNotifiedDate !== todayKey2){
       sendPromises.push(sendTelegram(
-        `🛑 <b>KILL SWITCH activado — TheHaton (cuenta #${acc.id})</b>\n\n` +
-        `Drawdown actual: ${(drawdownNow*100).toFixed(1)}% (límite: ${(KILL_SWITCH_DRAWDOWN*100).toFixed(0)}%).\n` +
-        `Se pausa la apertura de operaciones NUEVAS hasta revisión manual. Las tesis y operaciones ya abiertas se siguen gestionando normalmente (TP/SL/breakeven).\n\n` +
-        `Para reactivar: revisá qué está fallando (motor, condiciones de mercado) y reiniciá manualmente el capital o ajustá KILL_SWITCH_DRAWDOWN en el código si corresponde.`
+        `⚠️ <b>Drawdown alto — TheHaton (cuenta #${acc.id})</b>\n\n` +
+        `Drawdown actual: ${(drawdownNow*100).toFixed(1)}% (aviso a partir de ${(KILL_SWITCH_DRAWDOWN*100).toFixed(0)}%).\n` +
+        `Capital: ${acc.capital.toFixed(2)} USDT · pico: ${acc.peakCapital.toFixed(2)} USDT\n\n` +
+        `El bot <b>sigue operando</b>. Todas las operaciones que se abran a partir de acá quedan marcadas como "abiertas en drawdown alto", para poder analizarlas por separado después.\n\n` +
+        `Si la cuenta llega a cero, se archiva el historial y se abre una cuenta nueva de 100 USDT automáticamente.`
       ));
       state.killSwitchNotifiedDate = todayKey2;
     }
-    console.log(`🛑 Kill switch activo (drawdown ${(drawdownNow*100).toFixed(1)}%) — no se abren tesis nuevas esta corrida.`);
-    return;
+    console.log(`⚠️ Drawdown alto (${(drawdownNow*100).toFixed(1)}%) — se sigue operando, todo queda registrado.`);
   }
   for(const {symbol, tag} of candidates){
     if(acc.theses.find(t=>t.symbol===symbol)) continue; // ya hay una tesis abierta para esa moneda
@@ -736,7 +814,7 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
             evaluada: false, resultado: null,
           });
           // Se guardan las últimas 200 para no inflar el archivo de estado
-          if(state.shadowSignals.length > 200) state.shadowSignals = state.shadowSignals.slice(-200);
+          // Sin recorte: las señales sombra del mes se archivan completas al cambiar de mes.
           console.log(`  ${symbol}: señal sombra registrada (${best.toFixed(2)}, le faltaban ${(THRESHOLD-best).toFixed(2)} puntos).`);
         }catch(e){ /* si falla, no se interrumpe el escaneo */ }
       }
@@ -784,6 +862,10 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
       };
       journal(thesis, `Tesis detectada en 4h: ${result.recommendation} (score ${best.toFixed(1)}/10, confianza ${result.confidence}%). ${analystSummary(result)} Bajando a 15m a buscar confirmación de entrada.`);
         hito(thesis, '🔭 Detectada', `score ${best.toFixed(1)}/10 en 4h`);
+        // Se marca si la cuenta venía en drawdown alto: permite separar después el rendimiento
+        // del motor en condiciones normales del rendimiento con la cuenta ya golpeada.
+        thesis.abiertaEnDrawdownAlto = enDrawdownAlto;
+        thesis.drawdownAlDetectar = +(drawdownNow*100).toFixed(2);
         thesis.score4h = +best.toFixed(1);
       acc.theses.push(thesis);
 
@@ -814,7 +896,7 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
         `Entrada: <code>$${result.metrics.price.toFixed(6)}</code>\n` +
         `Stop: <code>$${theoSetup.stop.toFixed(6)}</code> (${pctR(theoSetup.stop).toFixed(2)}%)\n` +
         `TP1: <code>$${theoSetup.t1.toFixed(6)}</code> (${pctR(theoSetup.t1)>=0?'+':''}${pctR(theoSetup.t1).toFixed(2)}%)\n` +
-        `TP2: <code>$${theoSetup.t2.toFixed(6)}</code> (${pctR(theoSetup.t2)>=0?'+':''}${pctR(theoSetup.t2).toFixed(2)}%)\n\n` +
+        `TP2 (cierre): <code>$${theoSetup.t2.toFixed(6)}</code> (${pctR(theoSetup.t2)>=0?'+':''}${pctR(theoSetup.t2).toFixed(2)}%)\n\n` +
 
         (lecturaLiqRadar ? `${DIVR}\n${lecturaLiqRadar.texto}\n\n` : '') +
 
@@ -1617,6 +1699,17 @@ async function confirmTheses(state, capitalFlow){
         hito(thesis, '🚀 Entrada', `$${entryPrice.toFixed(6)}`);
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.tp3 = setup.t3; thesis.units = units; thesis.originalUnits = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
+        // ═══ ESTADO ORIGINAL — NUNCA CAMBIA ═══
+        // thesis.stop es MUTABLE: pasa a breakeven cuando se alcanza TP1. Por eso hace falta
+        // guardar aparte el stop original y el riesgo original.
+        // Sin esto, al auditar una operación cerrada se comparaba el mínimo de TODA la operación
+        // contra el stop FINAL (el breakeven), y un retroceso anterior a TP1 aparecía como
+        // "tocó el breakeven" aunque en ese momento el stop estuviera mucho más abajo.
+        thesis.originalStop = setup.stop;
+        thesis.originalRisk = Math.abs(entryPrice - setup.stop);
+        thesis.entryAt = Date.now();
+        // Historial de stops: cada tramo con el stop que estaba REALMENTE activo en ese momento
+        thesis.stopHistory = [{ tipo:'ORIGINAL', precio:setup.stop, desde:Date.now(), hasta:null }];
         // Tipo de setup y hora del día, para poder desglosar estadísticas después (win rate por
         // tipo de setup, por moneda, por horario) — se guarda acá y viaja solo a closedTrades
         // porque los cierres usan {...thesis}.
@@ -1837,9 +1930,9 @@ async function confirmTheses(state, capitalFlow){
           `Stop: <code>$${setup.stop.toFixed(6)}</code> (${pct(setup.stop).toFixed(2)}%)\n` +
           `TP1: <code>$${setup.t1.toFixed(6)}</code> (${pct(setup.t1)>=0?'+':''}${pct(setup.t1).toFixed(2)}%) · R:R ${rrTp1}\n` +
           `TP2: <code>$${setup.t2.toFixed(6)}</code> (${pct(setup.t2)>=0?'+':''}${pct(setup.t2).toFixed(2)}%) · R:R ${rrTp2}\n` +
-          `TP3: <code>$${setup.t3.toFixed(6)}</code> (${pct(setup.t3)>=0?'+':''}${pct(setup.t3).toFixed(2)}%) · R:R ${rrTp3}\n\n` +
+
           `Riesgo: ${(riskPct*100).toFixed(1)}% del capital · Apalancamiento ${setup.leverage}\n` +
-          `Gestión: 50% en TP1 + stop a break even\n\n` +
+          `Gestión: 60% en TP1 (stop pasa al punto de entrada) + 40% hasta TP2\n\n` +
 
           (lecturaLiq ? `${DIV}\n${lecturaLiq.texto}\n\n` : '') +
 
@@ -2159,24 +2252,39 @@ async function manageActiveTheses(state){
       }
 
       if(hitTP1){
-        // 40% en TP1 (no 50% como antes) — deja más corriendo para TP2 y TP3, que ahora sí se usan.
-        const exitUnits = thesis.originalUnits*0.4;
+        // 60% en TP1. Antes era 40%, pero los datos reales mostraron que el resto casi siempre
+        // muere en breakeven: de cuatro ganadoras seguidas, las cuatro cerraron el sobrante en
+        // cero y ninguna llegó a TP2. Tomando 60% se captura 0.6R en vez de 0.4R por acierto.
+        const exitUnits = thesis.originalUnits*0.6;
         const pnl = exitUnits * (thesis.tp1-thesis.entry) * (thesis.dir==='LONG'?1:-1);
         acc.capital = +(acc.capital+pnl).toFixed(4);
         thesis.units = thesis.units - exitUnits; // queda el 60% corriendo
         thesis.partialTaken = true;
         thesis.stop = thesis.entry; // mueve el stop al punto de entrada (breakeven)
+        // ═══ MOMENTO EXACTO EN QUE SE ACTIVÓ EL BREAKEVEN ═══
+        // Desde acá empieza a vigilarse el breakeven. Los precios ANTERIORES a este instante
+        // no cuentan: en ese momento el stop era el original, mucho más lejos.
+        // Este es el arreglo del caso PROM/GPS: un retroceso previo a TP1 se leía como
+        // "volvió a breakeven" y cerraba el 60% restante sin motivo.
+        thesis.tp1HitAt = Date.now();
         thesis.breakEvenActivatedAt = Date.now();
-        journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 40% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 60% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}) y TP3 ($${thesis.tp3?.toFixed?.(6)??'—'}).`);
+        if(thesis.stopHistory?.length) thesis.stopHistory.at(-1).hasta = Date.now();
+        else thesis.stopHistory = [];
+        thesis.stopHistory.push({ tipo:'BREAKEVEN', precio:thesis.entry, desde:Date.now(), hasta:null });
+        // La auditoría del tramo posterior arranca limpia: no hereda el mínimo de antes de TP1
+        thesis.auditoria = thesis.auditoria || {};
+        thesis.auditoria.minDesdeBE = null;
+        thesis.auditoria.maxDesdeBE = null;
+        journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 60% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 40% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}), con el stop ya en el punto de entrada.`);
         thesis.partialPnl = pnl;
         sendPromises.push(sendTelegram(
           (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
-          `💰 <b>TheHaton tomó 40% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+          `💰 <b>TheHaton tomó 60% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
           `TP1 alcanzado: $${thesis.tp1.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
           `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el resto ya no puede terminar en pérdida.\n` +
-          `El 60% restante sigue corriendo hacia TP2 (40%) y TP3 (20%).\nCapital: ${acc.capital.toFixed(2)} USDT`
+          `El 40% restante sigue corriendo hacia TP2.\nCapital: ${acc.capital.toFixed(2)} USDT`
         ));
-        hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 40% y el stop pasó a breakeven');
+        hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 60% y el stop pasó a breakeven');
         sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`, null, 'gestion', thesis.symbol));
         stillOpen.push(thesis);
       } else if(hitSL){
@@ -2197,107 +2305,100 @@ async function manageActiveTheses(state){
       continue;
     }
 
-    // Etapa 2: ya tomó el 40% en TP1 -> vigila TP2 (otro 40%) o vuelta a breakeven (con el rango real)
-    if(!thesis.secondPartialTaken){
-  let hitTP2=false, hitBE=false;
+    // ═══ ETAPA 2: el 40% restante corre hacia TP2, o vuelve a breakeven ═══
+    // Solo hay DOS objetivos: TP1 (60%) y TP2 (40% restante). TP3 se eliminó porque los datos
+    // reales mostraron que casi nunca se alcanzaba: de las ganadoras registradas, ninguna pasó
+    // de TP1 y el sobrante terminaba siempre en breakeven.
+    //
+    // ═══ EL ARREGLO DEL CASO PROM ═══
+    // El breakeven se vigila con un rango que EMPIEZA cuando se activó, no desde la entrada.
+    // Antes se comparaba el mínimo de toda la operación contra el stop actual (el breakeven),
+    // así que un retroceso ANTERIOR a TP1 —cuando el stop todavía era el original, mucho más
+    // abajo— se leía como "volvió a breakeven" y cerraba la posición sin motivo.
+    const beRange = thesis.breakEvenActivatedAt
+      ? await fetchPriceRange(thesis.symbol, thesis.breakEvenActivatedAt, thesis.breakEvenActivatedAt)
+      : null;
 
-  // Después de TP1, el BE solo puede activarse por precio ocurrido
-  // DESPUÉS de que TP1 fue registrado. Nunca usar el rango histórico
-  // anterior a la activación del breakeven.
-  const beSinceTs = thesis.breakevenActivatedAt || thesis.lastCheckedAt || thesis.confirmedAt;
+    // Auditoría del tramo posterior al breakeven, separada de la del tramo inicial
+    if(beRange && thesis.auditoria){
+      const a = thesis.auditoria;
+      a.minDesdeBE = a.minDesdeBE == null ? beRange.low : Math.min(a.minDesdeBE, beRange.low);
+      a.maxDesdeBE = a.maxDesdeBE == null ? beRange.high : Math.max(a.maxDesdeBE, beRange.high);
+    }
 
-  const beRange = await fetchPriceRange(
-    thesis.symbol,
-    beSinceTs,
-    thesis.confirmedAt
-  );
+    let hitTP2 = false, hitBE = false;
+    if(thesis.dir === 'LONG'){
+      // El breakeven solo cuenta con precios POSTERIORES a su activación
+      if(beRange && beRange.low <= thesis.stop) hitBE = true;
+      else if(range.high >= thesis.tp2) hitTP2 = true;
+    } else {
+      if(beRange && beRange.high >= thesis.stop) hitBE = true;
+      else if(range.low <= thesis.tp2) hitTP2 = true;
+    }
 
-  if(thesis.dir==='LONG'){
-    if(beRange && beRange.low <= thesis.stop) hitBE=true;
-    else if(range.high >= thesis.tp2) hitTP2=true;
-  } else {
-    if(beRange && beRange.high >= thesis.stop) hitBE=true;
-    else if(range.low <= thesis.tp2) hitTP2=true;
-  }
-      if(hitBE){
-        // Sin tp3 (tesis viejas migradas) o sin TP2 tocado -> se cierra todo el resto acá, como antes.
-        const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
-        acc.capital = +(acc.capital+pnl).toFixed(4);
-        const totalPnl = (thesis.partialPnl||0) + pnl;
-        journal(thesis, `Volvió a breakeven: se cierra el resto (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
-        cerrarOperacion(acc, thesis, thesis.stop, totalPnl, 'stop tras toma parcial', sendPromises);
-        sendPromises.push(sendTelegram(
-          (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
-          `⚖️ <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
-          `Volvió al punto de entrada (breakeven en lo que quedaba)\n` +
-          `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
-        ));
-        sendPromises.push(sendPushToAll(`⚖️ Breakeven: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
-        continue;
-      }
-      if(hitTP2 && thesis.tp3!=null){
-        // Con TP3 disponible: 40% más acá, queda 20% corriendo hacia TP3.
-        const exitUnits = thesis.originalUnits*0.4;
-        const pnl = exitUnits * (thesis.tp2-thesis.entry) * (thesis.dir==='LONG'?1:-1);
-        acc.capital = +(acc.capital+pnl).toFixed(4);
-        thesis.units = thesis.units - exitUnits;
-        thesis.secondPartialTaken = true;
-        thesis.partialPnl = (thesis.partialPnl||0) + pnl;
-        journal(thesis, `TP2 alcanzado ($${thesis.tp2.toFixed(6)}). Se tomó otro 40% (+${pnl.toFixed(2)} USDT). El 20% final sigue corriendo hacia TP3 ($${thesis.tp3.toFixed(6)}).`);
-        sendPromises.push(sendTelegram(
-          `💰 <b>TheHaton tomó otro 40% — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
-          `TP2 alcanzado: $${thesis.tp2.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
-          `El 20% final sigue corriendo hacia TP3 ($${thesis.tp3.toFixed(6)}).\nCapital: ${acc.capital.toFixed(2)} USDT`
-        ));
-        sendPromises.push(sendPushToAll(`💰 TP2 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · 20% corriendo a TP3`, null, 'gestion', thesis.symbol));
-        stillOpen.push(thesis);
-        continue;
-      }
-      if(hitTP2){
-        // Sin tp3 (tesis vieja migrada) -> se cierra todo acá, como en el esquema de 2 tramos de antes.
-        const pnl = thesis.units * (thesis.tp2-thesis.entry) * (thesis.dir==='LONG'?1:-1);
-        acc.capital = +(acc.capital+pnl).toFixed(4);
-        const totalPnl = (thesis.partialPnl||0) + pnl;
-        journal(thesis, `TP2 alcanzado: se cierra el resto (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
-        cerrarOperacion(acc, thesis, thesis.tp2, totalPnl, 'TP2', sendPromises);
-        sendPromises.push(sendTelegram(
-          `🚀 <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\nTP2 alcanzado ✅\nResultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
-        ));
-        sendPromises.push(sendPushToAll(`🚀 TP2 (cierre total): ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
-        continue;
-      }
+    // Si no hay rango posterior al breakeven todavía, no se puede afirmar que volvió: se espera.
+    if(!beRange && thesis.breakEvenActivatedAt){
+      journal(thesis, 'Todavía no hay velas posteriores a la activación del breakeven: no se puede verificar si volvió al punto de entrada. Se espera a la próxima corrida.');
       stillOpen.push(thesis);
       continue;
     }
 
-    // Etapa 3: ya tomó 40%+40% -> el 20% final corre hacia TP3, o vuelve a breakeven.
-    let hitTP3=false, hitBE3=false;
-    if(thesis.dir==='LONG'){ if(range.low<=thesis.stop) hitBE3=true; else if(range.high>=thesis.tp3) hitTP3=true; }
-    else { if(range.high>=thesis.stop) hitBE3=true; else if(range.low<=thesis.tp3) hitTP3=true; }
-
-    if(hitTP3 || hitBE3){
-      const exit = hitTP3 ? thesis.tp3 : thesis.stop;
-      const pnl = thesis.units * (exit-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+    if(hitTP2){
+      const pnl = thesis.units * (thesis.tp2-thesis.entry) * (thesis.dir==='LONG'?1:-1);
       acc.capital = +(acc.capital+pnl).toFixed(4);
       const totalPnl = (thesis.partialPnl||0) + pnl;
-      journal(thesis, `${hitTP3?'TP3 alcanzado (objetivo final)':'Volvió a breakeven'}: se cierra el 20% final (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
-      cerrarOperacion(acc, thesis, exit, totalPnl, 'TP final', sendPromises);
+      thesis.tp2HitAt = Date.now();
+      journal(thesis, `TP2 alcanzado ($${thesis.tp2.toFixed(6)}): se cierra el 40% final (+${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
+      hito(thesis, '🎯 TP2 alcanzado', `cierre completo · ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`);
+      cerrarOperacion(acc, thesis, thesis.tp2, totalPnl, 'TP2', sendPromises);
       sendPromises.push(sendTelegram(
         (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
-        `${hitTP3?'🎯':'⚖️'} <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
-        `${hitTP3?'TP3 alcanzado ✅ (objetivo final)':'Volvió al punto de entrada (breakeven en el tramo final)'}\n` +
+        `🎯 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir} en TP2</b>\n` +
+        `TP2 alcanzado: $${thesis.tp2.toFixed(6)} ✅\n` +
         `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
       ));
-      sendPromises.push(sendPushToAll(`${hitTP3?'🎯':'⚖️'} Cierre final: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
-    } else {
-      stillOpen.push(thesis);
+      sendPromises.push(sendPushToAll(`🎯 TP2 alcanzado: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
+      continue;
     }
+
+    if(hitBE){
+      const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+      acc.capital = +(acc.capital+pnl).toFixed(4);
+      const totalPnl = (thesis.partialPnl||0) + pnl;
+      journal(thesis, `Volvió al punto de entrada después de TP1: se cierra el 40% final (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT). Resultado total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
+      hito(thesis, '⚖️ Cerrada en breakeven', `${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`);
+      cerrarOperacion(acc, thesis, thesis.stop, totalPnl, 'breakeven tras TP1', sendPromises);
+      sendPromises.push(sendTelegram(
+        (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
+        `⚖️ <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+        `El precio volvió al punto de entrada después de haber tomado ganancia en TP1.\n` +
+        `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
+      ));
+      sendPromises.push(sendPushToAll(`⚖️ Breakeven: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
+      continue;
+    }
+
+    stillOpen.push(thesis);
+    continue;
+
   }
   acc.theses = stillOpen;
 
   if(acc.capital <= 0){
-    sendPromises.push(sendTelegram(`💀 <b>TheHaton agotó la cuenta #${acc.id}</b>\nAbriendo cuenta nueva de 100 USDT. El historial anterior queda archivado para siempre.`));
-    state.accountHistory.push({id:acc.id, finalCapital:acc.capital, closedTrades:acc.closedTrades, expiredTheses:acc.expiredTheses, closedAt:Date.now()});
+    const cerradasPrev = acc.closedTrades?.length || 0;
+    const ganadorasPrev = (acc.closedTrades||[]).filter(t=>(t.pnlUsd??0)>0).length;
+    sendPromises.push(sendTelegram(
+      `💀 <b>TheHaton agotó la cuenta #${acc.id}</b>\n\n` +
+      `Resumen de la cuenta que cierra:\n` +
+      `· ${cerradasPrev} operaciones registradas (${ganadorasPrev} ganadoras, ${cerradasPrev-ganadorasPrev} perdedoras)\n` +
+      `· ${acc.expiredTheses?.length || 0} tesis expiraron sin confirmar\n\n` +
+      `Se abre la cuenta #${acc.id+1} con 100 USDT. El historial completo queda archivado y se puede seguir analizando en el panel Intelligence.`
+    ));
+    state.accountHistory.push({ id:acc.id, finalCapital:acc.capital, closedTrades:acc.closedTrades,
+      expiredTheses:acc.expiredTheses, closedAt:Date.now(),
+      // Se guarda también cómo evolucionó el drawdown de esta cuenta
+      historialDrawdown: state.historialDrawdown || [], picoCapital: acc.peakCapital });
+    state.historialDrawdown = [];   // la cuenta nueva arranca con su propio registro
     state.account = { id:acc.id+1, capital:100, initialCapital:100, peakCapital:100, theses:[], closedTrades:[], expiredTheses:[], tradesToday:{date:null,count:0} };
   }
 }
