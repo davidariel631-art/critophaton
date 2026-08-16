@@ -368,22 +368,74 @@ async function tryMEXCFutures(symbolRaw, tf, variante){
   };
 }
 
-async function tryGate(symbolRaw, tf, variante){
+// ═══ BITUNIX FUTUROS ═══
+// Es el exchange donde David opera de verdad, así que los precios de acá son los que realmente
+// va a ver al abrir la posición. Además ya se usaba para filtrar qué monedas son operables:
+// tiene sentido que también sea fuente de velas.
+//
+// DOS DETALLES DE SU API:
+//  · Máximo 200 velas por pedido (el motor pide 220). Se traen dos tandas y se juntan.
+//  · Devuelve objetos {open,high,low,close,time,baseVol}, no arrays como Binance.
+async function tryBitunix(symbolRaw, tf, variante){
   const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
   const quote = variante?.quote ?? 'USDT';
-  const pair = `${sym}_${quote}`;
-  const interval = TF_MAP[tf].gate;
-  const rows = await fetchJSON(`https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair=${pair}&interval=${interval}&limit=220`);
-  if(!Array.isArray(rows) || !rows.length) throw new Error('Gate.io sin datos');
-  // Formato Gate: [timestamp, volumen, close, high, low, open]
-  const candles = rows.map(r=>({t:+r[0]*1000,o:+r[5],h:+r[3],l:+r[4],c:+r[2],v:+r[1]})).sort((a,b)=>a.t-b.t);
+  const pair = `${sym}${quote}`;
+  const interval = ({ '15m':'15m', '1h':'1h', '4h':'4h', '1d':'1d', '1mo':'1M' })[tf] || '4h';
+  const msPorVela = ({ '15m':900e3, '1h':3600e3, '4h':14400e3, '1d':86400e3, '1mo':2592000e3 })[tf] || 14400e3;
+  const BITUNIX = 'https://fapi.bitunix.com/api/v1/futures/market';
+
+  const traer = (endTime) => {
+    const q = `symbol=${pair}&interval=${interval}&limit=200${endTime ? `&endTime=${endTime}` : ''}`;
+    return fetchJSON(`${BITUNIX}/kline?${q}`);
+  };
+  const normalizar = (arr) => (Array.isArray(arr) ? arr : []).map(k => ({
+    t: Number(k.time), o:+k.open, h:+k.high, l:+k.low, c:+k.close, v:+(k.baseVol ?? k.quoteVol ?? 0),
+  })).filter(v => Number.isFinite(v.c) && Number.isFinite(v.t));
+
+  const res1 = await traer();
+  if(res1?.code !== 0 && res1?.code !== '0') throw new Error('Bitunix: ' + (res1?.msg || 'sin datos'));
+  let candles = normalizar(res1.data);
+  if(candles.length < 20) throw new Error('Bitunix sin velas suficientes');
+
+  // Segunda tanda hacia atrás, para llegar a las 220 que necesitan los indicadores largos
+  if(candles.length >= 200){
+    try{
+      const masViejo = Math.min(...candles.map(v=>v.t));
+      const res2 = await traer(masViejo - msPorVela);
+      const previas = normalizar(res2?.data);
+      if(previas.length){
+        const vistos = new Set(candles.map(v=>v.t));
+        candles = previas.filter(v=>!vistos.has(v.t)).concat(candles);
+      }
+    }catch(e){ /* con 200 velas ya alcanza para la mayoría de los indicadores */ }
+  }
+  candles.sort((a,b)=>a.t-b.t);
+
+  // Ticker: precio actual, variación y funding — Bitunix los da en el mismo lugar
+  let price = candles.at(-1).c, change24h = 0, funding = null;
+  try{
+    const tk = await fetchJSON(`${BITUNIX}/tickers?symbols=${pair}`);
+    const t = Array.isArray(tk?.data) ? tk.data[0] : null;
+    if(t){
+      price = parseFloat(t.lastPrice ?? t.last ?? price);
+      const abre = parseFloat(t.open ?? 0);
+      if(abre > 0) change24h = (price - abre)/abre*100;
+    }
+  }catch(e){ /* sin ticker se usan los datos de las velas */ }
+  try{
+    const fr = await fetchJSON(`${BITUNIX}/funding_rate?symbol=${pair}`);
+    const v = fr?.data?.fundingRate ?? fr?.data?.[0]?.fundingRate;
+    if(v != null) funding = parseFloat(v);
+  }catch(e){ /* el funding es opcional */ }
+
   return {
-    source:'Gate.io', symbol: pair, displayName: sym,
-    price: candles.at(-1).c,
-    change24h: ((candles.at(-1).c-candles.at(0).c)/candles.at(0).c)*100,
-    vol24h: candles.at(-1).v, candles, funding:null, oi:null, dexUrl:null, contract:null,
+    source:'Bitunix', symbol: pair, displayName: sym,
+    price, change24h,
+    vol24h: candles.slice(-24).reduce((s,v)=>s+v.v, 0),
+    candles, funding, oi:null, dexUrl:null, contract:null,
   };
 }
+
 async function tryKuCoin(symbolRaw, tf, variante){
   const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
   const quote = variante?.quote ?? 'USDT';
@@ -476,7 +528,9 @@ async function fetchTokenData(query, tf){
   ];
 
   // MEXC Futuros va temprano: es donde están las monedas chicas que el spot no tiene.
-  const sources = [tryBinance, tryMEXCFutures, tryMEXC, tryOKX, tryBybit, tryGate, tryKuCoin];
+  // Bitunix va segundo: es donde David opera de verdad, así que sus precios son los que va a
+  // ver al abrir la posición. Gate.io se sacó a pedido suyo.
+  const sources = [tryBinance, tryBitunix, tryMEXCFutures, tryMEXC, tryOKX, tryBybit, tryKuCoin];
   const fallos = [];
   // Se prueba fuente por fuente, y dentro de cada una las variantes del símbolo.
   // La primera variante (USDT con el nombre exacto) cubre la enorme mayoría de los casos,
@@ -2898,7 +2952,10 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
     // el objetivo se vuelve alcanzable, que es lo que importa para asegurar parte de la ganancia.
     // Múltiplos de R reales: TP1 a 1R como mínimo. Antes era 0,6R, o sea que se arriesgaba más
     // de lo que se buscaba en el primer objetivo.
-    if(esCapChico){ t1=price+R*1.0; t2=price+R*1.6; t3=Math.max(resistance, price+R*2.5); }
+    // Con dos objetivos, TP2 es el final: se acerca de 1.6R a 1.8R para que sea alcanzable.
+    // Los datos reales mostraron que casi ninguna operación pasaba de 1R, así que un objetivo
+    // final muy lejos equivale a cerrar siempre en breakeven.
+    if(esCapChico){ t1=price+R*1.0; t2=price+R*1.8; t3=Math.max(resistance, price+R*2.5); }
     else { t1=price+R*1.5; t2=price+R*3; t3=Math.max(resistance, price+R*5); }
     // Los TP también buscan liquidez real, no solo un múltiplo matemático — si hay una zona de
     // liquidez real (POC) en el camino hacia arriba, a una distancia sensata, el objetivo más cercano
@@ -2954,7 +3011,7 @@ function buildSetup(data, result, riskProfile, dataHTF, esCapChico){
       }
     }
     const R = stop-price;
-    if(esCapChico){ t1=price-R*1.0; t2=price-R*1.6; t3=Math.min(support, price-R*2.5); }
+    if(esCapChico){ t1=price-R*1.0; t2=price-R*1.8; t3=Math.min(support, price-R*2.5); }
     else { t1=price-R*1.5; t2=price-R*3; t3=Math.min(support, price-R*5); }
     // Mismo criterio que en LONG, mirado hacia abajo: si hay una zona real de liquidez a distancia
     // sensata, el objetivo más cercano se ajusta para apuntar ahí en vez de un múltiplo matemático.
@@ -3411,6 +3468,7 @@ function expectancyPorEstrategia(closedTrades, minMuestra = 10){
     ...agrupar('Ruptura', t => t.registro?.rupturaTriangulo ?? null),
     ...agrupar('On-chain', t => t.registro?.onChain?.acompana ?? null),
     ...agrupar('Actividad anómala', t => t.registro?.actividadAnomala?.nivel ?? null),
+    ...agrupar('Estado de la cuenta', t => t.abiertaEnDrawdownAlto == null ? null : (t.abiertaEnDrawdownAlto ? 'drawdown alto' : 'cuenta sana')),
   ].sort((a,b)=> b.expectancy - a.expectancy);
 
   const positivas = ranking.filter(x=>x.expectancy >= 0.1 && x.confianza !== 'baja');
@@ -4741,15 +4799,46 @@ function postMortem(trade, historial = []){
       fallos.length ? `Fallaron: ${fallos.join(', ')}.` : null,
       ...[notaStop, notaFase, notaLiquidez, notaEscape, notaHistorial].filter(Boolean),
       // Auditoría con números concretos, para no tener que mirar el gráfico y adivinar
+      // AUDITORÍA POR TRAMOS: cada nivel se juzga con el stop que estaba activo en ese momento.
+      // Antes se comparaba el mínimo de TODA la operación contra el stop FINAL (el breakeven),
+      // y un retroceso anterior a TP1 aparecía como "tocó el breakeven". Ese era el caso PROM.
       (()=>{ const a = trade.auditoria;
         if(!a || a.minDesdeEntrada == null) return null;
         const fmt = v => v==null ? '—' : (v>=1 ? v.toFixed(4) : v.toPrecision(6));
-        return `\n🔎 <b>AUDITORÍA</b>\n` +
-          `Entrada: $${fmt(trade.entry)} · Stop: $${fmt(trade.stop)}\n` +
-          `Desde la entrada — mínimo: $${fmt(a.minDesdeEntrada)} · máximo: $${fmt(a.maxDesdeEntrada)}\n` +
-          `¿Tocó el stop después de entrar? ${a.slTocadoDesdeEntrada ? '✅ sí' : '❌ NO'}` +
-          `${!a.slTocadoDesdeEntrada && trade.motivoCierre?.includes('stop') ? ' ⚠️ pero se cerró por stop — revisar' : ''}\n` +
-          `¿Tocó TP1? ${a.tp1TocadoDesdeEntrada ? '✅ sí' : '❌ no'}`;
+        const esLong = trade.dir === 'LONG';
+        const stopOrig = trade.originalStop ?? trade.stop;
+
+        // Tramo 1: entrada → TP1, con el stop ORIGINAL
+        const tocoStopOriginal = esLong
+          ? a.minDesdeEntrada <= stopOrig
+          : a.maxDesdeEntrada >= stopOrig;
+
+        const lineas = [
+          `\n🔎 <b>AUDITORÍA POR TRAMOS</b>`,
+          `<i>Tramo 1 — entrada hasta TP1</i>`,
+          `Entrada $${fmt(trade.entry)} · stop original $${fmt(stopOrig)}`,
+          `Recorrido: mínimo $${fmt(a.minDesdeEntrada)} · máximo $${fmt(a.maxDesdeEntrada)}`,
+          `¿Tocó el stop original? ${tocoStopOriginal ? '✅ sí' : '❌ no'}`,
+          `¿Alcanzó TP1? ${trade.alcanzoTp1 ? '✅ sí' : '❌ no'}`,
+        ];
+
+        // Tramo 2: solo existe si se activó el breakeven
+        if(trade.alcanzoTp1 && trade.breakEvenActivatedAt){
+          const tocoBE = a.minDesdeBE == null && a.maxDesdeBE == null ? null
+            : esLong ? a.minDesdeBE <= trade.entry : a.maxDesdeBE >= trade.entry;
+          lineas.push(
+            `\n<i>Tramo 2 — desde TP1, con el stop ya en el punto de entrada</i>`,
+            `Breakeven en $${fmt(trade.entry)}`,
+            a.minDesdeBE != null
+              ? `Recorrido posterior: mínimo $${fmt(a.minDesdeBE)} · máximo $${fmt(a.maxDesdeBE)}`
+              : `Sin recorrido posterior registrado`,
+            `¿Volvió al breakeven? ${tocoBE === null ? '— sin datos' : tocoBE ? '✅ sí' : '❌ NO'}`,
+          );
+          if(tocoBE === false && (trade.motivoCierre||'').includes('breakeven')){
+            lineas.push(`⚠️ Se cerró por breakeven pero el precio nunca volvió al nivel después de TP1 — revisar.`);
+          }
+        }
+        return lineas.join('\n');
       })(),
     ].filter(Boolean).join('\n'),
   };
@@ -4838,6 +4927,11 @@ function generarReporteResearch(closedTrades, opciones = {}){
     return f == null ? null : f >= 50 ? 'clara (50+)' : f >= 25 ? 'moderada (25-49)' : 'débil (menos de 25)';
   });
   analizarPor(null, 'Actividad anómala', t => t.registro?.actividadAnomala?.nivel ?? (t.registro ? 'sin nada raro' : null));
+  // ¿El motor rinde distinto cuando la cuenta ya viene golpeada? Puede pasar por dos motivos:
+  // el riesgo se reduce automáticamente en drawdown, o las condiciones de mercado que causaron
+  // el drawdown siguen presentes. Vale la pena poder separarlo.
+  analizarPor(null, 'Estado de la cuenta', t => t.abiertaEnDrawdownAlto == null ? null
+    : (t.abiertaEnDrawdownAlto ? 'abierta en drawdown alto' : 'cuenta sana'));
 
   // APORTE DE CADA COMPONENTE: compara el win rate cuando un componente empujó fuerte
   // contra cuando no aportó. Es la medición que faltaba para saber cuánto vale cada Dios.
@@ -5117,7 +5211,7 @@ export {
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, fetchUnlockRisk, fetchUsdStrength, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
-  tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryGate, tryKuCoin,
+  tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryBitunix, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, detectLiquidezPorHorizonte, detectIFVG, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectDoubleTopBottom, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
