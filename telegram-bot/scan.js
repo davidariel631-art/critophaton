@@ -1724,7 +1724,6 @@ async function confirmTheses(state, capitalFlow){
         const analyst = buildAnalystMode(data15, result15, setup, '15m');
         const rrTp1 = (Math.abs(setup.t1-entryPrice)/distance).toFixed(1);
         const rrTp2 = (Math.abs(setup.t2-entryPrice)/distance).toFixed(1);
-        const rrTp3 = (Math.abs(setup.t3-entryPrice)/distance).toFixed(1);
         // El texto tiene que coincidir con lo que hace el gestor: el stop se ejecuta cuando el
         // precio TOCA el nivel, no cuando la vela cierra. Antes decía "cierre de vela" y eso no
         // era lo que pasaba en la práctica.
