@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -181,6 +181,30 @@ async function runMarketPulse(state, capitalFlow){
       `⚖️ Long/Short (top traders): ${ratioTxt}\n\n` +
 
       (lecturaLiqWS ? `${DIVW}\n${lecturaLiqWS.texto}\n\n` : '') +
+
+      // ═══ FLUJO REAL DE BTC ═══
+      // No es el netflow de exchanges de CryptoQuant (eso es de pago). Es quién está siendo más
+      // agresivo AHORA: el volumen que ejecuta contra el libro, más el peso de las órdenes puestas.
+      (await (async()=>{
+        try{
+          const flujo = calcularPresionFlujo(results['4h'].rawData?.candles || [], 30);
+          const libro = await fetchLibroOrdenes('BTC', 'Binance');
+          if(!flujo && !libro) return '';
+          const p = [`${DIVW}\n🐳 <b>FLUJO REAL</b>`];
+          if(flujo){
+            const ic = flujo.sesgo==='COMPRADOR'?'🟢':flujo.sesgo==='VENDEDOR'?'🔴':'⚪';
+            p.push(`${ic} ${flujo.resumen}`);
+            if(Math.abs(flujo.cambio) > 6) p.push(`   ${flujo.tendencia}`);
+          }
+          if(libro){
+            const ic = libro.sesgo==='COMPRADOR'?'🟢':libro.sesgo==='VENDEDOR'?'🔴':'⚪';
+            p.push(`${ic} Órdenes puestas: $${(libro.usdCompra/1e6).toFixed(1)}M de compra contra $${(libro.usdVenta/1e6).toFixed(1)}M de venta (±2% del precio).`);
+            const muro = libro.muros[0];
+            if(muro) p.push(`   🧱 Muro de ${muro.lado} en $${Math.round(muro.precio).toLocaleString()} a ${muro.distPct.toFixed(2)}%: ahí puede frenar.`);
+          }
+          return p.join('\n') + '\n\n';
+        }catch(e){ return ''; }
+      })()) +
 
       `${DIVW}\n📌 <b>TESIS</b>\n${tesis}\n\n` +
       `${parrafo}\n\n` +
@@ -1685,6 +1709,15 @@ async function confirmTheses(state, capitalFlow){
             const oc = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir);
             return oc ? { presion:oc.presion, direccion:oc.direccion, fuerza:oc.fuerza, acompana:oc.acompana } : null;
           }catch(e){ return null; } })(),
+          // Libro de órdenes y flujo real, para medir después si predicen algo
+          libro: await (async()=>{ try{
+            const l = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix'?'Bitunix':'Binance');
+            return l ? { sesgo:l.sesgo, desbalance:l.desbalance, spreadPct:l.spreadPct, muros:l.muros.length } : null;
+          }catch(e){ return null; } })(),
+          flujoOrdenes: (()=>{ try{
+            const f = calcularPresionFlujo(data15.candles, 24);
+            return f ? { pctComprador:f.pctComprador, sesgo:f.sesgo, cambio:f.cambio } : null;
+          }catch(e){ return null; } })(),
           // Wallet Intelligence: evidencia para medir después si predice algo
           wallets: await (async()=>{ try{
             const tr = await fetchTransferenciasToken(data15.contract, data15.network, 24);
@@ -1963,6 +1996,27 @@ async function confirmTheses(state, capitalFlow){
           `Gestión: 60% en TP1 (stop pasa al punto de entrada) + 40% hasta TP2\n\n` +
 
           (lecturaLiq ? `${DIV}\n${lecturaLiq.texto}\n\n` : '') +
+
+          // ═══ LIBRO DE ÓRDENES ═══
+          // Órdenes que están puestas AHORA, no liquidez inferida de las velas.
+          (await (async()=>{
+            try{
+              const lib = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix' ? 'Bitunix' : 'Binance');
+              const flujo = calcularPresionFlujo(data15.candles, 24);
+              if(!lib && !flujo) return '';
+              const partes = [`${DIV}\n📖 <b>LIBRO DE ÓRDENES</b>`];
+              if(lib){
+                const ic = lib.sesgo==='COMPRADOR' ? '🟢' : lib.sesgo==='VENDEDOR' ? '🔴' : '⚪';
+                partes.push(`${ic} ${lib.resumen}`);
+                if(lib.alertaSpread) partes.push(`⚠️ ${lib.alertaSpread}`);
+              }
+              if(flujo){
+                const ic = flujo.sesgo==='COMPRADOR' ? '🟢' : flujo.sesgo==='VENDEDOR' ? '🔴' : '⚪';
+                partes.push(`${ic} ${flujo.resumen}`);
+              }
+              return partes.join('\n') + '\n\n';
+            }catch(e){ return ''; }
+          })()) +
 
           `${DIV}\n🧠 <b>CONFLUENCIA</b>\n${confluenciaLineas}\n\n` +
 
