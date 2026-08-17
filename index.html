@@ -621,6 +621,9 @@
         <div>
           <div id="recTag" class="rec-tag rec-none">NO OPERAR</div>
           <div class="subrow" id="tokenLabel">—</div>
+          <div id="flujoUnificadoPanel" style="display:none;margin-top:10px;"></div>
+          <div id="libroPanel" style="display:none;margin-top:10px;"></div>
+          <div id="walletsPanel" style="display:none;margin-top:10px;"></div>
           <div id="derivadosPanel" style="display:none;margin-top:10px;"></div>
           <div id="anomaliaPanel" style="display:none;margin-top:10px;"></div>
           <div id="fasePanel" style="display:none;margin-top:10px;"></div>
@@ -857,6 +860,7 @@
         <div id="liqStochContainer" style="width:100%;height:150px;margin-top:8px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
           <canvas id="liqStochCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
         </div>
+        <div id="liqLibroPanel" style="display:none;margin-top:12px;"></div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
         <input type="checkbox" id="liqAutoRefresh" style="width:16px;height:16px;">
@@ -1084,6 +1088,11 @@
   // (que no es type="module") lo use exactamente igual que antes.
   import * as TheHatonEngine from './thehaton-engine.js';
   Object.assign(window, TheHatonEngine);
+  // Wallet Intelligence vive en su propio archivo (clasifica wallets y descarta los movimientos
+  // internos de exchanges). Se importa aparte para que la web muestre lo mismo que el bot.
+  import('./wallet-intelligence.js')
+    .then(m => Object.assign(window, m))
+    .catch(() => console.warn('wallet-intelligence.js no disponible: el panel de wallets no se mostrará.'));
   window.TheHatonEngine = TheHatonEngine;
 
   // Memoria compartida: la misma que actualiza el bot (única fuente de verdad para toda la plataforma)
@@ -1327,6 +1336,97 @@ function renderResults(data, result, setup){
     }
   }catch(e){ /* el aviso es opcional, no interrumpe el análisis */ }
 
+  // ═══ LIBRO DE ÓRDENES, WALLETS Y LECTURA UNIFICADA ═══
+  // Todo esto ya estaba en el motor y lo usaba el bot, pero la web no lo mostraba.
+  // Ahora la web ve exactamente lo mismo que el mensaje de Telegram.
+  (async () => {
+    const pLibro = document.getElementById('libroPanel');
+    const pWallets = document.getElementById('walletsPanel');
+    const pFlujo = document.getElementById('flujoUnificadoPanel');
+    const tarjeta = (borde, titulo, cuerpo) =>
+      `<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid ${borde};border-radius:10px;padding:11px 13px;">
+         <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;margin-bottom:5px;">${titulo}</div>${cuerpo}</div>`;
+    try{
+      // Se piden en paralelo para no demorar la pantalla
+      const [libro, wallets] = await Promise.all([
+        TheHatonEngine.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null),
+        (async()=>{
+          try{
+            const tr = await TheHatonEngine.fetchTransferenciasToken(data.contract, data.network, 24);
+            if(!tr?.length) return null;
+            const conUsd = tr.map(t => ({ ...t, valueUsd: t.cantidad * (data.price||0) }));
+            const a = window.analizarTransferencias?.(conUsd, data.network, { minUsd:5000 });
+            return a ? window.construirEvidenciaOnChain?.(a, null) : null;
+          }catch(e){ return null; }
+        })(),
+      ]);
+      const flujo = TheHatonEngine.calcularPresionFlujo(data.candles, 24);
+
+      // LIBRO DE ÓRDENES
+      if(libro){
+        const col = libro.sesgo==='COMPRADOR' ? 'var(--teal)' : libro.sesgo==='VENDEDOR' ? 'var(--rose)' : 'var(--sub)';
+        let cuerpo = `<div style="font-size:12.5px;line-height:1.55;">${libro.resumen}</div>`;
+        if(libro.muros?.length){
+          cuerpo += `<div style="margin-top:7px;font-size:11.5px;">` + libro.muros.slice(0,2).map(m =>
+            `🧱 Muro de ${m.lado} en <b>$${m.precio}</b> a ${m.distPct.toFixed(2)}% — $${(m.usd/1000).toFixed(0)}K`).join('<br>') + `</div>`;
+        }
+        if(libro.alertaSpread) cuerpo += `<div style="margin-top:6px;font-size:11px;color:var(--amber);">⚠️ ${libro.alertaSpread}</div>`;
+        cuerpo += `<div style="margin-top:6px;font-size:10.5px;color:var(--sub);">${libro.aclaracion}</div>`;
+        pLibro.innerHTML = tarjeta(col, `📖 LIBRO DE ÓRDENES · ${libro.fuente}`, cuerpo);
+        pLibro.style.display = '';
+      }
+
+      // WALLETS
+      if(wallets){
+        const col = wallets.direccion==='LONG' ? 'var(--teal)' : wallets.direccion==='SHORT' ? 'var(--rose)' : 'var(--sub)';
+        let cuerpo = `<div style="font-size:12.5px;line-height:1.55;">${wallets.resumen}</div>`;
+        if(wallets.razones?.length){
+          cuerpo += `<div style="margin-top:7px;font-size:11.5px;color:#c3ccd6;">` +
+            wallets.razones.map(r=>`• ${r}`).join('<br>') + `</div>`;
+        }
+        cuerpo += `<div style="margin-top:6px;font-size:10.5px;color:var(--sub);">Las wallets se clasifican por su comportamiento. Los movimientos internos de exchanges se descartan para no contar el mismo dinero dos veces.</div>`;
+        pWallets.innerHTML = tarjeta(col, `🐋 WALLETS · confianza ${wallets.confianza}%`, cuerpo);
+        pWallets.style.display = '';
+      } else if(!data.contract){
+        pWallets.innerHTML = tarjeta('var(--border)', '🐋 WALLETS',
+          `<div style="font-size:11.5px;color:var(--sub);">Esta moneda no tiene contrato en una red soportada (Ethereum, BNB, Base, Arbitrum, Polygon), así que no hay transferencias que analizar.</div>`);
+        pWallets.style.display = '';
+      }
+
+      // LECTURA UNIFICADA: junta todo lo anterior con la liquidez
+      // La liquidez se calcula acá mismo: la pantalla de análisis no la tenía (estaba solo en
+      // la pestaña Liquidez), así que la lectura unificada se quedaba sin una de sus capas.
+      let capaLiq = null;
+      try{
+        const lh = TheHatonEngine.detectLiquidezPorHorizonte(data.candles);
+        const arriba = lh?.cercanaArriba || lh?.lejanaArriba;
+        const abajo = lh?.cercanaAbajo || lh?.lejanaAbajo;
+        if(arriba || abajo){
+          const fa = arriba?.toques || 0, fb = abajo?.toques || 0;
+          capaLiq = { ladoFuerte: fa > fb ? 'arriba' : fb > fa ? 'abajo' : 'pareja', confluencia: null };
+        }
+      }catch(e){ /* sin liquidez, la unificada usa las demás capas */ }
+
+      const onchainWeb = await TheHatonEngine.fetchOnChainPressure(data.contract, data.network, null).catch(()=>null);
+      const uni = TheHatonEngine.lecturaUnificada({
+        liquidez: capaLiq, libro, flujo,
+        wallets, onchain: onchainWeb,
+        anomalia: window._ultimaAnomalia || null, dirTesis: null,
+      });
+      if(uni){
+        const col = uni.dominante==='LONG' ? 'var(--teal)' : uni.dominante==='SHORT' ? 'var(--rose)' : 'var(--sub)';
+        const filas = uni.detalle.map(d => {
+          const c2 = d.sesgo==='LONG' ? 'var(--teal)' : d.sesgo==='SHORT' ? 'var(--rose)' : 'var(--sub)';
+          return `<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:11.5px;">
+                    <span>${d.nombre}</span><span style="color:${c2};font-weight:700;">${d.sesgo}</span></div>`;
+        }).join('');
+        pFlujo.innerHTML = tarjeta(col, `🌊 FLUJO EN CONJUNTO — ${uni.dominante} (${uni.fuerza}% de acuerdo)`,
+          `<div style="font-size:12.5px;line-height:1.55;">${uni.texto}</div><div style="margin-top:8px;">${filas}</div>`);
+        pFlujo.style.display = '';
+      }
+    }catch(e){ /* si falla, los paneles quedan ocultos y el análisis sigue igual */ }
+  })();
+
   // ═══ DERIVADOS: OPEN INTEREST Y FUNDING ═══
   // Antes el Open Interest estaba escondido detrás de un botón que había que tocar a mano.
   // Ahora se consulta solo en cada análisis, porque es de los datos que más dicen: el OI
@@ -1383,9 +1483,12 @@ function renderResults(data, result, setup){
   // Detecta que algo raro está pasando sin identificar quién. Va arriba de todo porque cuando
   // aparece es lo más importante de la pantalla.
   try{
+    // Se guarda para que la lectura unificada de más abajo pueda combinarla con las demás capas
+    window._ultimaAnomalia = null;
     const anom = TheHatonEngine.detectActividadAnomala(data.candles, {
       funding: data.funding != null ? data.funding*100 : null,
     });
+    window._ultimaAnomalia = anom;
     const ap2 = document.getElementById('anomaliaPanel');
     if(anom?.hayAlgo){
       const color = anom.nivel==='MUY ALTA' ? 'var(--rose)' : anom.nivel==='ALTA' ? 'var(--amber)' : 'var(--sub)';
@@ -2489,6 +2592,41 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   status.textContent = 'Buscando...'; results.innerHTML = ''; domBox.style.display = 'none';
   try{
     const data = await fetchTokenData(q, liqCurrentTf);
+
+    // ═══ LIBRO DE ÓRDENES EN LA PESTAÑA LIQUIDEZ ═══
+    // Esta pantalla mostraba solo liquidez INFERIDA de las velas (niveles con toques, POC,
+    // área de valor). El libro muestra las órdenes que están puestas ahora mismo, que es
+    // justamente lo que le faltaba a esta pantalla.
+    (async () => {
+      const p = document.getElementById('liqLibroPanel');
+      try{
+        const [libro, flujo] = await Promise.all([
+          TheHatonEngine.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null),
+          Promise.resolve(TheHatonEngine.calcularPresionFlujo(data.candles, 24)),
+        ]);
+        if(!libro && !flujo){ p.style.display='none'; return; }
+        const col = libro?.sesgo==='COMPRADOR' ? 'var(--teal)' : libro?.sesgo==='VENDEDOR' ? 'var(--rose)' : 'var(--sub)';
+        let cuerpo = '';
+        if(libro){
+          cuerpo += `<div style="font-size:12.5px;line-height:1.55;">${libro.resumen}</div>`;
+          cuerpo += `<div style="display:flex;gap:14px;margin-top:9px;flex-wrap:wrap;">
+            <div><div style="font-size:10px;color:var(--sub);">COMPRA ±2%</div><div style="font-size:15px;font-weight:800;color:var(--teal);">$${(libro.usdCompra/1000).toFixed(0)}K</div></div>
+            <div><div style="font-size:10px;color:var(--sub);">VENTA ±2%</div><div style="font-size:15px;font-weight:800;color:var(--rose);">$${(libro.usdVenta/1000).toFixed(0)}K</div></div>
+            <div><div style="font-size:10px;color:var(--sub);">SPREAD</div><div style="font-size:15px;font-weight:800;">${libro.spreadPct}%</div></div>
+          </div>`;
+          if(libro.muros?.length){
+            cuerpo += `<div style="margin-top:9px;font-size:11.5px;">` + libro.muros.map(m =>
+              `🧱 Muro de ${m.lado} en <b>$${m.precio}</b> a ${m.distPct.toFixed(2)}% — $${(m.usd/1000).toFixed(0)}K`).join('<br>') + `</div>`;
+          }
+          if(libro.alertaSpread) cuerpo += `<div style="margin-top:7px;font-size:11px;color:var(--amber);">⚠️ ${libro.alertaSpread}</div>`;
+        }
+        if(flujo) cuerpo += `<div style="margin-top:9px;font-size:12px;">⚡ ${flujo.resumen}</div>`;
+        cuerpo += `<div style="margin-top:7px;font-size:10.5px;color:var(--sub);">A diferencia de los niveles de arriba —que se deducen de las velas— esto son órdenes reales puestas ahora. Se pueden retirar en cualquier momento.</div>`;
+        p.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid ${col};border-radius:10px;padding:12px 14px;">
+          <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;margin-bottom:6px;">📖 LIBRO DE ÓRDENES${libro?` · ${libro.fuente}`:''}</div>${cuerpo}</div>`;
+        p.style.display = '';
+      }catch(e){ p.style.display='none'; }
+    })();
     const macro = await fetchMacroTrend(q).catch(()=>null);
     const result = computeScore(data, macro, [], {}, {}, null);
     const st = result.structure;
