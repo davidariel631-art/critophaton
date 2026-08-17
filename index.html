@@ -1387,11 +1387,10 @@ function renderResults(data, result, setup){
         cuerpo += `<div style="margin-top:6px;font-size:10.5px;color:var(--sub);">Las wallets se clasifican por su comportamiento. Los movimientos internos de exchanges se descartan para no contar el mismo dinero dos veces.</div>`;
         pWallets.innerHTML = tarjeta(col, `🐋 WALLETS · confianza ${wallets.confianza}%`, cuerpo);
         pWallets.style.display = '';
-      } else if(!data.contract){
-        pWallets.innerHTML = tarjeta('var(--border)', '🐋 WALLETS',
-          `<div style="font-size:11.5px;color:var(--sub);">Esta moneda no tiene contrato en una red soportada (Ethereum, BNB, Base, Arbitrum, Polygon), así que no hay transferencias que analizar.</div>`);
-        pWallets.style.display = '';
       }
+      // Si no hay datos de wallets NO se muestra nada. Antes salía un cartel diciendo que la
+      // moneda no tenía contrato soportado, y como casi ninguna lo tiene, ese cartel aparecía
+      // en todos los análisis ocupando espacio sin aportar. El bot lo sigue registrando igual.
 
       // LECTURA UNIFICADA: junta todo lo anterior con la liquidez
       // La liquidez se calcula acá mismo: la pantalla de análisis no la tenía (estaba solo en
