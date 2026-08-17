@@ -376,6 +376,108 @@ async function tryMEXCFutures(symbolRaw, tf, variante){
   };
 }
 
+// ═══ PERPETUOS: OKX, BYBIT, BINANCE Y BITUNIX SPOT ═══
+// EL BUG QUE ARREGLAN: muchas monedas existen SOLO como contrato perpetuo, no como par spot.
+// El caso CRCLUSDT lo muestra claro: en TradingView aparece en OKX, Bybit, Bitget y KuCoin,
+// pero todos como "Perpetual Contract". El código buscaba únicamente en los mercados SPOT de
+// esas casas, así que no la encontraba en ninguna aunque estuviera en todas.
+
+// OKX perpetuo: el identificador lleva -SWAP al final
+async function tryOKXPerp(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const instId = `${sym}-${quote}-SWAP`;
+  const bar = ({ '15m':'15m','1h':'1H','4h':'4H','1d':'1D','1mo':'1M' })[tf] || '4H';
+  const res = await fetchJSON(`https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=220`);
+  const filas = res?.data;
+  if(!Array.isArray(filas) || filas.length < 20) throw new Error('OKX perpetuo sin datos');
+  const candles = filas.map(k=>({ t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }))
+    .filter(v=>Number.isFinite(v.c)).sort((a,b)=>a.t-b.t);
+  if(candles.length < 20) throw new Error('OKX perpetuo con pocas velas');
+  let price = candles.at(-1).c, change24h = 0, funding = null;
+  try{
+    const t = await fetchJSON(`https://www.okx.com/api/v5/market/ticker?instId=${instId}`);
+    const d = t?.data?.[0];
+    if(d){ price = parseFloat(d.last) || price;
+      const ab = parseFloat(d.open24h) || 0;
+      if(ab > 0) change24h = (price-ab)/ab*100; }
+  }catch(e){}
+  try{
+    const fr = await fetchJSON(`https://www.okx.com/api/v5/public/funding-rate?instId=${instId}`);
+    const v = fr?.data?.[0]?.fundingRate;
+    if(v != null) funding = parseFloat(v);
+  }catch(e){}
+  return { source:'OKX Perpetuo', symbol:instId, displayName:sym, price, change24h,
+           vol24h: candles.slice(-24).reduce((s,v)=>s+v.v,0), candles, funding, oi:null, dexUrl:null, contract:null };
+}
+
+// Bybit perpetuo: mismo endpoint que spot pero con category=linear
+async function tryBybitPerp(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}${quote}`;
+  const interval = ({ '15m':'15','1h':'60','4h':'240','1d':'D','1mo':'M' })[tf] || '240';
+  const res = await fetchJSON(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${pair}&interval=${interval}&limit=200`);
+  const filas = res?.result?.list;
+  if(!Array.isArray(filas) || filas.length < 20) throw new Error('Bybit perpetuo sin datos');
+  const candles = filas.map(k=>({ t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }))
+    .filter(v=>Number.isFinite(v.c)).sort((a,b)=>a.t-b.t);
+  if(candles.length < 20) throw new Error('Bybit perpetuo con pocas velas');
+  let price = candles.at(-1).c, change24h = 0, funding = null, oi = null;
+  try{
+    const t = await fetchJSON(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${pair}`);
+    const d = t?.result?.list?.[0];
+    if(d){ price = parseFloat(d.lastPrice) || price;
+      change24h = parseFloat(d.price24hPcnt || 0) * 100;
+      funding = d.fundingRate != null ? parseFloat(d.fundingRate) : null;
+      oi = d.openInterest != null ? parseFloat(d.openInterest) : null; }
+  }catch(e){}
+  return { source:'Bybit Perpetuo', symbol:pair, displayName:sym, price, change24h,
+           vol24h: candles.slice(-24).reduce((s,v)=>s+v.v,0), candles, funding, oi, dexUrl:null, contract:null };
+}
+
+// Binance Futures: muchas monedas están en futuros y no en spot
+async function tryBinanceFutures(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}${quote}`;
+  const interval = TF_MAP[tf] || '4h';
+  const klines = await fetchJSON(`${FUTURES}/fapi/v1/klines?symbol=${pair}&interval=${interval}&limit=220`);
+  if(!Array.isArray(klines) || klines.length < 20) throw new Error('Binance Futures sin datos');
+  // El campo 9 es el volumen comprador agresivo, igual que en spot
+  const candles = klines.map(k=>({ t:k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5],
+    vc:+k[9]||0, vv: Math.max(0,(+k[5]||0)-(+k[9]||0)), ops:+k[8]||0 }));
+  let price = candles.at(-1).c, change24h = 0, funding = null;
+  try{
+    const t = await fetchJSON(`${FUTURES}/fapi/v1/ticker/24hr?symbol=${pair}`);
+    if(t){ price = parseFloat(t.lastPrice) || price; change24h = parseFloat(t.priceChangePercent) || 0; }
+  }catch(e){}
+  try{
+    const pr = await fetchJSON(`${FUTURES}/fapi/v1/premiumIndex?symbol=${pair}`);
+    if(pr?.lastFundingRate != null) funding = parseFloat(pr.lastFundingRate);
+  }catch(e){}
+  return { source:'Binance Futures', symbol:pair, displayName:sym, price, change24h,
+           vol24h: candles.slice(-24).reduce((s,v)=>s+v.v,0), candles, funding, oi:null, dexUrl:null, contract:null };
+}
+
+// Bitunix SPOT: el mercado al contado, aparte del de futuros que ya estaba
+async function tryBitunixSpot(symbolRaw, tf, variante){
+  const sym = variante?.sym ?? normalizarSimbolo(symbolRaw);
+  const quote = variante?.quote ?? 'USDT';
+  const pair = `${sym}${quote}`;
+  const interval = ({ '15m':'15m','1h':'1h','4h':'4h','1d':'1d','1mo':'1M' })[tf] || '4h';
+  const res = await fetchJSON(`https://openapi.bitunix.com/api/spot/v1/market/kline?symbol=${pair}&interval=${interval}&limit=200`);
+  const filas = res?.data;
+  if(!Array.isArray(filas) || filas.length < 20) throw new Error('Bitunix spot sin datos');
+  const candles = filas.map(k => Array.isArray(k)
+      ? { t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }
+      : { t:+(k.time??k.t), o:+(k.open??k.o), h:+(k.high??k.h), l:+(k.low??k.l), c:+(k.close??k.c), v:+(k.baseVol??k.vol??0) })
+    .filter(v=>Number.isFinite(v.c) && Number.isFinite(v.t)).sort((a,b)=>a.t-b.t);
+  if(candles.length < 20) throw new Error('Bitunix spot con pocas velas');
+  return { source:'Bitunix Spot', symbol:pair, displayName:sym, price:candles.at(-1).c, change24h:0,
+           vol24h: candles.slice(-24).reduce((s,v)=>s+v.v,0), candles, funding:null, oi:null, dexUrl:null, contract:null };
+}
+
 // ═══ BITUNIX FUTUROS ═══
 // Es el exchange donde David opera de verdad, así que los precios de acá son los que realmente
 // va a ver al abrir la posición. Además ya se usaba para filtrar qué monedas son operables:
@@ -558,9 +660,12 @@ async function fetchTokenData(query, tf){
   //   Tanda 1: Binance + Bitunix + MEXC Futuros  → cubre la enorme mayoría
   //   Tanda 2: el resto, solo si la primera no encontró nada
   // Peor caso: de ~54 segundos a ~18.
+  // Cada tanda mezcla SPOT y PERPETUOS a propósito: muchas monedas existen solo como contrato
+  // perpetuo (el caso CRCLUSDT) y otras solo al contado. Buscando en ambos a la vez se cubren
+  // las dos sin agregar tiempo, porque las tandas van en paralelo.
   const tandas = [
-    [tryBinance, tryBitunix, tryMEXCFutures],
-    [tryMEXC, tryOKX, tryBybit, tryKuCoin],
+    [tryBinance, tryBinanceFutures, tryBitunix, tryBitunixSpot, tryMEXCFutures],
+    [tryOKXPerp, tryBybitPerp, tryMEXC, tryOKX, tryBybit, tryKuCoin],
   ];
 
   const intentar = async (src, variante) => {
@@ -2243,7 +2348,21 @@ function computeStructure(candles, atrArr){
   }
 
   score = Math.max(0, Math.min(20, score));
-  return {score, notes, events, bullishOB, bearishOB, fvgs, ifvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, doubleTopBottom, resistanceTests, supportTests, accBearTrap, distBullTrap};
+  // ═══ SEPARAR LO ACCIONABLE DEL CONTEXTO ═══
+  // Antes todas las observaciones iban al mismo array `notes` y se mostraban como 9 viñetas
+  // idénticas. Entre ellas hay cosas muy distintas: "cluster FUERTE, objetivo muy probable"
+  // es accionable; "estructura LH-LL intacta" es contexto de fondo. Verlas iguales obliga a
+  // leerlas todas para encontrar la que importa.
+  const esAccionable = (n) => /cluster FUERTE|BOS|CHoCH|Bear Trap|Bull Trap|barrido|sweep confirmado|Order Block .* cerca/i.test(n);
+  const esAdvertencia = (n) => /⚠️|en duda|falso|atrapados/i.test(n);
+  const notasClave = notes.filter(esAccionable);
+  const notasAviso = notes.filter(n => !esAccionable(n) && esAdvertencia(n));
+  const notasContexto = notes.filter(n => !esAccionable(n) && !esAdvertencia(n));
+
+  return {score, notes,
+    // Las mismas notas, agrupadas por importancia para que quien las muestre pueda jerarquizar
+    notasClave, notasAviso, notasContexto,
+    events, bullishOB, bearishOB, fvgs, ifvgs, eqHighs, eqHighsCount, eqLows, eqLowsCount, fib, pivots, candlePattern, liquiditySweep, doubleTopBottom, resistanceTests, supportTests, accBearTrap, distBullTrap};
 }
 
 // ---------- Scoring ----------
@@ -2836,27 +2955,22 @@ function buildAnalystMode(data, result, setup, currentTF){
     ? 'El error más común acá sería forzar una entrada solo por impaciencia, sin que el mercado muestre una ventaja real.'
     : 'El error más común sería entrar de golpe al precio actual con tamaño completo antes de la confirmación, en vez de esperar el retroceso ideal o escalonar la entrada.';
 
-  const explanation = `${resumen}
-
-✅ Lo que acompaña la decisión: ${soporta}.
-⚠️ Lo que no acompaña del todo: ${noAcompana}.
-
-🏦 Dinero institucional (proxy vía funding): ${institucional}
-
-🌍 ${result.marketNote}
-
-⚠️ Riesgos activos:
-${riesgos.map(r=>'• '+r).join('\n')}
-
-📈 Qué confirmaría más la entrada:
-${confirmacion}
-
-🔄 Escenario alternativo (si el análisis falla):
-${alternativo}
-
-🎯 Mejor nivel para esperar / error común de entrar ya:
-${mejorEntrada}
-${errorComun}`;
+  // ═══ SOLO SE ESCRIBE LO QUE APORTA ═══
+  // Antes salían siempre 'lo que acompaña / lo que no acompaña' aunque dijeran 'ninguno':
+  // dos renglones para decir que no hay nada que decir. Y marketNote aparecía DOS VECES en
+  // el mismo texto, palabra por palabra. Ahora cada bloque se omite si está vacío.
+  const vacio = (t) => !t || /^ningun|^nada|^—$|^-$/i.test(String(t).trim());
+  const bloques = [resumen];
+  const apoyos = [];
+  if(!vacio(soporta)) apoyos.push(`✅ A favor: ${soporta}.`);
+  if(!vacio(noAcompana)) apoyos.push(`⚠️ En contra: ${noAcompana}.`);
+  if(apoyos.length) bloques.push(apoyos.join('\n'));
+  if(institucional && !/no hay una señal clara/i.test(institucional)) bloques.push(`🏦 Dinero institucional: ${institucional}`);
+  if(riesgos.length) bloques.push(`⚠️ Riesgos activos:\n${riesgos.map(r=>'• '+r).join('\n')}`);
+  bloques.push(`📈 Qué confirmaría más la entrada:\n${confirmacion}`);
+  bloques.push(`🔄 Si el análisis falla:\n${alternativo}`);
+  bloques.push(`🎯 Mejor nivel para esperar:\n${mejorEntrada}\n${errorComun}`);
+  const explanation = bloques.join('\n\n');
 
   const invalidation = [];
   if(rec==='LONG'){
@@ -5560,7 +5674,8 @@ export {
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
   fetchCapitalFlowContext, fetchUnlockRisk, fetchUsdStrength, keltnerChannel, detectSqueeze, confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow,
-  tryBinance, tryGecko, tryOKX, tryBybit, tryMEXC, tryBitunix, tryKuCoin,
+  tryBinance, tryBinanceFutures, tryGecko, tryOKX, tryOKXPerp, tryBybit, tryBybitPerp,
+  tryMEXC, tryBitunix, tryBitunixSpot, tryKuCoin,
   ema, sma, rsi, macd, bollinger, atr, stochRsi, stochasticOscillator, computeLiquidityProfile, computeVolumeProbability, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectZonasOfertaDemanda, detectNivelesEstructurales, detectLiquidezPorHorizonte, detectIFVG, computeVWAP, computeCVD, mfi, obvSeries, adx, cci, roc,
   findSupportResistance, findNearbyLevel, levelStrength, analyzeLevelTests, findPivots, labelSwings, detectStructureEvents,
   detectOrderBlocks, detectFVG, detectDoubleTopBottom, detectEqualLevels, detectLiquiditySweep, detectAccumulationBearTrap, detectDistributionBullTrap, fibLevels, detectCandlePattern, computeStructure,
