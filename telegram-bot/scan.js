@@ -2247,17 +2247,15 @@ async function confirmTheses(state, capitalFlow){
           .map(g=>`✅ ${g.name.replace(/^[^\s]+\s/,'')}`).join('\n');
 
         sendPromises.push(sendTelegram(
-          `${thesis.dir==='LONG'?'🟢':'🔴'} <b>SEÑAL CONFIRMADA — $${thesis.symbol}${thesis.tag||''}</b>\n` +
-          `${DIV}\n` +
-          // Se muestran los DOS scores: el de 4h (que es el que pasó el umbral de 7.6 y creó la
-          // tesis) y el de 15m (recalculado al confirmar). Antes solo se veía el de 15m, y como
-          // puede ser más bajo, parecía que una señal de 6.8 había pasado un umbral de 7.6.
-          `📊 Score: <b>${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10</b> en 15m` +
-          (thesis.score4h ? ` · <b>${thesis.score4h}/10</b> en 4h <i>(el que creó la tesis)</i>` : '') + `\n` +
-          `🎯 Confianza: <b>${result15.confidence}%</b>\n` +
-          `🧩 Setup: ${setupsActivos}\n` +
-          `📈 Dirección: <b>${thesis.dir}</b>\n` +
-          `⏱ 4h → Confirmado en 15m\n\n` +
+          // ═══ ENCABEZADO: LO QUE HAY QUE SABER DE UN VISTAZO ═══
+          // Antes eran 5 líneas sueltas (score, confianza, setup, dirección, timeframe) que
+          // había que leer una por una. Ahora la primera línea dice qué operación es y qué tan
+          // fuerte, y los detalles van en una sola línea debajo.
+          `${thesis.dir==='LONG'?'🟢':'🔴'} <b>${thesis.dir} — $${thesis.symbol}${thesis.tag||''}</b>  ` +
+          `<b>${Math.max(result15.longScore,result15.shortScore).toFixed(1)}</b>/10\n` +
+          `<i>Confianza ${result15.confidence}%` +
+          (thesis.score4h ? ` · la tesis nació en 4h con ${thesis.score4h}/10` : '') +
+          ` · ${setupsActivos}</i>\n\n` +
 
           `${DIV}\n📌 <b>OPERACIÓN</b>\n` +
           `Entrada: <code>$${entryPrice.toFixed(6)}</code>\n` +
