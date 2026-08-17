@@ -497,8 +497,19 @@ function getSaludAPIs(){
 // escribías "BICOUSDT" o "BICO/USDT" terminaba buscando "BICOUSDTUSDT", que no existe en ningún
 // exchange, y el resultado era "moneda no encontrada" aunque la moneda estuviera perfectamente.
 function normalizarSimbolo(entrada){
-  let s = String(entrada||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
-  // Se saca el par del final solo si queda algo antes (para no romper "USDT" a secas)
+  let s = String(entrada||'').trim().toUpperCase();
+
+  // Sufijos de perpetuo que usan TradingView y varios exchanges. Hay que sacarlos ANTES de
+  // limpiar los símbolos, porque ".P" se convertiría en "P" y quedaría pegado al nombre:
+  // LABUSDT.P terminaría buscándose como "LABUSDTP", que no existe en ningún lado.
+  s = s.replace(/\.(P|PERP)$/i, '')      // LABUSDT.P → LABUSDT
+       .replace(/[-_]?PERP$/i, '')        // LAB-PERP  → LAB
+       .replace(/[-_]?SWAP$/i, '')        // LAB-SWAP  → LAB
+       .replace(/^(BINANCE|BYBIT|MEXC|OKX|KUCOIN|BITUNIX|GATEIO|COINBASE):/i, ''); // prefijo de exchange
+
+  s = s.replace(/[^A-Z0-9]/g,'');
+
+  // Se saca la moneda de cotización del final, si queda algo antes
   for(const sufijo of ['USDT','USDC','BUSD','USD']){
     if(s.endsWith(sufijo) && s.length > sufijo.length){ s = s.slice(0, -sufijo.length); break; }
   }
@@ -540,45 +551,51 @@ async function fetchTokenData(query, tf){
   // ver al abrir la posición. Gate.io se sacó a pedido suyo.
   const sources = [tryBinance, tryBitunix, tryMEXCFutures, tryMEXC, tryOKX, tryBybit, tryKuCoin];
   const fallos = [];
-  // Se prueba fuente por fuente, y dentro de cada una las variantes del símbolo.
-  // La primera variante (USDT con el nombre exacto) cubre la enorme mayoría de los casos,
-  // así que las demás casi nunca se llegan a probar y no ralentizan la búsqueda normal.
-  for(const src of sources){
-    for(const variante of variantes){
-      const esPrincipal = (variante === variantes[0]);
-      const etiqueta = esPrincipal ? src.name : `${src.name} (${variante.sym}/${variante.quote})`;
+  // ═══ BÚSQUEDA EN PARALELO ═══
+  // Antes se probaba fuente por fuente en fila: si la moneda estaba en la última, había que
+  // esperar a que las seis anteriores agotaran su límite de 9 segundos (hasta 54 segundos).
+  // Ahora se lanzan en tandas paralelas y gana la primera que responda con datos válidos.
+  //   Tanda 1: Binance + Bitunix + MEXC Futuros  → cubre la enorme mayoría
+  //   Tanda 2: el resto, solo si la primera no encontró nada
+  // Peor caso: de ~54 segundos a ~18.
+  const tandas = [
+    [tryBinance, tryBitunix, tryMEXCFutures],
+    [tryMEXC, tryOKX, tryBybit, tryKuCoin],
+  ];
+
+  const intentar = async (src, variante) => {
+    const esPrincipal = (variante === variantes[0]);
+    const etiqueta = esPrincipal ? src.name : `${src.name} (${variante.sym}/${variante.quote})`;
+    const t0 = Date.now();
+    const data = await conTiempoLimite(src(query, tf, variante), 9000, etiqueta);
+    if(!data?.candles || data.candles.length < 20) throw new Error(`${src.name}: sin velas suficientes`);
+    if(data.candles.length < 60) data.pocasVelas = true;
+    if(variante.quote !== 'USDT') data.parAlternativo = `${variante.sym}/${variante.quote}`;
+    if(variante.sym !== symBase) data.simboloReal = variante.sym;
+    registrarAPI(src.name, true, Date.now()-t0);
+    return data;
+  };
+
+  for(const tanda of tandas){
+    // Dentro de cada tanda: todas las fuentes con la variante principal, a la vez.
+    // Promise.any devuelve la PRIMERA que funcione, sin esperar a las demás.
+    try{
+      return await Promise.any(tanda.map(src => intentar(src, variantes[0])));
+    }catch(errores){
+      // AggregateError: fallaron todas las de esta tanda con el símbolo normal
+      for(const src of tanda) fallos.push(`${src.name}: no encontró ${symBase}USDT`);
+    }
+    // Si el símbolo normal falló, se prueban las variantes (USDC, 1000XXX) también en paralelo
+    const alternativas = variantes.slice(1);
+    if(alternativas.length){
       try{
-        // 6 segundos por fuente: si no responde en ese tiempo, se pasa a la siguiente en vez de
-        // quedarse colgado. Con 6 fuentes, el peor caso pasa de varios minutos a ~36 segundos.
-        const _t0 = Date.now();
-        // 9 segundos, no 6: desde el navegador cada pedido puede pasar por un proxy CORS,
-        // y con 6s la fuente se abandonaba antes de que el proxy respondiera. Es el motivo
-        // por el que la web no encontraba monedas que el bot sí encontraba.
-        const data = await conTiempoLimite(src(query, tf, variante), 9000, etiqueta);
-        // El mínimo baja de 30 a 20 velas: una moneda recién listada puede tener pocas y antes
-        // se descartaba aunque la fuente hubiera respondido bien. Se marca para que el motor
-        // sepa que los indicadores largos no van a ser confiables.
-        if(data.candles && data.candles.length>=20){
-          if(data.candles.length < 60) data.pocasVelas = true;
-          if(variante.quote !== 'USDT') data.parAlternativo = `${variante.sym}/${variante.quote}`;
-          if(variante.sym !== symBase) data.simboloReal = variante.sym;
-          registrarAPI(src.name, true, Date.now()-_t0);
-          return data;
-        }
-        if(esPrincipal){
-          registrarAPI(src.name, false, null, 'sin velas suficientes');
-          fallos.push(`${src.name}: sin velas suficientes`);
-        }
-      }catch(e){
-        if(esPrincipal){
-          registrarAPI(src.name, false, null, e.message);
-          fallos.push(`${src.name}: ${e.message}`);
-        }
-        // Si la fuente entera se cayó por timeout, no tiene sentido probar las otras variantes
-        if(String(e.message||'').includes('se agotó el tiempo')) break;
-      }
+        const intentos = [];
+        for(const src of tanda) for(const v of alternativas) intentos.push(intentar(src, v));
+        return await Promise.any(intentos);
+      }catch(e){ /* ninguna variante funcionó en esta tanda, se pasa a la siguiente */ }
     }
   }
+
   // ninguna fuente de exchanges centralizados lo tiene -> probamos DEXs (GeckoTerminal)
   try{
     return await conTiempoLimite(tryGecko(query, tf), 8000, 'GeckoTerminal');
@@ -4083,6 +4100,152 @@ function verificarDatosSanos(data, opciones = {}){
   };
 }
 
+// ═══ RATIOS DE APALANCAMIENTO Y POSICIONAMIENTO ═══
+// Cuatro números que dicen bastante sobre cuán inflada está una moneda con derivados:
+//  · OI/market cap: cuánto apalancamiento hay respecto al tamaño real de la moneda.
+//    Arriba del 30% es mucho: cualquier movimiento provoca liquidaciones en cadena.
+//  · Futuros/spot: si se opera mucho más en futuros que al contado, el precio lo mueven
+//    los apalancados, no compradores reales. Típico de las monedas que se desploman de golpe.
+//  · L/S global vs L/S de cuentas grandes: cuando difieren, los grandes están del lado
+//    contrario a la mayoría — y suelen tener razón.
+export async function fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpotUsd){
+  const sym = normalizarSimbolo(symbolRaw);
+  const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
+  const out = { oiUsd:null, oiSobreMcap:null, futSobreSpot:null,
+                lsGlobal:null, lsCuentasTop:null, lsPosicionesTop:null, divergencia:null, alertas:[] };
+  try{
+    const [oiRes, gRes, aRes, pRes, tkRes] = await Promise.all([
+      fetchJSON(`${FUTURES}/fapi/v1/openInterest?symbol=${pair}`).catch(()=>null),
+      fetchJSON(`${FUTURES}/futures/data/globalLongShortAccountRatio?symbol=${pair}&period=1h&limit=1`).catch(()=>null),
+      fetchJSON(`${FUTURES}/futures/data/topLongShortAccountRatio?symbol=${pair}&period=1h&limit=1`).catch(()=>null),
+      fetchJSON(`${FUTURES}/futures/data/topLongShortPositionRatio?symbol=${pair}&period=1h&limit=1`).catch(()=>null),
+      fetchJSON(`${FUTURES}/fapi/v1/ticker/24hr?symbol=${pair}`).catch(()=>null),
+    ]);
+
+    const precio = parseFloat(tkRes?.lastPrice) || null;
+    if(oiRes?.openInterest && precio){
+      out.oiUsd = parseFloat(oiRes.openInterest) * precio;
+      if(marketCapUsd > 0){
+        out.oiSobreMcap = +(out.oiUsd/marketCapUsd*100).toFixed(1);
+        if(out.oiSobreMcap >= 30) out.alertas.push(`El interés abierto es el ${out.oiSobreMcap}% del market cap: hay muchísimo apalancamiento para el tamaño de esta moneda. Un movimiento fuerte puede desatar liquidaciones en cadena.`);
+      }
+    }
+    const volFut = parseFloat(tkRes?.quoteVolume) || null;
+    if(volFut && volSpotUsd > 0){
+      out.futSobreSpot = +(volFut/volSpotUsd).toFixed(1);
+      if(out.futSobreSpot >= 5) out.alertas.push(`Se opera ${out.futSobreSpot}x más en futuros que al contado: el precio lo están moviendo los apalancados, no compradores reales.`);
+    }
+
+    const leer = r => Array.isArray(r) && r[0] ? parseFloat(r[0].longShortRatio) : null;
+    out.lsGlobal = leer(gRes);
+    out.lsCuentasTop = leer(aRes);
+    out.lsPosicionesTop = leer(pRes);
+
+    // Lo más interesante: cuando los grandes están del lado contrario a la mayoría
+    if(out.lsGlobal && out.lsPosicionesTop){
+      const gGlobal = out.lsGlobal > 1 ? 'LONG' : 'SHORT';
+      const gTop = out.lsPosicionesTop > 1 ? 'LONG' : 'SHORT';
+      if(gGlobal !== gTop){
+        out.divergencia = {
+          multitud: gGlobal, grandes: gTop,
+          texto: `La mayoría está ${gGlobal} (${out.lsGlobal.toFixed(2)}) pero las posiciones grandes están ${gTop} (${out.lsPosicionesTop.toFixed(2)}). Cuando se separan así, suele tener razón el lado grande.`,
+        };
+      }
+    }
+    return (out.oiUsd || out.lsGlobal) ? out : null;
+  }catch(e){ return null; }
+}
+
+// ═══ LECTURA UNIFICADA DE LIQUIDEZ Y FLUJO ═══
+// El problema que resuelve: el mensaje mostraba cinco bloques sueltos (liquidez, libro de órdenes,
+// flujo, wallets, actividad anómala). Si tres decían lo mismo no se notaba, y si se contradecían
+// tampoco. Leerlos por separado obliga a hacer la síntesis mentalmente.
+//
+// Esto los junta en UNA lectura: cuenta cuántas capas apuntan a cada lado, marca cuándo coinciden
+// —que es cuando la señal vale— y sobre todo marca cuándo se contradicen, que es la información
+// más útil y la que más fácil se pierde mirando bloques separados.
+export function lecturaUnificada({ liquidez, libro, flujo, wallets, onchain, anomalia, dirTesis }){
+  const capas = [];
+
+  // Cada capa se reduce a lo mismo: nombre, hacia dónde apunta, y por qué
+  if(liquidez?.ladoFuerte && liquidez.ladoFuerte !== 'pareja'){
+    capas.push({
+      nombre:'Liquidez', peso: liquidez.confluencia ? 2 : 1,   // si coincide 15m+4h pesa doble
+      sesgo: liquidez.ladoFuerte === 'arriba' ? 'LONG' : 'SHORT',
+      texto: liquidez.confluencia
+        ? `el imán más fuerte está ${liquidez.ladoFuerte} y coincide en 15m y 4h`
+        : `la liquidez más fuerte está ${liquidez.ladoFuerte}`,
+    });
+  }
+  if(libro?.sesgo && libro.sesgo !== 'EQUILIBRADO'){
+    capas.push({ nombre:'Libro de órdenes', peso:1,
+      sesgo: libro.sesgo === 'COMPRADOR' ? 'LONG' : 'SHORT',
+      texto: `las órdenes puestas pesan del lado ${libro.sesgo.toLowerCase()}` });
+  }
+  if(flujo?.sesgo && flujo.sesgo !== 'EQUILIBRADO'){
+    capas.push({ nombre:'Flujo de órdenes', peso: Math.abs(flujo.cambio) > 6 ? 2 : 1,
+      sesgo: flujo.sesgo === 'COMPRADOR' ? 'LONG' : 'SHORT',
+      texto: `${flujo.pctComprador}% del volumen es comprador agresivo${Math.abs(flujo.cambio)>6 ? ` y viene ${flujo.cambio>0?'subiendo':'bajando'}` : ''}` });
+  }
+  if(wallets?.direccion && wallets.direccion !== 'NEUTRO'){
+    capas.push({ nombre:'Wallets', peso: wallets.confianza >= 60 ? 2 : 1,
+      sesgo: wallets.direccion,
+      texto: wallets.direccion === 'LONG' ? 'salen más tokens de exchanges de los que entran' : 'entran más tokens a exchanges de los que salen' });
+  }
+  if(onchain?.direccion && onchain.direccion !== 'NEUTRO'){
+    capas.push({ nombre:'Actividad DEX', peso:1, sesgo: onchain.direccion,
+      texto: onchain.direccion === 'LONG' ? 'dominan las compras en los pools' : 'dominan las ventas en los pools' });
+  }
+  if(anomalia?.hayAlgo){
+    const absorcion = anomalia.señales?.find(s => s.tipo === 'absorción');
+    const barrido = anomalia.señales?.find(s => s.tipo === 'barrido');
+    if(absorcion || barrido){
+      capas.push({ nombre:'Actividad inusual', peso:1, sesgo:'AVISO',
+        texto: absorcion ? 'alguien está absorbiendo órdenes sin mover el precio' : 'hubo un barrido de liquidez reciente' });
+    }
+  }
+
+  if(!capas.length) return null;
+
+  const aFavorLong = capas.filter(c=>c.sesgo==='LONG').reduce((s,c)=>s+c.peso, 0);
+  const aFavorShort = capas.filter(c=>c.sesgo==='SHORT').reduce((s,c)=>s+c.peso, 0);
+  const total = aFavorLong + aFavorShort;
+  const dominante = aFavorLong > aFavorShort ? 'LONG' : aFavorShort > aFavorLong ? 'SHORT' : 'EMPATE';
+  const fuerza = total > 0 ? Math.round(Math.abs(aFavorLong-aFavorShort)/total*100) : 0;
+
+  const alineadas = capas.filter(c=>c.sesgo===dominante);
+  const enContra = capas.filter(c=>c.sesgo!==dominante && c.sesgo!=='AVISO');
+  const avisos = capas.filter(c=>c.sesgo==='AVISO');
+
+  // Lo importante: si la mayoría apunta contra la operación, hay que decirlo con claridad
+  const relacionConTesis = !dirTesis || dominante === 'EMPATE' ? null
+    : dominante === dirTesis ? 'acompaña' : 'contradice';
+
+  const frases = [];
+  if(dominante === 'EMPATE'){
+    frases.push(`Las señales de flujo están divididas: ${capas.filter(c=>c.sesgo==='LONG').length} apuntan arriba y ${capas.filter(c=>c.sesgo==='SHORT').length} abajo. No hay una lectura clara.`);
+  } else {
+    frases.push(`${alineadas.length} de ${capas.length} señales de flujo apuntan a ${dominante} (${alineadas.map(c=>c.nombre).join(', ')}): ${alineadas.map(c=>c.texto).join('; ')}.`);
+    if(enContra.length){
+      frases.push(`⚠️ Pero ${enContra.length} apunta${enContra.length>1?'n':''} al lado contrario — ${enContra.map(c=>`${c.nombre}: ${c.texto}`).join('; ')}.`);
+    }
+  }
+  if(avisos.length) frases.push(`ℹ️ ${avisos.map(c=>c.texto).join('; ')}.`);
+  if(relacionConTesis === 'contradice'){
+    frases.push(`🔴 En conjunto, el flujo va EN CONTRA de esta operación ${dirTesis}. Puede que el precio busque el otro lado antes de girar a favor.`);
+  } else if(relacionConTesis === 'acompaña' && fuerza >= 50){
+    frases.push(`🟢 El flujo acompaña la operación ${dirTesis} de forma bastante consistente.`);
+  }
+
+  return {
+    dominante, fuerza, capas: capas.length,
+    aFavor: alineadas.length, enContra: enContra.length,
+    relacionConTesis,
+    detalle: capas,
+    texto: frases.join(' '),
+  };
+}
+
 // ═══ LIBRO DE ÓRDENES ═══
 // La diferencia con lo que veníamos haciendo: hasta ahora la liquidez se RECONSTRUÍA a partir de
 // las velas (dónde hubo toques, dónde se acumuló volumen). Eso es inferir dónde PUDO haber
@@ -5101,6 +5264,14 @@ function generarReporteResearch(closedTrades, opciones = {}){
   analizarPor(null, 'Wallets', t => t.registro?.wallets?.acompana ?? (t.registro?.wallets ? 'neutro' : null));
   // Libro de órdenes y flujo real: ¿predicen algo o son ruido llamativo?
   analizarPor(null, 'Libro de órdenes', t => t.registro?.libro?.sesgo ?? null);
+  // ¿El apalancamiento excesivo predice algo? Es la sospecha clásica: OI muy alto respecto al
+  // market cap suele preceder movimientos violentos, pero hay que comprobarlo.
+  analizarPor(null, 'Apalancamiento', t => {
+    const o = t.registro?.apalancamiento?.oiSobreMcap;
+    return o == null ? null : o >= 30 ? 'muy alto (30%+)' : o >= 15 ? 'alto (15-30%)' : 'normal';
+  });
+  analizarPor(null, 'Grandes vs multitud', t => t.registro?.apalancamiento?.divergencia == null ? null
+    : `grandes en ${t.registro.apalancamiento.divergencia}`);
   analizarPor(null, 'Flujo de órdenes', t => t.registro?.flujoOrdenes?.sesgo ?? null);
   analizarPor(null, 'Flujo de exchange', t => {
     const w = t.registro?.wallets;
