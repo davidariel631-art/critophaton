@@ -756,6 +756,8 @@
     </div><!-- /subgroup indicadores -->
 
     <div class="analyze-subgroup" data-subgroup="analisis" style="display:none;">
+      <!-- Los escenarios van PRIMERO: es lo que se quiere saber después de ver todos los datos -->
+      <div id="escenariosBox" style="display:none;"></div>
     <div class="card" style="margin-top:18px;">
       <h2>🧠 Modo Analista</h2>
       <div class="signal-text" id="analystExplanation" style="background:var(--panel2);"></div>
@@ -1249,7 +1251,10 @@ function drawCandles(candles, series, support, resistance, structure, setup){
     const line = candleChart.addLineSeries({ color, lineWidth:1.3, priceLineVisible:false, lastValueVisible:false });
     line.setData(candles.map((c,i)=> arr[i]!=null ? { time: Math.floor(c.t/1000), value: arr[i] } : null).filter(Boolean));
   }
-  addEma(series.e20, '#00d9ff'); addEma(series.e50, '#6ea8ff'); addEma(series.e200, '#9a7bd9');
+  // Solo DOS medias: la rápida (20) para el corto plazo y la lenta (200) que define la tendencia
+  // de fondo. La de 50 se sacó porque en un gráfico de 400px tres medias se pisan entre sí y
+  // ninguna se lee bien.
+  addEma(series.e20, '#00d9ff'); addEma(series.e200, '#9a7bd9');
 
   // Legend de zonas/niveles (reemplaza el click sobre el canvas: más simple y funciona igual de bien en mobile)
   const legend = [];
@@ -1276,12 +1281,33 @@ function drawCandles(candles, series, support, resistance, structure, setup){
   }
   if(structure){
     if(structure.bullishOB){
-      addLevel(structure.bullishOB.top, 'rgba(16,185,129,0.5)', true, 'OB alcista (techo)', `Order Block alcista entre $${fmt(structure.bullishOB.bottom)} y $${fmt(structure.bullishOB.top)}: última vela bajista antes de un impulso alcista fuerte. Zona donde "smart money" habría acumulado.`);
-      addLevel(structure.bullishOB.bottom, 'rgba(16,185,129,0.5)', true, 'OB alcista (piso)', `Order Block alcista entre $${fmt(structure.bullishOB.bottom)} y $${fmt(structure.bullishOB.top)}.`);
+      // ═══ ORDER BLOCKS COMO BANDA, NO COMO 4 LÍNEAS ═══
+  // Antes cada order block dibujaba dos líneas (techo y piso), o sea 4 líneas en total solo
+  // para las zonas. Con soporte, resistencia, entrada, stop y dos TP encima, el gráfico
+  // quedaba ilegible. Ahora cada zona es una sola línea en su punto medio, con la etiqueta.
+  const zonaOB = (ob, color, nombre) => {
+    if(!ob || ob.top == null || ob.bottom == null) return;
+    const medio = (ob.top + ob.bottom) / 2;
+    const ancho = Math.abs(ob.top - ob.bottom) / medio * 100;
+    addLevel(medio, color, true, nombre,
+      `${nombre} entre $${fmt(ob.bottom)} y $${fmt(ob.top)} (zona de ${ancho.toFixed(1)}% de ancho). Es donde entró dinero institucional: el precio suele reaccionar al volver acá.`);
+  };
+  zonaOB(structure.bullishOB, 'rgba(16,185,129,0.45)', 'Zona de demanda');
+  zonaOB(structure.bearishOB, 'rgba(239,68,68,0.45)', 'Zona de oferta');
+
+  // ═══ COMPRESIÓN: EL TECHO Y EL PISO QUE SE ESTÁN CERRANDO ═══
+  // El motor ya detectaba triángulos de compresión pero nunca se dibujaban. Es de las cosas
+  // más útiles de marcar: cuando el rango se estrecha, se está acumulando energía y la salida
+  // suele ser violenta. Verlo en el gráfico cambia cómo se lee todo lo demás.
+  try{
+    const tri = window.TheHatonEngine?.detectTrianguloCompresion?.(candles);
+    if(tri && tri.techo != null && tri.piso != null){
+      addLevel(tri.techo, 'rgba(0,217,255,0.8)', false, `Compresión ↑`,
+        `Techo del ${tri.tipo}: el rango se comprimió un ${tri.compresionPct.toFixed(0)}%. ${tri.descripcion}`);
+      addLevel(tri.piso, 'rgba(0,217,255,0.8)', false, `Compresión ↓`,
+        `Piso del ${tri.tipo}. Cuando el precio rompe uno de los dos bordes, el movimiento suele ser fuerte porque se libera la energía acumulada.`);
     }
-    if(structure.bearishOB){
-      addLevel(structure.bearishOB.top, 'rgba(239,68,68,0.5)', true, 'OB bajista (techo)', `Order Block bajista entre $${fmt(structure.bearishOB.bottom)} y $${fmt(structure.bearishOB.top)}: última vela alcista antes de un impulso bajista fuerte.`);
-      addLevel(structure.bearishOB.bottom, 'rgba(239,68,68,0.5)', true, 'OB bajista (piso)', `Order Block bajista entre $${fmt(structure.bearishOB.bottom)} y $${fmt(structure.bearishOB.top)}.`);
+  }catch(e){ /* sin compresión detectada, el gráfico queda igual */ }
     }
     (structure.fvgs||[]).slice(0,2).forEach(g=>{
       const color = g.type==='bull' ? 'rgba(16,185,129,0.35)' : 'rgba(239,68,68,0.35)';
@@ -1693,6 +1719,57 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
 
 ⚠️ Análisis automatizado, no asesoría financiera. DYOR.`;
   document.getElementById('signalText').textContent = signal;
+  // ═══ QUÉ PUEDE PASAR ═══
+  // Se calcula al final, cuando ya están todos los datos: estructura, liquidez, compresión y fase.
+  // Es lo que le faltaba al análisis — después de mostrar todo, decir hacia dónde puede ir.
+  (() => {
+    const box = document.getElementById('escenariosBox');
+    try{
+      const E = window.TheHatonEngine;
+      const esc = E.escenariosProbables({
+        price: result.metrics.price,
+        structure: result.structure,
+        liquidez: E.detectLiquidezPorHorizonte(data.candles),
+        compresion: E.detectTrianguloCompresion(data.candles),
+        fase: (E.detectMarketPhase(data.candles) || {}).fase,
+        dirTesis: result.recommendation === 'NO OPERAR' ? null : result.recommendation,
+        setup: result.setup,
+      });
+      if(!esc){ box.style.display='none'; return; }
+
+      const colProb = p => p==='alta' ? 'var(--amber)' : p==='media' ? 'var(--sub)' : '#5a6672';
+      const critica = esc.areaCritica ? `
+        <div style="background:rgba(0,217,255,.07);border:1px solid rgba(0,217,255,.3);border-radius:11px;padding:13px;margin-bottom:12px;">
+          <div style="font-size:10.5px;color:var(--amber);letter-spacing:.6px;font-weight:700;">📍 ÁREA CRÍTICA</div>
+          <div style="font-family:var(--display);font-size:16px;font-weight:800;margin:5px 0;">
+            $${fmt(esc.areaCritica.desde)} — $${fmt(esc.areaCritica.hasta)}</div>
+          <div style="font-size:12px;color:#c3ccd6;line-height:1.55;">${esc.areaCritica.motivo}</div>
+        </div>` : '';
+
+      const filas = esc.escenarios.map(e => `
+        <div style="border-left:2px solid ${colProb(e.probabilidad)};padding:0 0 0 11px;margin-bottom:13px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <div style="font-size:13px;font-weight:700;">${e.titulo}</div>
+            <div style="font-size:9.5px;color:${colProb(e.probabilidad)};text-transform:uppercase;letter-spacing:.5px;font-weight:700;">${e.probabilidad}</div>
+          </div>
+          <div style="font-size:12.5px;color:#c3ccd6;line-height:1.6;margin-top:5px;">${e.texto}</div>
+        </div>`).join('');
+
+      box.innerHTML = `<div class="card" style="border-color:rgba(0,217,255,.22);">
+        <h2 style="color:var(--amber);">🔮 Qué puede pasar</h2>
+        ${critica}
+        ${filas}
+        <div style="background:var(--panel2);border-radius:9px;padding:11px 13px;margin-top:4px;font-size:12.5px;line-height:1.55;">
+          🧠 <b>${esc.conclusion}</b>
+        </div>
+        <div style="font-size:10.5px;color:var(--sub);margin-top:9px;line-height:1.5;">
+          No es una predicción: son los caminos más probables según dónde está la liquidez, la estructura y la compresión. El mercado puede hacer cualquier otra cosa.
+        </div>
+      </div>`;
+      box.style.display = '';
+    }catch(e){ box.style.display='none'; }
+  })();
+
   // ═══ LECTURA DE ESTRUCTURA JERARQUIZADA ═══
   // Antes eran 9 viñetas idénticas donde convivían "cluster FUERTE, objetivo muy probable"
   // (accionable) con "estructura LH-LL intacta" (contexto de fondo). Había que leerlas todas

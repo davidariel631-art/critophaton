@@ -4270,6 +4270,101 @@ export async function fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpot
   }catch(e){ return null; }
 }
 
+// ═══ QUÉ PUEDE PASAR — ESCENARIOS ═══
+// Lo que le faltaba al análisis: después de mostrar todos los datos, decir qué puede pasar.
+// No es una predicción: son los dos o tres caminos más probables según dónde está la liquidez,
+// la estructura y la compresión, con el nivel que define cuál se cumple.
+// Es la idea del gráfico anotado a mano: "área crítica", "todavía no hay entrada clara".
+export function escenariosProbables({ price, structure, liquidez, compresion, fase, dirTesis, setup }){
+  if(!price || !structure) return null;
+  const fmt = v => v == null ? '—' : (v >= 1 ? v.toFixed(2) : v.toPrecision(6));
+  const pct = (a,b) => Math.abs(a-b)/b*100;
+
+  const escenarios = [];
+  const arriba = liquidez?.cercanaArriba || liquidez?.lejanaArriba;
+  const abajo = liquidez?.cercanaAbajo || liquidez?.lejanaAbajo;
+  const bias = structure.bias;   // 'bull' | 'bear' | null
+
+  // ═══ ÁREA CRÍTICA ═══
+  // El nivel que, si se pierde o se supera, cambia la lectura entera. Es lo primero que hay
+  // que mirar: mientras el precio esté de un lado, vale una historia; del otro, otra.
+  let areaCritica = null;
+  if(compresion?.techo && compresion?.piso){
+    areaCritica = { desde: compresion.piso, hasta: compresion.techo,
+      motivo: `El precio está comprimido entre estos dos niveles. Mientras siga adentro no hay dirección; el lado por el que rompa define el movimiento.` };
+  } else if(structure.bullishOB && bias === 'bull'){
+    areaCritica = { desde: structure.bullishOB.bottom, hasta: structure.bullishOB.top,
+      motivo: `Zona de demanda. Si el precio la pierde con un cierre debajo, la tesis alcista deja de tener sustento.` };
+  } else if(structure.bearishOB && bias === 'bear'){
+    areaCritica = { desde: structure.bearishOB.bottom, hasta: structure.bearishOB.top,
+      motivo: `Zona de oferta. Si el precio la supera con un cierre encima, la tesis bajista deja de tener sustento.` };
+  } else if(abajo && arriba){
+    areaCritica = { desde: abajo.precio, hasta: arriba.precio,
+      motivo: `Entre estos dos niveles el precio no tiene un imán claro. Los movimientos adentro suelen ser ruido.` };
+  }
+
+  // ═══ ESCENARIO 1: BARRIDO DE LIQUIDEZ ═══
+  // El más frecuente y el que más sorprende: el precio va PRIMERO a buscar la liquidez
+  // contraria antes de arrancar para el lado bueno.
+  const imanCercano = (arriba && abajo)
+    ? (pct(arriba.precio, price) < pct(abajo.precio, price) ? arriba : abajo)
+    : (arriba || abajo);
+  if(imanCercano){
+    const esArriba = imanCercano === arriba;
+    const dist = pct(imanCercano.precio, price);
+    const contraTesis = dirTesis && ((dirTesis === 'LONG' && !esArriba) || (dirTesis === 'SHORT' && esArriba));
+    escenarios.push({
+      titulo: contraTesis ? '⚠️ Barrido antes de arrancar' : '🎯 Va a buscar el imán',
+      probabilidad: dist < 3 ? 'alta' : dist < 8 ? 'media' : 'baja',
+      texto: contraTesis
+        ? `Lo más probable es que el precio baje primero a $${fmt(imanCercano.precio)} (${dist.toFixed(1)}% ${esArriba?'arriba':'abajo'}, ${imanCercano.toques} toques) a barrer los stops que se acumularon ahí, y recién después gire a favor. Si tenés la operación abierta, ese movimiento en contra puede ser normal y no significa que la tesis falló.`
+        : `El precio tiene un imán a $${fmt(imanCercano.precio)}, a ${dist.toFixed(1)}% ${esArriba?'por encima':'por debajo'}, con ${imanCercano.toques} toques acumulados. Es hacia donde tiende a moverse antes de definir.`,
+      nivel: imanCercano.precio,
+    });
+  }
+
+  // ═══ ESCENARIO 2: SALIDA DE LA COMPRESIÓN ═══
+  if(compresion?.techo && compresion?.piso){
+    escenarios.push({
+      titulo: '💥 Expansión desde la compresión',
+      probabilidad: compresion.compresionPct >= 50 ? 'alta' : 'media',
+      texto: `El rango se comprimió un ${compresion.compresionPct.toFixed(0)}%: se está acumulando energía. Cuando rompa $${fmt(compresion.techo)} o $${fmt(compresion.piso)}, el movimiento suele ser rápido y del tamaño del rango que venía comprimiendo. Operar adentro de la compresión es lo que más falsas señales genera.`,
+      nivel: null,
+    });
+  }
+
+  // ═══ ESCENARIO 3: CONTINUACIÓN ═══
+  if(bias && setup?.t1){
+    const alcista = bias === 'bull';
+    escenarios.push({
+      titulo: alcista ? '📈 Continuación alcista' : '📉 Continuación bajista',
+      probabilidad: fase && /EXPANSIÓN/i.test(fase) ? 'alta' : 'media',
+      texto: `La estructura sigue ${alcista?'alcista (máximos y mínimos más altos)':'bajista (máximos y mínimos más bajos)'}. Si se mantiene, el primer objetivo razonable es $${fmt(setup.t1)}${setup.t2?` y después $${fmt(setup.t2)}`:''}.${fase?` La fase actual (${fase}) ${/EXPANSIÓN/i.test(fase)?'acompaña':'no acompaña del todo'} este escenario.`:''}`,
+      nivel: setup.t1,
+    });
+  }
+
+  // ═══ ESCENARIO 4: INVALIDACIÓN ═══
+  if(structure.events?.some(e=>/CHoCH/i.test(e))){
+    escenarios.push({
+      titulo: '🔄 Cambio de carácter en curso',
+      probabilidad: 'media',
+      texto: `Apareció un CHoCH: la estructura previa está en duda. Es el aviso temprano de que la tendencia puede darse vuelta, pero también el momento donde más falsos quiebres hay. Conviene esperar confirmación antes de operar en la nueva dirección.`,
+      nivel: null,
+    });
+  }
+
+  if(!escenarios.length) return null;
+
+  // Una conclusión que ate todo, no una lista de escenarios sueltos
+  const alta = escenarios.filter(e=>e.probabilidad==='alta');
+  const conclusion = alta.length
+    ? `Lo más probable ahora: ${alta.map(e=>e.titulo.replace(/^[^\s]+\s/,'').toLowerCase()).join(' y después ')}.`
+    : `Ningún escenario destaca claramente: el mercado no está mostrando una intención definida. Es de los momentos donde conviene esperar.`;
+
+  return { escenarios, areaCritica, conclusion };
+}
+
 // ═══ LECTURA UNIFICADA DE LIQUIDEZ Y FLUJO ═══
 // El problema que resuelve: el mensaje mostraba cinco bloques sueltos (liquidez, libro de órdenes,
 // flujo, wallets, actividad anómala). Si tres decían lo mismo no se notaba, y si se contradecían
