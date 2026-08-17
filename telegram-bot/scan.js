@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -181,6 +181,26 @@ async function runMarketPulse(state, capitalFlow){
       `⚖️ Long/Short (top traders): ${ratioTxt}\n\n` +
 
       (lecturaLiqWS ? `${DIVW}\n${lecturaLiqWS.texto}\n\n` : '') +
+
+      // ═══ AGENDA DE LA SEMANA ═══
+      // Los datos macro mueven el precio más que cualquier indicador técnico. Saber que el
+      // miércoles salen las minutas de la Fed cambia cómo se lee todo lo demás.
+      (() => {
+        try{
+          const cal = calendarioMacro();
+          if(!cal.proximos.length) return '';
+          const icono = i => i === 'MUY ALTO' ? '🔴' : i === 'ALTO' ? '🟠' : '🟡';
+          const filas = cal.proximos.slice(0,4).map(e => {
+            const cuando = e.horas < 24 ? `en ${Math.max(0,e.horas).toFixed(0)}h` : `en ${(e.horas/24).toFixed(0)} días`;
+            const estimada = e.exacta ? '' : ' (fecha estimada)';
+            return `${icono(e.impacto)} <b>${e.nombre}</b> — ${cuando}${estimada}`;
+          }).join('\n');
+          const grande = cal.proximos.find(e => e.impacto === 'MUY ALTO' && e.horas < 72);
+          return `${DIVW}\n📅 <b>AGENDA DE LA SEMANA</b>\n${filas}\n` +
+            (grande ? `<i>${grande.queEs}</i>\n` : '') +
+            (cal.aviso ? `${cal.aviso}\n` : '') + '\n';
+        }catch(e){ return ''; }
+      })() +
 
       // ═══ FLUJO REAL DE BTC ═══
       // No es el netflow de exchanges de CryptoQuant (eso es de pago). Es quién está siendo más
@@ -2102,7 +2122,7 @@ async function confirmTheses(state, capitalFlow){
         // ═══ LECTURA UNIFICADA DE MERCADO ═══
         // Se calcula acá, donde ya existen anomalo/wallets/onchain, y se usa después en el mensaje.
         // Junta liquidez multi-temporalidad + libro + flujo + wallets + on-chain en un solo veredicto.
-        let lecturaMercado = null, liqMultiTF = null, libroOrdenes = null;
+        let lecturaMercado = null, liqMultiTF = null, libroOrdenes = null, matrizGrandes = null;
         try{
           liqMultiTF = await liquidezMultiTF(thesis.symbol, data15.candles, entryPrice);
           libroOrdenes = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix'?'Bitunix':'Binance');
@@ -2119,6 +2139,19 @@ async function confirmTheses(state, capitalFlow){
 
         // Ahora sí, con anomalo/wallets/onchain ya definidos, se arma el veredicto conjunto
         try{
+          // ═══ PRECIO vs POSICIONAMIENTO DE LOS GRANDES ═══
+          // Cuando el precio y los traders grandes van al mismo lado hay confirmación. Cuando
+          // se separan, alguien está atrapado — y normalmente no son los grandes.
+          try{
+            // fetch directo: scan.js no tiene fetchJSON propia (esa vive en el motor).
+            const res = await fetch(`https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=${thesis.symbol}USDT&period=1h&limit=6`);
+            const hist = res.ok ? await res.json() : null;
+            if(Array.isArray(hist) && hist.length >= 3){
+              matrizGrandes = precioVsPosicionamiento(data15.candles,
+                parseFloat(hist.at(-1).longShortRatio), parseFloat(hist[0].longShortRatio), thesis.dir);
+            }
+          }catch(e){ matrizGrandes = null; }
+
           lecturaMercado = lecturaUnificada({
             dir: thesis.dir, liqMulti: liqMultiTF, libro: libroOrdenes,
             flujo: calcularPresionFlujo(data15.candles, 24),
@@ -2267,6 +2300,8 @@ async function confirmTheses(state, capitalFlow){
           `Gestión: 60% en TP1 (stop pasa al punto de entrada) + 40% hasta TP2\n\n` +
 
           // Todo el contexto de mercado en una sola sección, ya calculado arriba
+          (matrizGrandes && matrizGrandes.cuadrante !== 'SIN DEFINIR'
+            ? `${DIV}\n${matrizGrandes.alineado===true?'🟢':matrizGrandes.alineado===false?'🔴':'⚪'} <b>${matrizGrandes.cuadrante}</b>\n${matrizGrandes.texto}\n${matrizGrandes.aviso?`⚠️ ${matrizGrandes.aviso}\n`:''}\n` : '') +
           (lecturaMercado ? `${DIV}\n${lecturaMercado.texto}\n\n` : '') +
           (liqMultiTF ? (()=>{
             const fmt = v => v>=1 ? v.toFixed(4) : v.toPrecision(5);
