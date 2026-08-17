@@ -224,13 +224,101 @@ const CUSTOM_COINS = ['TIA','SEI','JUP','PYTH','WIF','ORDI','STRK','ENA','W','TN
 let sendPromises = [];
 
 // ═══════════════════════════════════════════════════════════════════════
+// LIQUIDEZ MULTI-TEMPORALIDAD
+// Antes la liquidez se leía SOLO en 15m. Con 220 velas eso son 2 días y medio: se veían los
+// niveles del día, pero no dónde se vinieron acumulando stops durante semanas.
+// Y era incoherente con el resto del sistema, que detecta la tesis en 4h.
+//
+// Ahora se leen las tres y se distingue el peso de cada una:
+//   1D  → los niveles que más importan, donde hay stops de swing acumulados
+//   4h  → la temporalidad donde se detecta la tesis
+//   15m → dónde puede reaccionar el precio en las próximas horas
+// ═══════════════════════════════════════════════════════════════════════
+async function liquidezMultiTF(symbol, candles15, precio){
+  const capas = [];
+  const agregar = (tf, velas, peso) => {
+    if(!velas?.length || velas.length < 40) return;
+    try{
+      const liq = detectLiquidezPorHorizonte(velas);
+      const perfil = computeLiquidityProfile(velas, precio, 200);
+      if(!liq && !perfil) return;
+      capas.push({ tf, peso, liq, perfil });
+    }catch(e){ /* si una temporalidad falla, seguimos con las otras */ }
+  };
+
+  agregar('15m', candles15, 1);
+  // 4h y 1D se traen aparte: son las que tienen los niveles que de verdad pesan
+  try{ const d4 = await fetchTokenData(symbol, '4h'); agregar('4h', d4?.candles, 2); }catch(e){}
+  try{ const d1 = await fetchTokenData(symbol, '1d'); agregar('1D', d1?.candles, 3); }catch(e){}
+  if(!capas.length) return null;
+
+  // Se juntan todos los niveles de todas las temporalidades. Un nivel que aparece en 1D pesa
+  // el triple que uno de 15m, porque hay muchísimos más stops detrás.
+  const niveles = [];
+  for(const capa of capas){
+    for(const lado of ['cercanaArriba','lejanaArriba','cercanaAbajo','lejanaAbajo']){
+      const n = capa.liq?.[lado];
+      if(!n?.precio) continue;
+      niveles.push({
+        precio: n.precio, toques: n.toques || 1, consumida: !!n.consumida,
+        tf: capa.tf, peso: capa.peso,
+        arriba: n.precio > precio,
+        distPct: Math.abs(n.precio - precio)/precio*100,
+        fuerza: (n.toques||1) * capa.peso,
+      });
+    }
+  }
+  if(!niveles.length) return null;
+
+  // Niveles casi iguales de distintas temporalidades se unifican: si 1D y 4h marcan el mismo
+  // precio, no son dos niveles, es UN nivel confirmado por dos marcos — y eso lo hace más fuerte.
+  const unificados = [];
+  for(const n of niveles.sort((a,b)=>b.fuerza-a.fuerza)){
+    const cerca = unificados.find(u => Math.abs(u.precio - n.precio)/precio < 0.004 && u.arriba === n.arriba);
+    if(cerca){
+      cerca.fuerza += n.fuerza;
+      cerca.toques += n.toques;
+      if(!cerca.tfs.includes(n.tf)) cerca.tfs.push(n.tf);
+      cerca.consumida = cerca.consumida && n.consumida;
+    } else {
+      unificados.push({ ...n, tfs:[n.tf] });
+    }
+  }
+
+  const arriba = unificados.filter(n=>n.arriba).sort((a,b)=>a.distPct-b.distPct);
+  const abajo  = unificados.filter(n=>!n.arriba).sort((a,b)=>a.distPct-b.distPct);
+  const masFuerte = [...unificados].sort((a,b)=>b.fuerza-a.fuerza)[0] || null;
+  const perfil1D = capas.find(c=>c.tf==='1D')?.perfil || capas.find(c=>c.tf==='4h')?.perfil || capas[0]?.perfil;
+
+  return {
+    temporalidades: capas.map(c=>c.tf),
+    arriba: arriba.slice(0,3), abajo: abajo.slice(0,3),
+    masFuerte,
+    poc: perfil1D?.poc ?? null, vah: perfil1D?.vah ?? null, val: perfil1D?.val ?? null,
+    dentroDelArea: perfil1D?.dentroDelAreaDeValor ?? null,
+    // Hacia qué lado tira la liquidez, contando el peso de cada temporalidad
+    sesgo: (()=>{
+      const fa = arriba.filter(n=>!n.consumida).reduce((s,n)=>s+n.fuerza,0);
+      const fb = abajo.filter(n=>!n.consumida).reduce((s,n)=>s+n.fuerza,0);
+      if(fa + fb === 0) return 'NEUTRO';
+      const d = (fa-fb)/(fa+fb);
+      return d > 0.25 ? 'ARRIBA' : d < -0.25 ? 'ABAJO' : 'EQUILIBRADO';
+    })(),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // LECTURA DE LIQUIDEZ INTERPRETADA
 // No alcanza con mostrar los números de liquidez: hay que decir qué es PROBABLE que haga el precio.
 // Combina la liquidez cercana (equal highs/lows, con cantidad de toques como medida de fuerza),
 // el POC del perfil de volumen, y el Estocástico — porque el mismo nivel de liquidez significa algo
 // distinto según si el momentum tiene espacio o ya está agotado.
 // ═══════════════════════════════════════════════════════════════════════
-function lecturaDeLiquidez(candles, estructura, dirTesis){
+// Recibe DOS temporalidades a propósito. Antes solo miraba 15m (unos 2 días y medio de historia),
+// así que veía niveles recientes pero se perdía los que de verdad importan: donde se acumularon
+// stops durante semanas, que están en 4h. Era incoherente que la tesis se detecte en 4h y la
+// liquidez se lea solo en 15m.
+function lecturaDeLiquidez(candles, estructura, dirTesis, candles4h){
   try{
     const precio = candles.at(-1).c;
     const liq = detectLiquidezPorHorizonte(candles);
@@ -259,6 +347,25 @@ function lecturaDeLiquidez(candles, estructura, dirTesis){
 
     if(perfil?.poc) lineas.push(`• POC (mayor volumen): <code>$${perfil.poc.toFixed(6)}</code>`);
 
+    // ═══ LIQUIDEZ DEL MARCO MAYOR ═══
+    // Los niveles de 4h pesan más: llevan semanas acumulando órdenes. Cuando uno de 15m
+    // coincide con uno de 4h, ese nivel es mucho más fuerte que cualquiera de los dos solo.
+    let liq4h = null, confluencia = null;
+    if(candles4h?.length >= 60){
+      try{
+        liq4h = detectLiquidezPorHorizonte(candles4h);
+        const a4 = liq4h?.cercanaArriba || liq4h?.lejanaArriba;
+        const b4 = liq4h?.cercanaAbajo || liq4h?.lejanaAbajo;
+        if(a4) lineas.push(`• <b>4h</b> arriba: <code>$${a4.precio.toFixed(6)}</code> (${a4.distPct.toFixed(1)}%) — ${fuerzaTxt(a4.toques)}`);
+        if(b4) lineas.push(`• <b>4h</b> abajo: <code>$${b4.precio.toFixed(6)}</code> (${b4.distPct.toFixed(1)}%) — ${fuerzaTxt(b4.toques)}`);
+
+        // ¿Coincide algún nivel de 15m con uno de 4h? Ese es el nivel que hay que mirar.
+        const coincide = (n1, n2) => n1 && n2 && Math.abs(n1.precio - n2.precio)/n2.precio < 0.012;
+        if(coincide(arriba, a4)) confluencia = { lado:'arriba', precio:a4.precio, dist:a4.distPct };
+        else if(coincide(abajo, b4)) confluencia = { lado:'abajo', precio:b4.precio, dist:b4.distPct };
+      }catch(e){ /* si falla, se sigue con la lectura de 15m */ }
+    }
+
     // Estado del Estocástico
     let estadoStoch = 'sin datos';
     if(k!=null) estadoStoch = k>=80 ? 'sobrecomprado' : k<=20 ? 'sobrevendido' : k>=60 ? 'alto, con poco espacio' : k<=40 ? 'bajo, con espacio' : 'neutral';
@@ -283,6 +390,11 @@ function lecturaDeLiquidez(candles, estructura, dirTesis){
         interpretacion.push(`La liquidez más fuerte está ${ladoFuerte}, a ${obj.distPct.toFixed(1)}%, con el Estocástico en ${k.toFixed(0)}. Ese es el imán principal del precio por ahora.`);
       }
 
+      // La confluencia entre marcos es la señal más fuerte de todas
+      if(confluencia){
+        interpretacion.push(`🎯 El nivel de $${confluencia.precio.toFixed(6)} (${confluencia.dist.toFixed(1)}% ${confluencia.lado}) aparece en 15m Y en 4h: es el nivel más importante del gráfico ahora, porque lleva semanas acumulando órdenes.`);
+      }
+
       // Advertencia si la liquidez fuerte va en contra de la tesis
       if(dirTesis && ladoFuerte && ladoFuerte!=='pareja'){
         const enContra = (dirTesis==='LONG' && ladoFuerte==='abajo') || (dirTesis==='SHORT' && ladoFuerte==='arriba');
@@ -294,18 +406,153 @@ function lecturaDeLiquidez(candles, estructura, dirTesis){
       lineas, estadoStoch, k,
       interpretacion: interpretacion.join(' '),
       ladoFuerte,
+      liq4h, confluencia,
       texto: `💧 <b>LECTURA DE LIQUIDEZ</b>\n${lineas.join('\n')}\n\n📊 Estocástico: <b>${estadoStoch}</b>${k!=null?` (${k.toFixed(0)})`:''}\n\n🧠 <i>${interpretacion.join(' ') || 'Sin una lectura clara todavía: no hay niveles de liquidez suficientemente definidos cerca del precio.'}</i>`,
     };
   }catch(e){ return null; }
 }
 
-async function sendTelegram(text){
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
-  const res = await fetch(url, {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({chat_id: CHAT_ID, text, parse_mode:'HTML'})
+// ═══════════════════════════════════════════════════════════════════════
+// LECTURA UNIFICADA
+// El problema que resuelve: el mensaje mostraba liquidez, libro de órdenes, wallets, on-chain y
+// actividad anómala como cinco bloques sueltos. Si tres decían lo mismo no se notaba, y si se
+// contradecían tampoco.
+//
+// Esta función los junta y responde una sola pregunta: ¿todo esto apunta al mismo lado?
+// Cuando varias capas coinciden, eso vale mucho más que cualquiera de ellas por separado.
+// Cuando se contradicen, hay que saberlo antes de entrar.
+// ═══════════════════════════════════════════════════════════════════════
+function lecturaUnificada({ dir, liqMulti, libro, flujo, wallets, onchain, anomalo, precio }){
+  const capas = [];
+  const sumar = (nombre, sesgo, texto, peso = 1) => {
+    if(!sesgo || sesgo === 'NEUTRO' || sesgo === 'EQUILIBRADO') {
+      capas.push({ nombre, sesgo:'NEUTRO', texto, peso:0, voto:0 });
+      return;
+    }
+    const esLong = sesgo === 'LONG' || sesgo === 'ARRIBA' || sesgo === 'COMPRADOR' || sesgo === 'ALCISTA';
+    capas.push({ nombre, sesgo: esLong?'LONG':'SHORT', texto, peso, voto: (esLong?1:-1)*peso });
+  };
+
+  // La liquidez pesa más porque ahora mira tres temporalidades, no una
+  if(liqMulti?.sesgo){
+    const m = liqMulti.masFuerte;
+    sumar('Liquidez', liqMulti.sesgo,
+      m ? `El nivel más fuerte está ${m.arriba?'arriba':'abajo'}, a ${m.distPct.toFixed(1)}% (${m.tfs.join('+')}, ${m.toques} toques)`
+        : 'Sin un nivel dominante claro', 2);
+  }
+  // El resumen se corta por longitud, no por punto: split('.') partía los números decimales
+  // y salía "Hay $1" en vez de "Hay $1.2M de venta...".
+  const recortar = (t, max=95) => !t ? '' : (t.length <= max ? t.replace(/\.$/,'') : t.slice(0, max).replace(/[\s,.]+$/,'') + '…');
+  if(libro?.sesgo) sumar('Libro de órdenes', libro.sesgo, recortar(libro.resumen), 1.5);
+  if(flujo?.sesgo) sumar('Flujo de órdenes', flujo.sesgo, `${flujo.pctComprador}% del volumen fue comprador agresivo`, 1.5);
+  if(wallets?.direccion) sumar('Wallets', wallets.direccion, recortar(wallets.resumen), 1);
+  if(onchain?.direccion) sumar('Actividad DEX', onchain.direccion, recortar(onchain.resumen), 1);
+
+  const conVoto = capas.filter(c => c.peso > 0);
+  if(!conVoto.length) return null;
+
+  const total = conVoto.reduce((s,c)=>s+c.voto, 0);
+  const pesoTotal = conVoto.reduce((s,c)=>s+c.peso, 0);
+  const alineacion = pesoTotal > 0 ? total/pesoTotal : 0;   // +1 todo LONG, -1 todo SHORT
+
+  const aFavor = conVoto.filter(c => c.sesgo === dir);
+  const enContra = conVoto.filter(c => c.sesgo !== dir);
+  const sesgoGeneral = alineacion > 0.3 ? 'LONG' : alineacion < -0.3 ? 'SHORT' : 'DIVIDIDO';
+
+  // El veredicto que importa: ¿todo esto acompaña la operación o no?
+  const veredicto = sesgoGeneral === 'DIVIDIDO'
+    ? `➖ Las señales de mercado están divididas: ${aFavor.length} acompañan y ${enContra.length} van en contra.`
+    : sesgoGeneral === dir
+    ? `✅ ${aFavor.length} de ${conVoto.length} señales de mercado acompañan este ${dir}.`
+    : `⚠️ El conjunto de señales apunta a ${sesgoGeneral}, no a ${dir}. ${enContra.length} de ${conVoto.length} van en contra de esta operación.`;
+
+  return {
+    alineacion: +alineacion.toFixed(2),
+    sesgoGeneral,
+    acompana: sesgoGeneral === 'DIVIDIDO' ? 'dividido' : sesgoGeneral === dir ? 'acompaña' : 'contradice',
+    capas, aFavor: aFavor.length, enContra: enContra.length, total: conVoto.length,
+    veredicto,
+    // Texto listo para el mensaje: una sola sección en vez de cinco sueltas
+    texto: [
+      `${sesgoGeneral === dir ? '🟢' : sesgoGeneral === 'DIVIDIDO' ? '⚪' : '🔴'} <b>LECTURA DE MERCADO</b>`,
+      veredicto,
+      '',
+      ...capas.map(c => {
+        const ic = c.peso === 0 ? '⚪' : c.sesgo === dir ? '🟢' : '🔴';
+        return `${ic} <b>${c.nombre}</b>: ${c.texto}`;
+      }),
+      anomalo?.hayAlgo ? `\n${anomalo.nivel==='MUY ALTA'?'🚨':'⚠️'} <b>Actividad inusual</b> (${anomalo.nivel.toLowerCase()}): ${anomalo.señales.map(s=>s.tipo).join(', ')}` : null,
+    ].filter(x => x !== null).join('\n'),
+  };
+}
+
+// ═══ ENVÍO A TELEGRAM CON PARTIDO AUTOMÁTICO ═══
+// BUG CORREGIDO: los mensajes de señal crecieron mucho (liquidez, flujo, explain engine,
+// analista, recorrido...) y superaban los 4096 caracteres que Telegram acepta como máximo.
+// Cuando eso pasaba, Telegram devolvía error 400 y el mensaje NO llegaba — pero la operación
+// ya había quedado abierta. Por eso aparecían operaciones sin su mensaje.
+//
+// Ahora se parte en varios mensajes por los divisores, y si el HTML falla se reintenta en
+// texto plano antes de darse por vencido.
+const LIMITE_TELEGRAM = 4000;   // 4096 es el máximo real; se deja margen
+
+function partirMensaje(texto){
+  if(texto.length <= LIMITE_TELEGRAM) return [texto];
+  const partes = [];
+  // Se corta por los divisores para que cada parte quede completa y legible
+  const bloques = texto.split('━━━━━━━━━━━━━━━━━━━━');
+  let actual = '';
+  for(const b of bloques){
+    const candidato = actual ? `${actual}━━━━━━━━━━━━━━━━━━━━${b}` : b;
+    if(candidato.length > LIMITE_TELEGRAM && actual){
+      partes.push(actual.trim());
+      actual = b;
+    } else actual = candidato;
+  }
+  if(actual.trim()) partes.push(actual.trim());
+  // Si algún bloque suelto sigue siendo enorme, se corta a lo bruto
+  return partes.flatMap(p => {
+    if(p.length <= LIMITE_TELEGRAM) return [p];
+    const trozos = [];
+    for(let i=0; i<p.length; i+=LIMITE_TELEGRAM) trozos.push(p.slice(i, i+LIMITE_TELEGRAM));
+    return trozos;
   });
-  if(!res.ok){ console.error('Error enviando a Telegram:', await res.text()); }
+}
+
+async function enviarUno(text, sinHtml = false){
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+  const cuerpo = { chat_id: CHAT_ID, text: sinHtml ? text.replace(/<[^>]+>/g,'') : text };
+  if(!sinHtml) cuerpo.parse_mode = 'HTML';
+  const res = await fetch(url, {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cuerpo)
+  });
+  if(res.ok) return true;
+  const detalle = await res.text().catch(()=> '');
+  // Si el problema es el HTML mal formado, se reintenta en texto plano: es preferible
+  // un mensaje sin formato a no recibir nada.
+  if(!sinHtml && /parse|entity|tag/i.test(detalle)){
+    console.error('Telegram rechazó el HTML, reintentando en texto plano:', detalle.slice(0,120));
+    return enviarUno(text, true);
+  }
+  console.error('Error enviando a Telegram:', detalle.slice(0, 200));
+  return false;
+}
+
+async function sendTelegram(text){
+  try{
+    const partes = partirMensaje(String(text||''));
+    if(partes.length > 1) console.log(`  ✂️ Mensaje de ${text.length} caracteres partido en ${partes.length} partes.`);
+    for(let i=0; i<partes.length; i++){
+      const sufijo = partes.length > 1 ? `\n\n<i>(${i+1}/${partes.length})</i>` : '';
+      await enviarUno(partes[i] + sufijo);
+      if(i < partes.length-1) await new Promise(r=>setTimeout(r, 350)); // Telegram limita la frecuencia
+    }
+    return true;
+  }catch(e){
+    // NUNCA se propaga el error: si un mensaje falla, los demás tienen que salir igual
+    console.error('Fallo al enviar a Telegram:', e.message);
+    return false;
+  }
 }
 
 // Genera una imagen del gráfico (vía QuickChart.io, gratis, sin key) con las velas recientes y
@@ -1100,7 +1347,9 @@ async function confirmTheses(state, capitalFlow){
             const zonasFib = detectZonasOfertaDemanda(data15.candles);
             const enDemanda = zonasFib.demanda.some(z => priceNow >= z.piso*0.995 && priceNow <= z.techo*1.005);
             const enOferta = zonasFib.oferta.some(z => priceNow >= z.piso*0.995 && priceNow <= z.techo*1.005);
-            // Índice de fuerza del volumen (la línea naranja de la sección Liquidez)
+
+
+        // Índice de fuerza del volumen (la línea naranja de la sección Liquidez)
             const fuerza = computeVolumeProbability(data15.candles, 20);
             const fuerzaAFavor = fuerza && (thesis.dir==='LONG' ? fuerza.probUp >= 55 : fuerza.probDown >= 55);
             const liquidezAFavor = thesis.dir==='LONG' ? (enDemanda || fuerzaAFavor) : (enOferta || fuerzaAFavor);
@@ -1709,6 +1958,12 @@ async function confirmTheses(state, capitalFlow){
             const oc = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir);
             return oc ? { presion:oc.presion, direccion:oc.direccion, fuerza:oc.fuerza, acompana:oc.acompana } : null;
           }catch(e){ return null; } })(),
+          apalancamiento: await (async()=>{ try{
+            const r = await fetchRatiosApalancamiento(thesis.symbol, data15.marketCap, data15.vol24hSpot);
+            return r ? { oiSobreMcap:r.oiSobreMcap, futSobreSpot:r.futSobreSpot,
+                         lsGlobal:r.lsGlobal, lsGrandes:r.lsPosicionesTop,
+                         divergencia: r.divergencia ? r.divergencia.grandes : null } : null;
+          }catch(e){ return null; } })(),
           // Libro de órdenes y flujo real, para medir después si predicen algo
           libro: await (async()=>{ try{
             const l = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix'?'Bitunix':'Binance');
@@ -1844,6 +2099,15 @@ async function confirmTheses(state, capitalFlow){
           relato.push(`${ic} <b>Wallets</b>: ${wallets.resumen} ${wallets.razones.slice(0,3).join(' · ')}.`);
         }
 
+        // ═══ LECTURA UNIFICADA DE MERCADO ═══
+        // Se calcula acá, donde ya existen anomalo/wallets/onchain, y se usa después en el mensaje.
+        // Junta liquidez multi-temporalidad + libro + flujo + wallets + on-chain en un solo veredicto.
+        let lecturaMercado = null, liqMultiTF = null, libroOrdenes = null;
+        try{
+          liqMultiTF = await liquidezMultiTF(thesis.symbol, data15.candles, entryPrice);
+          libroOrdenes = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix'?'Bitunix':'Binance');
+        }catch(e){ /* si falla, el mensaje sale sin esta sección */ }
+
         // Presión on-chain: qué está pasando en los pools de DEX de verdad
         const onchain = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir).catch(()=>null);
         if(onchain){
@@ -1852,6 +2116,15 @@ async function confirmTheses(state, capitalFlow){
             .map(s=>`${s.tipo}: ${s.valor}${s.alerta?` — ${s.alerta}`:''}`).join(' · ');
           relato.push(`${icono} <b>On-chain</b>: ${onchain.resumen}${detalles?` (${detalles})`:''}`);
         }
+
+        // Ahora sí, con anomalo/wallets/onchain ya definidos, se arma el veredicto conjunto
+        try{
+          lecturaMercado = lecturaUnificada({
+            dir: thesis.dir, liqMulti: liqMultiTF, libro: libroOrdenes,
+            flujo: calcularPresionFlujo(data15.candles, 24),
+            wallets, onchain, anomalo, precio: entryPrice,
+          });
+        }catch(e){ /* si falla, el mensaje sale sin esta sección */ }
 
         // Índice de fuerza del volumen — es la misma línea naranja que ya se dibuja en la sección
         // Liquidez de la web: mide qué porcentaje del volumen reciente vino de velas alcistas vs
@@ -1964,7 +2237,7 @@ async function confirmTheses(state, capitalFlow){
         }
 
         // Lectura de liquidez interpretada, no solo los números
-        const lecturaLiq = lecturaDeLiquidez(data15.candles, result15.structure, thesis.dir);
+        const lecturaLiq = lecturaDeLiquidez(data15.candles, result15.structure, thesis.dir, data4h?.candles);
         const DIV = '━━━━━━━━━━━━━━━━━━━━';
         // Qué caminos confirmaron: da contexto sobre la CALIDAD de la entrada
 
@@ -1995,28 +2268,22 @@ async function confirmTheses(state, capitalFlow){
           `Riesgo: ${(riskPct*100).toFixed(1)}% del capital · Apalancamiento ${setup.leverage}\n` +
           `Gestión: 60% en TP1 (stop pasa al punto de entrada) + 40% hasta TP2\n\n` +
 
-          (lecturaLiq ? `${DIV}\n${lecturaLiq.texto}\n\n` : '') +
-
-          // ═══ LIBRO DE ÓRDENES ═══
-          // Órdenes que están puestas AHORA, no liquidez inferida de las velas.
-          (await (async()=>{
-            try{
-              const lib = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix' ? 'Bitunix' : 'Binance');
-              const flujo = calcularPresionFlujo(data15.candles, 24);
-              if(!lib && !flujo) return '';
-              const partes = [`${DIV}\n📖 <b>LIBRO DE ÓRDENES</b>`];
-              if(lib){
-                const ic = lib.sesgo==='COMPRADOR' ? '🟢' : lib.sesgo==='VENDEDOR' ? '🔴' : '⚪';
-                partes.push(`${ic} ${lib.resumen}`);
-                if(lib.alertaSpread) partes.push(`⚠️ ${lib.alertaSpread}`);
-              }
-              if(flujo){
-                const ic = flujo.sesgo==='COMPRADOR' ? '🟢' : flujo.sesgo==='VENDEDOR' ? '🔴' : '⚪';
-                partes.push(`${ic} ${flujo.resumen}`);
-              }
-              return partes.join('\n') + '\n\n';
-            }catch(e){ return ''; }
-          })()) +
+          // Todo el contexto de mercado en una sola sección, ya calculado arriba
+          (lecturaMercado ? `${DIV}\n${lecturaMercado.texto}\n\n` : '') +
+          (liqMultiTF ? (()=>{
+            const fmt = v => v>=1 ? v.toFixed(4) : v.toPrecision(5);
+            const l = [`${DIV}\n💧 <b>NIVELES</b> <i>(${liqMultiTF.temporalidades.join(' + ')})</i>`];
+            const n1 = liqMultiTF.arriba[0], n2 = liqMultiTF.abajo[0];
+            if(n1) l.push(`↑ $${fmt(n1.precio)} (${n1.distPct.toFixed(1)}%) — ${n1.tfs.join('+')}, ${n1.toques} toques${n1.consumida?' · ya barrido':''}`);
+            if(n2) l.push(`↓ $${fmt(n2.precio)} (${n2.distPct.toFixed(1)}%) — ${n2.tfs.join('+')}, ${n2.toques} toques${n2.consumida?' · ya barrido':''}`);
+            if(liqMultiTF.poc) l.push(`POC $${fmt(liqMultiTF.poc)}${liqMultiTF.dentroDelArea?' · precio dentro del área de valor':''}`);
+            if(libroOrdenes?.muros?.length){
+              const m = libroOrdenes.muros[0];
+              l.push(`🧱 Muro de ${m.lado} en $${fmt(m.precio)} a ${m.distPct.toFixed(2)}% — $${(m.usd/1000).toFixed(0)}K puestos ahora`);
+            }
+            if(libroOrdenes?.alertaSpread) l.push(`⚠️ ${libroOrdenes.alertaSpread}`);
+            return l.join('\n') + '\n\n';
+          })() : '') +
 
           `${DIV}\n🧠 <b>CONFLUENCIA</b>\n${confluenciaLineas}\n\n` +
 
@@ -2610,7 +2877,16 @@ async function main(){
     .map(symbol=>({symbol, tag:' (cap chico)'}));
   await scanForTheses(state, midCapCandidates, capitalFlow, btcReference4h);
 
-  await Promise.all(sendPromises);
+  // allSettled, no all: con Promise.all, si UNA promesa se rechazaba se cancelaban todas las
+  // demás y se perdían los mensajes de esa corrida entera.
+  const resultados = await Promise.allSettled(sendPromises);
+  const fallidos = resultados.filter(r => r.status === 'rejected');
+  if(fallidos.length){
+    console.error(`  ⚠️ ${fallidos.length} de ${resultados.length} mensajes fallaron:`);
+    fallidos.slice(0,3).forEach(r => console.error(`     ${r.reason?.message || r.reason}`));
+  } else if(resultados.length){
+    console.log(`  📨 ${resultados.length} mensaje(s) enviados correctamente.`);
+  }
   saveState(state);
   // Desglose por estado: "47 tesis" no dice nada si no se sabe cuántas están esperando y cuántas
   // realmente abiertas. Con el bug de priceNow, TODAS quedaban atascadas en WATCHING y el número
