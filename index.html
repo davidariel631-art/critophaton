@@ -49,7 +49,9 @@
   .brand small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:100%;}
   .avatar-wrap{position:relative;flex-shrink:0;}
   .avatar-btn{width:42px;height:42px;border-radius:50%;background:var(--panel2);border:1px solid var(--border);color:var(--text);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;background-size:cover;background-position:center;overflow:hidden;}
-  .avatar-btn.has-photo{font-size:0;}
+  .avatar-btn.has-photo{font-size:0;background-size:cover;background-position:center center;background-repeat:no-repeat;}
+  /* Borde sutil para que la foto se despegue del fondo negro */
+  .avatar-btn.has-photo{border:2px solid rgba(0,217,255,.45);box-shadow:0 0 0 1px rgba(0,0,0,.6) inset;}
   .avatar-btn.logged-in{background:linear-gradient(135deg,var(--amber),var(--accent2));}
   .avatar-dropdown{display:none;position:fixed;top:64px;right:14px;left:auto;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;width:min(260px, calc(100vw - 28px));box-shadow:0 12px 32px rgba(0,0,0,0.45);z-index:60;}
   .avatar-dropdown.open{display:block;}
@@ -1944,7 +1946,12 @@ document.addEventListener('click', (e)=>{
 function applyProfilePhoto(dataUrl){
   [document.getElementById('avatarBtn'), document.getElementById('avatarPreviewBtn')].forEach(btn=>{
     if(!btn) return;
-    if(dataUrl){ btn.style.backgroundImage = `url(${dataUrl})`; btn.classList.add('has-photo'); }
+    if(dataUrl){
+      // Las comillas son necesarias: un data URL sin comillar puede romper el CSS si contiene
+      // paréntesis o comas, y entonces la foto simplemente no aparece.
+      btn.style.backgroundImage = `url("${dataUrl}")`;
+      btn.classList.add('has-photo');
+    }
     else { btn.style.backgroundImage = ''; btn.classList.remove('has-photo'); }
   });
 }
@@ -2097,7 +2104,7 @@ document.getElementById('photoFileInput').addEventListener('change', async (e)=>
     const dataUrl = await compressImageToDataUrl(file);
     // Vista previa antes de guardar — así si el recorte quedó mal, lo ves al toque y podés
     // cancelar y probar con otra foto, en vez de que quede guardada una imagen rota sin darte cuenta.
-    document.getElementById('photoPreviewImg').style.backgroundImage = `url(${dataUrl})`;
+    document.getElementById('photoPreviewImg').style.backgroundImage = `url("${dataUrl}")`;
     document.getElementById('photoPreviewSheet').dataset.pendingUrl = dataUrl;
     document.getElementById('photoPreviewSheet').classList.add('open');
   }catch(err){
@@ -2137,6 +2144,17 @@ if(!window.matchMedia('(display-mode: standalone)').matches){
 }
 
 function switchTab(tabName){
+  // ═══ EL ENCABEZADO SOLO EN "ANALIZAR" ═══
+  // La barra de datos macro (Fear&Greed, dominancias, índices) y el saludo con el último
+  // análisis solo tienen sentido en la pantalla de análisis. En Liquidez, Heatmap o TheHaton
+  // ocupaban media pantalla sin aportar nada, y había que scrollear para llegar al contenido.
+  const soloEnAnalizar = tabName === 'analizar';
+  const ticker = document.getElementById('tickerBar');
+  if(ticker) ticker.style.display = soloEnAnalizar ? '' : 'none';
+  const saludo = document.getElementById('greetingBanner');
+  // El saludo además solo se muestra si tenía contenido: no se fuerza a aparecer
+  if(saludo && saludo.dataset.tieneContenido === '1') saludo.style.display = soloEnAnalizar ? '' : 'none';
+
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
   document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===tabName));
   document.querySelectorAll('.tabpanel').forEach(p=>p.classList.remove('active'));
@@ -3346,12 +3364,13 @@ wireAuthUI();
 // ================= SALUDO CON MEMORIA =================
 async function showGreeting(user){
   const banner = document.getElementById('greetingBanner');
-  if(!user){ banner.style.display='none'; return; }
+  if(!user){ banner.style.display='none'; banner.dataset.tieneContenido='0'; return; }
   try{
     const hist = await window.fb.loadHistory();
-    if(!hist.length){ banner.style.display='none'; return; }
+    if(!hist.length){ banner.style.display='none'; banner.dataset.tieneContenido='0'; return; }
     const last = hist[0];
     const name = user.email.split('@')[0];
+    banner.dataset.tieneContenido = '1';
     banner.textContent = `👋 Hola ${name}, la última vez analizaste ${last.token} (${last.tf}) y el motor dio ${last.recommendation} con Long ${last.longScore.toFixed(1)} / Short ${last.shortScore.toFixed(1)}.`;
     banner.style.display='block';
   }catch(e){ banner.style.display='none'; }
