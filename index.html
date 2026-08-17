@@ -595,6 +595,8 @@
       <button class="asub-btn" data-subgroup="analisis">Análisis IA</button>
     </div>
     <div class="analyze-subgroup" data-subgroup="resumen">
+    <!-- El veredicto va PRIMERO: qué hacer, no dos números que hay que interpretar -->
+    <div id="veredictoBox" style="display:none;"></div>
     <div class="card">
       <h2>Long Score / Short Score</h2>
       <div class="dual-hero">
@@ -1584,6 +1586,53 @@ function renderResults(data, result, setup){
   document.getElementById('bipolarPct').textContent = `${result.longScore.toFixed(1)} vs ${result.shortScore.toFixed(1)}`;
 
   const recTag = document.getElementById('recTag');
+  // ═══ VEREDICTO ═══
+  // Lo primero que se ve. Antes había que interpretar dos círculos (Long 3.7 / Short 6.3) y
+  // buscar la recomendación entre el resto de los datos.
+  (() => {
+    const box = document.getElementById('veredictoBox');
+    const rec = result.recommendation;
+    const esLong = rec === 'LONG', esShort = rec === 'SHORT';
+    const col = esLong ? 'var(--teal)' : esShort ? 'var(--rose)' : 'var(--sub)';
+    const borde = esLong ? 'rgba(16,185,129,.3)' : esShort ? 'rgba(239,68,68,.3)' : 'var(--border)';
+    const fondo = esLong ? 'linear-gradient(160deg,rgba(16,185,129,.10),rgba(16,185,129,.02))'
+                : esShort ? 'linear-gradient(160deg,rgba(239,68,68,.10),rgba(239,68,68,.02))' : 'var(--panel)';
+    const score = Math.max(result.longScore, result.shortScore);
+    const titulo = esLong ? 'LONG' : esShort ? 'SHORT' : 'ESPERAR';
+    // Una frase que explique la decisión, no solo la etiqueta
+    const frase = esLong ? 'El motor ve una oportunidad de compra.'
+                : esShort ? 'El motor ve una oportunidad de venta.'
+                : 'No hay ventaja clara: los especialistas están divididos. Lo más profesional es esperar.';
+    const met = (k, v, c2) => `<div style="flex:1;min-width:74px;">
+        <div style="color:var(--sub);font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;">${k}</div>
+        <div style="font-family:var(--display);font-size:19px;font-weight:800;margin-top:2px;${c2?`color:${c2};`:''}">${v}</div></div>`;
+    const rr = result.setup && result.setup.stop && result.setup.t1
+      ? (Math.abs(result.setup.t1 - result.metrics.price) / Math.abs(result.metrics.price - result.setup.stop)).toFixed(2)
+      : '—';
+    box.innerHTML = `<div style="background:${fondo};border:1px solid ${borde};border-radius:18px;padding:20px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+        <div>
+          <div style="font-family:var(--display);font-size:32px;font-weight:800;line-height:1;color:${col};">${titulo}</div>
+          <div style="color:var(--sub);font-size:12.5px;margin-top:5px;">${result.displayName || ''} · ${currentTF}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:var(--display);font-size:25px;font-weight:800;">${score.toFixed(1)}</div>
+          <div style="font-size:10px;color:var(--sub);">de 10</div>
+        </div>
+      </div>
+      <div style="height:5px;background:rgba(255,255,255,.07);border-radius:99px;margin-top:14px;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(100,score*10)}%;background:${col};border-radius:99px;"></div>
+      </div>
+      <div style="font-size:12.5px;color:#c3ccd6;margin-top:12px;line-height:1.5;">${frase}</div>
+      <div style="display:flex;gap:18px;margin-top:14px;flex-wrap:wrap;">
+        ${met('Confianza', result.confidence + '%')}
+        ${met('R:R en TP1', rr, rr !== '—' && parseFloat(rr) >= 1 ? 'var(--teal)' : 'var(--rose)')}
+        ${met('Calidad', '★'.repeat(result.quality||0) + '☆'.repeat(5-(result.quality||0)))}
+      </div>
+    </div>`;
+    box.style.display = '';
+  })();
+
   recTag.textContent = result.recommendation==='LONG' ? '🟢 LONG' : result.recommendation==='SHORT' ? '🔴 SHORT' : '⚪ NO OPERAR';
   recTag.className = 'rec-tag ' + (result.recommendation==='LONG'?'rec-long':result.recommendation==='SHORT'?'rec-short':'rec-none');
 
@@ -1644,7 +1693,37 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
 
 ⚠️ Análisis automatizado, no asesoría financiera. DYOR.`;
   document.getElementById('signalText').textContent = signal;
-  document.getElementById('structureNotes').textContent = result.structure.notes.map(n=>'• '+n).join('\n');
+  // ═══ LECTURA DE ESTRUCTURA JERARQUIZADA ═══
+  // Antes eran 9 viñetas idénticas donde convivían "cluster FUERTE, objetivo muy probable"
+  // (accionable) con "estructura LH-LL intacta" (contexto de fondo). Había que leerlas todas
+  // para encontrar la que importa. Ahora se agrupan por peso, con lo accionable primero.
+  (() => {
+    const s = result.structure;
+    const cont = document.getElementById('structureNotes');
+    const clave = s.notasClave || [], aviso = s.notasAviso || [], ctx = s.notasContexto || [];
+    // Si el motor es viejo y no trae los grupos, se muestra la lista de siempre
+    if(!clave.length && !aviso.length && !ctx.length){
+      cont.textContent = (s.notes||[]).map(n=>'• '+n).join('\n');
+      return;
+    }
+    const bloque = (titulo, arr, color, abierto) => {
+      if(!arr.length) return '';
+      return `<div style="margin-bottom:10px;">
+        <div style="font-size:10.5px;color:${color};letter-spacing:.5px;font-weight:700;margin-bottom:5px;">${titulo}</div>
+        <div style="font-size:12.5px;line-height:1.6;color:${abierto?'var(--text)':'#a8b3bf'};">
+          ${arr.map(n=>`<div style="padding:3px 0;">• ${n}</div>`).join('')}
+        </div></div>`;
+    };
+    cont.innerHTML =
+      bloque('🎯 LO QUE MÁS PESA AHORA', clave, 'var(--amber)', true) +
+      bloque('⚠️ A TENER EN CUENTA', aviso, 'var(--rose)', true) +
+      (ctx.length ? `<details style="margin-top:4px;">
+        <summary style="cursor:pointer;font-size:10.5px;color:var(--sub);letter-spacing:.5px;font-weight:700;list-style:none;">
+          📋 CONTEXTO DE FONDO (${ctx.length}) — tocá para ver</summary>
+        <div style="font-size:12px;line-height:1.6;color:#8b98a8;margin-top:6px;">
+          ${ctx.map(n=>`<div style="padding:3px 0;">• ${n}</div>`).join('')}
+        </div></details>` : '');
+  })();
 
   const analyst = buildAnalystMode(data, result, setup, currentTF);
   document.getElementById('analystExplanation').textContent = analyst.explanation;
@@ -3665,7 +3744,39 @@ function renderIntelVista(vista, trades){
     const met = E.metricasCompletas(trades);
     if(!met.listo) return `<div class="subrow">${met.nota}</div>`;
     const col = (k,v,c2) => `<div class="indi-col"><div class="il-k">${k}</div><div class="il-v"${c2?` style="color:${c2};"`:''}>${v}</div></div>`;
-    let html = `<div class="indi-grid" style="margin-bottom:12px;">
+
+    // ═══ VEREDICTO DE LA CUENTA ═══
+    // Antes esta pantalla arrancaba con una grilla de números sueltos. El dato que más define
+    // el resultado —cuánto ganás cuando acertás contra cuánto perdés cuando fallás— había que
+    // calcularlo a mano comparando dos celdas.
+    let html = '';
+    if(met.avgWin != null && met.avgLoss != null && met.avgLoss > 0){
+      const ratio = met.avgWin / met.avgLoss;
+      const wrNecesario = (1/(1+ratio)*100);
+      const sano = met.winRate >= wrNecesario;
+      const col2 = sano ? 'var(--teal)' : 'var(--rose)';
+      const borde = sano ? 'rgba(16,185,129,.3)' : 'rgba(239,68,68,.3)';
+      const fondo = sano ? 'linear-gradient(160deg,rgba(16,185,129,.08),transparent)'
+                         : 'linear-gradient(160deg,rgba(239,68,68,.08),transparent)';
+      html += `<div style="background:${fondo};border:1px solid ${borde};border-radius:16px;padding:17px;margin-bottom:12px;">
+        <div style="font-family:var(--display);font-size:20px;font-weight:800;color:${col2};">
+          ${sano ? 'El sistema está en terreno positivo' : 'El sistema pierde por el tamaño de las operaciones'}
+        </div>
+        <div style="font-size:12.5px;color:#c3ccd6;margin-top:8px;line-height:1.6;">
+          Ganás <b style="color:var(--teal);">${met.avgWin.toFixed(2)}</b> en promedio cuando acertás
+          y perdés <b style="color:var(--rose);">${met.avgLoss.toFixed(2)}</b> cuando fallás
+          (ratio <b>${ratio.toFixed(2)}</b>).
+          Con esa relación hace falta un win rate de <b>${wrNecesario.toFixed(0)}%</b> solo para no perder,
+          y el real es <b style="color:${col2};">${met.winRate}%</b>.
+        </div>
+        ${!sano ? `<div style="font-size:11.5px;color:var(--sub);margin-top:8px;line-height:1.5;">
+          Para dar vuelta esto hay dos caminos: que las ganadoras rindan más (objetivos más lejos o dejar correr más posición)
+          o que las perdedoras cuesten menos (stops más ajustados). Subir el win rate a ${wrNecesario.toFixed(0)}% es el camino más difícil.
+        </div>` : ''}
+      </div>`;
+    }
+
+    html += `<div class="indi-grid" style="margin-bottom:12px;">
       ${col('Expectancy', (met.expectancy>=0?'+':'')+met.expectancy+'%', met.expectancy>0?'var(--teal)':'var(--rose)')}
       ${col('Win rate', met.winRate+'%')}
       ${col('Profit Factor', met.profitFactor===Infinity?'∞':met.profitFactor, met.profitFactor>=1?'var(--teal)':'var(--rose)')}
@@ -4029,8 +4140,33 @@ async function loadTheHaton(){
     if(horas<24) return `${horas}h ${mins%60}min`;
     return `${Math.floor(horas/24)}d`;
   }
-  function journalHtml(t){
-    return (t.journal||[]).map(j=>`<div style="font-size:11px;color:var(--sub);padding:3px 0;">• ${new Date(j.ts).toLocaleString()} — ${j.note}</div>`).join('');
+  // ═══ DIARIO RESUMIDO ═══
+  // El diario de una tesis puede tener 40 entradas casi idénticas ("sigue esperando", con el
+  // mismo motivo repetido cada 30 minutos). Mostrarlas todas obliga a scrollear para encontrar
+  // qué está pasando. Ahora se muestran las últimas 3 y el resto queda plegado.
+  function journalHtml(t, verTodo){
+    const j = t.journal || [];
+    if(!j.length) return '';
+    const linea = (x) => `<div style="font-size:11px;color:var(--sub);padding:3px 0;">• ${new Date(x.ts).toLocaleString()} — ${x.note}</div>`;
+    if(verTodo || j.length <= 4) return j.map(linea).join('');
+    const ultimas = j.slice(-3), previas = j.slice(0, -3);
+    return `<details style="margin-bottom:4px;">
+        <summary style="cursor:pointer;font-size:10.5px;color:var(--sub);list-style:none;padding:3px 0;">
+          ▸ Ver las ${previas.length} entradas anteriores</summary>
+        ${previas.map(linea).join('')}
+      </details>` + ultimas.map(linea).join('');
+  }
+
+  // El motivo por el que una tesis sigue esperando: es lo que se quiere saber de un vistazo,
+  // sin tener que leer las 40 líneas repetidas del diario.
+  function motivoActual(t){
+    const j = t.journal || [];
+    if(!j.length) return '';
+    const n = j[j.length-1].note || '';
+    // Se recorta la parte informativa del mensaje, sin la explicación larga
+    const m = n.match(/(?:Todavía esperando confirmación[:\s]*\(?)([^.—)]{10,90})/i)
+           || n.match(/^([^.—]{10,90})/);
+    return m ? m[1].trim().replace(/^[:\s(]+/, '') : '';
   }
 
   document.getElementById('thWatching').innerHTML = watching.length ? watching.map(t=>{
@@ -4039,7 +4175,10 @@ async function loadTheHaton(){
     return `
     <details class="acc-tesis">
       <summary style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none;">
-        <div>${t.symbol}${t.tag||''}</div>
+        <div>
+          <div>${t.symbol}${t.tag||''}</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${motivoActual(t)}</div>
+        </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir} · observando</span>
           <span style="color:var(--sub);font-size:10px;">▾</span>
@@ -4050,20 +4189,40 @@ async function loadTheHaton(){
     </details>`;
   }).join('') : 'Ninguna en este momento.';
 
+  // Las operaciones activas ahora se pliegan igual que las que están observando: antes cada una
+  // mostraba su diario entero desplegado, y con 24 abiertas la pantalla era interminable.
   document.getElementById('thActive').innerHTML = active.length ? active.map(t=>`
-    <div class="hist-row" style="display:block;">
-      <div style="display:flex;justify-content:space-between;"><div>${t.symbol}${t.tag||''}</div><span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir} · activa${t.breakEvenMoved?' · BE':''}</span></div>
-      <div class="subrow">Entrada $${t.entry?.toFixed?.(6)} · Stop $${t.stop?.toFixed?.(6)} · TP1 $${t.tp1?.toFixed?.(6)??'—'}${t.tp2!=null?` · TP2 $${t.tp2.toFixed(6)}`:''}${t.tp3!=null?` · TP3 $${t.tp3.toFixed(6)}`:''}${t.secondPartialTaken?' (40%+40% ya tomado, 20% final corriendo)':t.partialTaken?' (40% ya tomado, resto corriendo)':''}</div>
+    <details class="acc-tesis">
+      <summary style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none;">
+        <div>
+          <div>${t.symbol}${t.tag||''}</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px;">Entrada $${t.entry?.toFixed?.(6)}${t.partialTaken?' · 60% ya tomado':''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir}${t.partialTaken?' · BE':''}</span>
+          <span style="color:var(--sub);font-size:10px;">▾</span>
+        </div>
+      </summary>
+      <div class="subrow" style="margin-top:6px;">Entrada $${t.entry?.toFixed?.(6)} · Stop $${t.stop?.toFixed?.(6)} · TP1 $${t.tp1?.toFixed?.(6)??'—'}${t.tp2!=null?` · TP2 $${t.tp2.toFixed(6)}`:''}${t.partialTaken?' — el 60% se tomó en TP1, el 40% restante corre con el stop en el punto de entrada':''}</div>
       ${journalHtml(t)}
-    </div>`).join('') : 'Ninguna en este momento.';
+    </details>`).join('') : 'Ninguna en este momento.';
 
   const recent = trades.slice(-10).reverse();
   document.getElementById('thClosedTrades').innerHTML = recent.length ? recent.map(t=>{
     const cls = t.result==='win'?'badge-long':'badge-short';
-    return `<div class="hist-row" style="display:block;">
-      <div style="display:flex;justify-content:space-between;"><div>${new Date(t.closedAt).toLocaleString()} · ${t.symbol}${t.tag||''} ${t.dir}</div><div><span class="badge ${cls}">${t.result==='win'?'GANÓ':'PERDIÓ'}</span> ${t.pnl>=0?'+':''}${t.pnl.toFixed(2)} USDT</div></div>
+    return `<details class="acc-tesis">
+      <summary style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none;">
+        <div>
+          <div>${t.symbol}${t.tag||''} ${t.dir}</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px;">${new Date(t.closedAt).toLocaleString()}${t.motivoCierre?' · '+t.motivoCierre:''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="badge ${cls}">${t.pnl>=0?'+':''}${t.pnl.toFixed(2)}</span>
+          <span style="color:var(--sub);font-size:10px;">▾</span>
+        </div>
+      </summary>
       ${journalHtml(t)}
-    </div>`;
+    </details>`;
   }).join('') : '<div class="subrow">Todavía no se cerró ninguna operación.</div>';
 
   const archived = state?.accountHistory || [];
