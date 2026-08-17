@@ -284,11 +284,31 @@ export function analizarTransferencias(transferencias, red, opciones = {}){
 // Convierte el análisis en la estructura que espera TheHaton.
 // NO suma al score: devuelve evidencia para registrar y medir después.
 // ───────────────────────────────────────────────────────────────────────────
-export function construirEvidenciaOnChain(analisis, dirTesis){
+// Recibe el market cap y el volumen para poder decir si un movimiento es grande DE VERDAD.
+// $4M no significa nada solo: en una moneda de $10.000M es ruido, en una de $200M es enorme.
+export function construirEvidenciaOnChain(analisis, dirTesis, marketCapUsd, volumenDiarioUsd){
   if(!analisis?.hayDatos) return null;
   const acompana = analisis.direccion === 'NEUTRO' ? null
     : (analisis.direccion === 'ALCISTA' ? 'LONG' : 'SHORT') === dirTesis ? 'acompaña' : 'contradice';
+  // El movimiento más grande, medido contra el tamaño de la moneda
+  const mayor = analisis.movimientos?.find(m => m.cuenta);
+  let contexto = null;
+  if(mayor && (marketCapUsd > 0 || volumenDiarioUsd > 0)){
+    const pctMcap = marketCapUsd > 0 ? mayor.usd/marketCapUsd*100 : null;
+    const pctVol = volumenDiarioUsd > 0 ? mayor.usd/volumenDiarioUsd*100 : null;
+    const partes = [];
+    if(pctMcap != null) partes.push(`${pctMcap.toFixed(2)}% del market cap`);
+    if(pctVol != null) partes.push(`${pctVol.toFixed(1)}% del volumen diario`);
+    const grande = (pctMcap >= 1) || (pctVol >= 15);
+    contexto = {
+      usd: mayor.usd, pctMcap, pctVol, grande,
+      texto: `El movimiento más grande fue de $${(mayor.usd/1000).toFixed(0)}K — ${partes.join(' · ')}.` +
+        (grande ? ` Es un tamaño que no puede moverse sin afectar el precio.` : ''),
+    };
+  }
+
   return {
+    contexto,
     presion: analisis.presion,
     direccion: analisis.direccion === 'ALCISTA' ? 'LONG' : analisis.direccion === 'BAJISTA' ? 'SHORT' : 'NEUTRO',
     confianza: analisis.confianza,

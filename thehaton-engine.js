@@ -888,6 +888,88 @@ const FOMC_ANNOUNCEMENTS_UTC = [
   '2026-10-28T18:00:00Z',
   '2026-12-09T19:00:00Z', // EST de nuevo (UTC-5)
 ];
+// ═══ CALENDARIO MACRO CON FECHAS REALES ═══
+// Estos datos mueven el precio más que cualquier indicador técnico, y las fechas son públicas
+// y predecibles: no hace falta pagar una API.
+//   · FOMC: el calendario se publica con un año de anticipación
+//   · Peticiones de desempleo: TODOS los jueves a las 13:30 UTC, sin excepción
+//   · CPI: alrededor del día 10-13, a las 13:30 UTC
+//   · PMI: alrededor del 22-24
+//   · Inventarios de petróleo: miércoles 15:30 UTC
+//
+// Se marca lo que es fecha EXACTA y lo que es ventana estimada, para no dar por seguro
+// algo que no lo es.
+const FOMC_2026 = [   // fechas oficiales publicadas por la Reserva Federal
+  '2026-01-28','2026-03-18','2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-11-04','2026-12-16',
+];
+// Las minutas salen 3 semanas después de cada reunión
+const MINUTAS_2026 = FOMC_2026.map(d => {
+  const x = new Date(d + 'T19:00:00Z'); x.setUTCDate(x.getUTCDate() + 21); return x.toISOString().slice(0,10);
+});
+
+export function calendarioMacro(ahora = new Date()){
+  const eventos = [];
+  const hoy = new Date(ahora);
+  const iso = d => d.toISOString().slice(0,10);
+  const enHoras = (fecha, h, m=0) => {
+    const d = new Date(fecha + `T${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:00Z`);
+    return (d - hoy) / 3600000;
+  };
+
+  // Próximos 10 días
+  for(let i = 0; i <= 10; i++){
+    const d = new Date(hoy); d.setUTCDate(d.getUTCDate() + i);
+    const fecha = iso(d), dia = d.getUTCDay(), diaMes = d.getUTCDate();
+
+    if(FOMC_2026.includes(fecha)) eventos.push({
+      fecha, hora:'19:00 UTC', nombre:'Decisión de tasas de la Fed (FOMC)', impacto:'MUY ALTO', exacta:true,
+      horas: enHoras(fecha,19),
+      queEs:'La Fed anuncia si sube, baja o mantiene las tasas. Es el evento que más mueve todo: dólar, oro, acciones y cripto.' });
+
+    if(MINUTAS_2026.includes(fecha)) eventos.push({
+      fecha, hora:'19:00 UTC', nombre:'Minutas de la Fed', impacto:'ALTO', exacta:true,
+      horas: enHoras(fecha,19),
+      queEs:'El detalle de qué discutieron en la última reunión. Cambia las expectativas sobre las próximas tasas y suele sacudir al dólar, al oro y a BTC.' });
+
+    if(dia === 4) eventos.push({   // jueves
+      fecha, hora:'13:30 UTC', nombre:'Peticiones de subsidio por desempleo', impacto:'MEDIO', exacta:true,
+      horas: enHoras(fecha,13,30),
+      queEs:'Mide la solidez del empleo en Estados Unidos. Si salen peores de lo esperado hay más margen para una Fed flexible (bueno para riesgo); si salen mejores, lo contrario.' });
+
+    if(dia === 3) eventos.push({   // miércoles
+      fecha, hora:'15:30 UTC', nombre:'Inventarios de petróleo', impacto:'MEDIO', exacta:true,
+      horas: enHoras(fecha,15,30),
+      queEs:'Mueve fuerte al sector energético y de ahí puede arrastrar al resto del mercado.' });
+
+    if(diaMes >= 10 && diaMes <= 13 && dia >= 1 && dia <= 5) eventos.push({
+      fecha, hora:'13:30 UTC', nombre:'CPI — inflación de EE.UU.', impacto:'MUY ALTO', exacta:false,
+      horas: enHoras(fecha,13,30),
+      queEs:'La inflación. Es el dato que más define qué va a hacer la Fed con las tasas.' });
+
+    if(diaMes >= 22 && diaMes <= 24 && dia >= 1 && dia <= 5) eventos.push({
+      fecha, hora:'14:45 UTC', nombre:'PMI (actividad económica)', impacto:'ALTO', exacta:false,
+      horas: enHoras(fecha,14,45),
+      queEs:'Mide la actividad de las empresas. Importa sobre todo cuando el dato real se aparta mucho de lo que se esperaba.' });
+  }
+
+  eventos.sort((a,b)=>a.horas-b.horas);
+  const proximos = eventos.filter(e => e.horas > -2);
+  const inminente = proximos.find(e => e.horas <= 24 && (e.impacto === 'MUY ALTO' || e.impacto === 'ALTO'));
+  const enCurso = eventos.find(e => e.horas <= 0.5 && e.horas > -2);
+
+  return {
+    proximos: proximos.slice(0, 6),
+    inminente: inminente || null,
+    enCurso: enCurso || null,
+    // El aviso concreto: si hay algo grande en las próximas horas, conviene no abrir posiciones
+    aviso: enCurso
+      ? `🔴 ${enCurso.nombre} está saliendo AHORA. El mercado puede moverse de forma violenta e impredecible en los próximos minutos.`
+      : inminente
+      ? `⚠️ ${inminente.nombre} en ${inminente.horas < 1 ? 'menos de una hora' : `${inminente.horas.toFixed(0)} horas`}${inminente.exacta ? '' : ' (fecha estimada)'}. ${inminente.queEs}`
+      : null,
+  };
+}
+
 function getFOMCWindow(bufferHours=3){
   const now = Date.now();
   for(const iso of FOMC_ANNOUNCEMENTS_UTC){
@@ -4270,6 +4352,93 @@ export async function fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpot
   }catch(e){ return null; }
 }
 
+// ═══ PRECIO vs POSICIONAMIENTO DE LOS GRANDES ═══
+// La idea es simple y potente: comparar hacia dónde va el PRECIO con hacia dónde se mueve el
+// ratio Long/Short de los traders grandes. Cuando van juntos, hay confirmación. Cuando se
+// separan, alguien está atrapado — y normalmente es la mayoría, no los grandes.
+//
+//   PRECIO ↑ + L/S ↑  → los grandes acompañan la suba: confirmación para LONG
+//   PRECIO ↑ + L/S ↓  → suben mientras los grandes venden: los shorts pueden ser exprimidos
+//   PRECIO ↓ + L/S ↑  → baja mientras los grandes compran: pueden quedar atrapados
+//   PRECIO ↓ + L/S ↓  → los grandes acompañan la baja: confirmación para SHORT
+export function precioVsPosicionamiento(candles, lsActual, lsPrevio, dirTesis){
+  if(!Array.isArray(candles) || candles.length < 8) return null;
+  if(lsActual == null || lsPrevio == null) return null;
+
+  // Variación del precio en las últimas velas (no solo la última, para no leer ruido)
+  const ult = candles.slice(-6);
+  const precioIni = ult[0].c, precioFin = ult.at(-1).c;
+  if(!precioIni) return null;
+  const varPrecio = (precioFin - precioIni)/precioIni*100;
+  const varLS = ((lsActual - lsPrevio)/Math.max(0.01, lsPrevio))*100;
+
+  // Umbrales: por debajo de esto es ruido, no movimiento
+  const precioSube = varPrecio > 0.4, precioBaja = varPrecio < -0.4;
+  const lsSube = varLS > 3, lsBaja = varLS < -3;
+  if((!precioSube && !precioBaja) || (!lsSube && !lsBaja)){
+    return { cuadrante:'SIN DEFINIR', alineado:null, varPrecio:+varPrecio.toFixed(2), varLS:+varLS.toFixed(1),
+      texto:`Ni el precio ni el posicionamiento de los grandes se están moviendo lo suficiente como para sacar una lectura (precio ${varPrecio>=0?'+':''}${varPrecio.toFixed(2)}%, L/S ${varLS>=0?'+':''}${varLS.toFixed(1)}%).` };
+  }
+
+  let cuadrante, favorece, texto, aviso = null;
+  if(precioSube && lsSube){
+    cuadrante = 'PRECIO ↑ · GRANDES ↑'; favorece = 'LONG';
+    texto = `El precio sube ${varPrecio.toFixed(2)}% y los traders grandes están abriendo MÁS largos (L/S ${varLS>=0?'+':''}${varLS.toFixed(1)}%). Van en la misma dirección: es confirmación para el lado comprador.`;
+  } else if(precioSube && lsBaja){
+    cuadrante = 'PRECIO ↑ · GRANDES ↓'; favorece = 'LONG';
+    texto = `El precio sube ${varPrecio.toFixed(2)}% pero los grandes se están pasando al lado corto (L/S ${varLS.toFixed(1)}%).`;
+    aviso = `Si estás pensando en SHORT, ojo: esos cortos pueden ser exprimidos y empujar el precio todavía más arriba. La suba puede acelerarse justamente porque hay muchos vendidos.`;
+  } else if(precioBaja && lsSube){
+    cuadrante = 'PRECIO ↓ · GRANDES ↑'; favorece = 'SHORT';
+    texto = `El precio baja ${varPrecio.toFixed(2)}% pero los grandes están abriendo largos (L/S +${varLS.toFixed(1)}%).`;
+    aviso = `Si estás pensando en LONG, ojo: todavía no hay confirmación. Si el precio sigue cayendo, esos largos quedan atrapados y su liquidación puede acelerar la baja.`;
+  } else {
+    cuadrante = 'PRECIO ↓ · GRANDES ↓'; favorece = 'SHORT';
+    texto = `El precio baja ${varPrecio.toFixed(2)}% y los grandes están abriendo más cortos (L/S ${varLS.toFixed(1)}%). Van en la misma dirección: es confirmación para el lado vendedor.`;
+  }
+
+  const alineado = dirTesis ? (favorece === dirTesis) : null;
+  return {
+    cuadrante, favorece, alineado,
+    varPrecio:+varPrecio.toFixed(2), varLS:+varLS.toFixed(1),
+    lsActual:+lsActual.toFixed(3), lsPrevio:+lsPrevio.toFixed(3),
+    texto, aviso,
+    resumen: dirTesis
+      ? (alineado ? `✅ El posicionamiento de los grandes acompaña esta operación ${dirTesis}.`
+                  : `⚠️ El posicionamiento de los grandes NO acompaña esta operación ${dirTesis}. ${aviso || ''}`)
+      : texto,
+  };
+}
+
+// ═══ TAMAÑO DE UNA TRANSFERENCIA EN CONTEXTO ═══
+// Un movimiento de $4M no significa nada por sí solo: en una moneda de $10.000M es ruido,
+// en una de $200M es enorme. Lo que importa es el tamaño CONTRA el market cap y contra el
+// volumen diario — si una sola transferencia equivale al 17% de todo lo que se opera en un
+// día, ese dinero no puede salir sin mover el precio.
+export function contextoTransferencia(usd, marketCapUsd, volumenDiarioUsd){
+  if(!usd || usd <= 0) return null;
+  const pctMcap = marketCapUsd > 0 ? usd/marketCapUsd*100 : null;
+  const pctVol = volumenDiarioUsd > 0 ? usd/volumenDiarioUsd*100 : null;
+  if(pctMcap == null && pctVol == null) return null;
+
+  // El nivel sale del mayor de los dos: cualquiera de los dos puede ser determinante
+  const peor = Math.max(pctMcap ?? 0, (pctVol ?? 0)/5);   // el volumen se pondera distinto
+  const nivel = peor >= 3 ? 'MUY ALTO' : peor >= 1 ? 'ALTO' : peor >= 0.3 ? 'MEDIO' : 'BAJO';
+
+  const lecturas = [];
+  if(pctVol != null && pctVol >= 15) lecturas.push(`Equivale al ${pctVol.toFixed(1)}% de todo lo que se opera en un día: un movimiento de este tamaño no puede ejecutarse sin mover el precio.`);
+  else if(pctVol != null && pctVol >= 5) lecturas.push(`Es el ${pctVol.toFixed(1)}% del volumen diario: significativo, aunque el mercado puede absorberlo.`);
+  if(pctMcap != null && pctMcap >= 1) lecturas.push(`Representa el ${pctMcap.toFixed(2)}% de toda la capitalización de la moneda.`);
+
+  return {
+    usd, nivel,
+    pctMarketCap: pctMcap != null ? +pctMcap.toFixed(2) : null,
+    pctVolumenDiario: pctVol != null ? +pctVol.toFixed(1) : null,
+    relevante: nivel === 'ALTO' || nivel === 'MUY ALTO',
+    lectura: lecturas.length ? lecturas.join(' ') : `Movimiento chico para el tamaño de esta moneda: probablemente no mueva el precio.`,
+  };
+}
+
 // ═══ QUÉ PUEDE PASAR — ESCENARIOS ═══
 // Lo que le faltaba al análisis: después de mostrar todos los datos, decir qué puede pasar.
 // No es una predicción: son los dos o tres caminos más probables según dónde está la liquidez,
@@ -4283,7 +4452,13 @@ export function escenariosProbables({ price, structure, liquidez, compresion, fa
   const escenarios = [];
   const arriba = liquidez?.cercanaArriba || liquidez?.lejanaArriba;
   const abajo = liquidez?.cercanaAbajo || liquidez?.lejanaAbajo;
-  const bias = structure.bias;   // 'bull' | 'bear' | null
+  // La dirección estructural sale de events.trendStructure ('HH-HL' alcista, 'LH-LL' bajista,
+  // 'range' sin definir), no de un campo `bias` que no existe.
+  // trendStructure devuelve 'bull' | 'bear' | 'range' directamente. Se aceptan también las
+  // formas HH-HL / LH-LL por si cambia el formato.
+  const ts = String(structure.events?.trendStructure || '').toLowerCase();
+  const bias = (ts === 'bull' || /hh|hl/.test(ts)) ? 'bull'
+             : (ts === 'bear' || /lh|ll/.test(ts)) ? 'bear' : null;
 
   // ═══ ÁREA CRÍTICA ═══
   // El nivel que, si se pierde o se supera, cambia la lectura entera. Es lo primero que hay
@@ -4334,18 +4509,23 @@ export function escenariosProbables({ price, structure, liquidez, compresion, fa
   }
 
   // ═══ ESCENARIO 3: CONTINUACIÓN ═══
-  if(bias && setup?.t1){
+  // El setup puede traer los objetivos como t1/t2 o como tp1/tp2 según de dónde venga
+  const obj1 = setup?.t1 ?? setup?.tp1 ?? null;
+  const obj2 = setup?.t2 ?? setup?.tp2 ?? null;
+  if(bias && obj1){
     const alcista = bias === 'bull';
     escenarios.push({
       titulo: alcista ? '📈 Continuación alcista' : '📉 Continuación bajista',
       probabilidad: fase && /EXPANSIÓN/i.test(fase) ? 'alta' : 'media',
-      texto: `La estructura sigue ${alcista?'alcista (máximos y mínimos más altos)':'bajista (máximos y mínimos más bajos)'}. Si se mantiene, el primer objetivo razonable es $${fmt(setup.t1)}${setup.t2?` y después $${fmt(setup.t2)}`:''}.${fase?` La fase actual (${fase}) ${/EXPANSIÓN/i.test(fase)?'acompaña':'no acompaña del todo'} este escenario.`:''}`,
-      nivel: setup.t1,
+      texto: `La estructura sigue ${alcista?'alcista (máximos y mínimos más altos)':'bajista (máximos y mínimos más bajos)'}. Si se mantiene, el primer objetivo razonable es $${fmt(obj1)}${obj2?` y después $${fmt(obj2)}`:''}.${fase?` La fase actual (${fase}) ${/EXPANSIÓN/i.test(fase)?'acompaña':'no acompaña del todo'} este escenario.`:''}`,
+      nivel: obj1,
     });
   }
 
   // ═══ ESCENARIO 4: INVALIDACIÓN ═══
-  if(structure.events?.some(e=>/CHoCH/i.test(e))){
+  // structure.events es un OBJETO con {trendStructure, bos, choch, ...}, no un array.
+  // Antes se llamaba .some() sobre él y toda la función se caía.
+  if(structure.events?.choch){
     escenarios.push({
       titulo: '🔄 Cambio de carácter en curso',
       probabilidad: 'media',
