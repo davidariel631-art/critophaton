@@ -1071,6 +1071,37 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
   }
   for(const {symbol, tag} of candidates){
     if(acc.theses.find(t=>t.symbol===symbol)) continue; // ya hay una tesis abierta para esa moneda
+
+    // ═══ ESPERA DESPUÉS DE CERRAR ═══
+    // Antes solo se miraban las tesis ABIERTAS, así que una moneda que cerraba en TP2 a las 13:00
+    // podía volver a abrirse a las 13:30 en la misma dirección. Eso trae tres problemas:
+    //  · Son la misma apuesta: si el movimiento se da vuelta, se pierde dos veces por lo mismo.
+    //  · Se entra tarde: si ya alcanzó los objetivos, el movimiento ya ocurrió.
+    //  · El Research Center las cuenta como operaciones independientes cuando no lo son.
+    //
+    // La espera depende de cómo cerró, porque no todos los cierres significan lo mismo:
+    //  · Ganó y llegó a los objetivos → el movimiento ya se dio: 12h antes de volver
+    //  · Perdió por stop → la lectura estaba mal: 8h para no insistir con una tesis fallida
+    //  · Cerró en breakeven → menos concluyente: 4h
+    const cerradaReciente = (acc.closedTrades||[])
+      .filter(t => t.symbol === symbol && t.closedAt)
+      .sort((a,b) => b.closedAt - a.closedAt)[0];
+    if(cerradaReciente){
+      const horas = (Date.now() - cerradaReciente.closedAt) / 3600000;
+      const motivo = String(cerradaReciente.motivoCierre || '');
+      const espera = /TP2|TP1/i.test(motivo) ? 12
+                   : /stop/i.test(motivo) ? 8
+                   : 4;
+      if(horas < espera){
+        // Solo se frena si además va en la MISMA dirección: si el mercado se dio vuelta
+        // y ahora la señal es al revés, es una tesis distinta y tiene sentido tomarla.
+        const mismaDireccion = cerradaReciente.dir === dir;
+        if(mismaDireccion){
+          console.log(`  ⏸️ ${symbol}: cerró hace ${horas.toFixed(1)}h por "${motivo}" en la misma dirección (${dir}). Se espera a ${espera}h para no repetir la misma apuesta.`);
+          continue;
+        }
+      }
+    }
     try{
       const data = await fetchTokenData(symbol, '4h');
       if(!data.candles || data.candles.length<220) continue;
