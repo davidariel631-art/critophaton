@@ -4820,8 +4820,35 @@ export async function buscarContratoToken(symbolRaw){
 // NECESITA UNA CLAVE DE ALCHEMY (gratis, 30M unidades al mes). Se guarda como secreto de
 // GitHub Actions igual que TELEGRAM_BOT_TOKEN. Sin clave, esta función devuelve null y el bot
 // sigue funcionando exactamente como antes, sin esta capa.
-const ALCHEMY_KEY = (typeof process !== 'undefined' && process.env?.ALCHEMY_API_KEY) || null;
-const ALCHEMY_REDES = { ethereum:'eth-mainnet', bsc:'bnb-mainnet', base:'base-mainnet', arbitrum:'arb-mainnet', polygon:'polygon-mainnet' };
+// La clave sale de dos lugares distintos según dónde corra:
+//  · En el bot (Node): de process.env, que viene del secreto de GitHub Actions.
+//  · En la web (navegador): NO hay process. Se lee de window.ALCHEMY_KEY, que se puede
+//    definir en el HTML. Antes esto era solo process.env, así que en la web SIEMPRE daba
+//    null y el panel de Wallets no aparecía nunca.
+const ALCHEMY_KEY =
+  (typeof process !== 'undefined' && process.env?.ALCHEMY_API_KEY) ||
+  (typeof window !== 'undefined' && window.ALCHEMY_KEY) || null;
+
+// Los identificadores de red de GeckoTerminal NO son los mismos que los de Alchemy.
+// Gecko devuelve 'eth' y 'polygon_pos'; Alchemy espera 'eth-mainnet' y 'polygon-mainnet'.
+// Sin este mapeo, buscar LINK (red 'eth') devolvía undefined y la función cortaba antes de
+// llamar a la API — o sea que tampoco funcionaba en el bot.
+const ALCHEMY_REDES = {
+  eth:'eth-mainnet', ethereum:'eth-mainnet',
+  bsc:'bnb-mainnet', 'binance-smart-chain':'bnb-mainnet',
+  base:'base-mainnet',
+  arbitrum:'arb-mainnet', arbitrum_one:'arb-mainnet', 'arbitrum-one':'arb-mainnet',
+  polygon_pos:'polygon-mainnet', polygon:'polygon-mainnet', 'polygon-pos':'polygon-mainnet',
+};
+
+export function estadoWalletIntelligence(red){
+  // Sirve para poder mostrar POR QUÉ no hay datos, en vez de que el panel simplemente
+  // no aparezca y no se sepa si está roto o si la moneda no aplica.
+  if(!ALCHEMY_KEY) return { ok:false, motivo:'Falta la clave de Alchemy. Se configura como secreto ALCHEMY_API_KEY en GitHub Actions y se pasa al paso del bot en el bloque env del workflow.' };
+  if(!red) return { ok:false, motivo:'No se encontró el contrato de esta moneda en ninguna red soportada.' };
+  if(!ALCHEMY_REDES[red]) return { ok:false, motivo:`La red "${red}" no está soportada. Funciona con Ethereum, BNB Chain, Base, Arbitrum y Polygon. Las monedas de Solana no tienen análisis de wallets.` };
+  return { ok:true, motivo:null };
+}
 
 async function fetchTransferenciasToken(contrato, red, horas = 24){
   if(!ALCHEMY_KEY || !contrato) return null;

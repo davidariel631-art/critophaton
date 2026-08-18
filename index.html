@@ -625,7 +625,6 @@
           <div class="subrow" id="tokenLabel">—</div>
           <div id="flujoUnificadoPanel" style="display:none;margin-top:10px;"></div>
           <div id="libroPanel" style="display:none;margin-top:10px;"></div>
-          <div id="walletsPanel" style="display:none;margin-top:10px;"></div>
           <div id="derivadosPanel" style="display:none;margin-top:10px;"></div>
           <div id="anomaliaPanel" style="display:none;margin-top:10px;"></div>
           <div id="fasePanel" style="display:none;margin-top:10px;"></div>
@@ -1090,6 +1089,13 @@
   // Motor único compartido (thehaton-engine.js) — el mismo archivo que usa el bot.
   // Se expone como variables globales para que el script clásico de abajo
   // (que no es type="module") lo use exactamente igual que antes.
+  // ═══ WALLET INTELLIGENCE SOLO EN EL BOT ═══
+  // La clave de Alchemy NO se pone acá a propósito: cualquiera que abra el código fuente de la
+  // página la vería y podría consumir la cuota. Es una clave de solo lectura, así que el riesgo
+  // es bajo, pero no hay motivo para exponerla.
+  // El análisis de wallets corre en el bot, donde la clave vive como secreto de GitHub Actions,
+  // y el resultado se ve en los mensajes de Telegram y en el registro de cada operación.
+
   import * as TheHatonEngine from './thehaton-engine.js';
   Object.assign(window, TheHatonEngine);
   // Wallet Intelligence vive en su propio archivo (clasifica wallets y descarta los movimientos
@@ -1369,7 +1375,6 @@ function renderResults(data, result, setup){
   // Ahora la web ve exactamente lo mismo que el mensaje de Telegram.
   (async () => {
     const pLibro = document.getElementById('libroPanel');
-    const pWallets = document.getElementById('walletsPanel');
     const pFlujo = document.getElementById('flujoUnificadoPanel');
     const tarjeta = (borde, titulo, cuerpo) =>
       `<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid ${borde};border-radius:10px;padding:11px 13px;">
@@ -1378,24 +1383,13 @@ function renderResults(data, result, setup){
       // Se piden en paralelo para no demorar la pantalla
       const [libro, wallets] = await Promise.all([
         TheHatonEngine.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null),
-        (async()=>{
-          try{
-            // El contrato casi nunca viene con los datos (solo GeckoTerminal lo devuelve, y es la
-            // última fuente que se prueba). Se busca aparte: sin esto el panel de Wallets no
-            // aparecía nunca para monedas que resuelven desde un exchange centralizado.
-            let ct = data.contract, rd = data.network;
-            if(!ct){
-              const info = await TheHatonEngine.buscarContratoToken(data.displayName).catch(()=>null);
-              if(info){ ct = info.contrato; rd = info.red; }
-            }
-            window._contratoActual = ct ? { contrato:ct, red:rd } : null;
-            const tr = await TheHatonEngine.fetchTransferenciasToken(ct, rd, 24);
-            if(!tr?.length) return null;
-            const conUsd = tr.map(t => ({ ...t, valueUsd: t.cantidad * (data.price||0) }));
-            const a = window.analizarTransferencias?.(conUsd, data.network, { minUsd:5000 });
-            return a ? window.construirEvidenciaOnChain?.(a, null) : null;
-          }catch(e){ return null; }
-        })(),
+        // El contrato se busca igual: lo usa la capa de actividad DEX, que no necesita clave.
+        (async()=>{ try{
+          if(data.contract) { window._contratoActual = { contrato:data.contract, red:data.network }; return null; }
+          const info = await TheHatonEngine.buscarContratoToken(data.displayName).catch(()=>null);
+          window._contratoActual = info ? { contrato:info.contrato, red:info.red } : null;
+          return null;   // wallets: solo en el bot, donde la clave de Alchemy está protegida
+        }catch(e){ return null; } })(),
       ]);
       const flujo = TheHatonEngine.calcularPresionFlujo(data.candles, 24);
 
@@ -1413,21 +1407,9 @@ function renderResults(data, result, setup){
         pLibro.style.display = '';
       }
 
-      // WALLETS
-      if(wallets){
-        const col = wallets.direccion==='LONG' ? 'var(--teal)' : wallets.direccion==='SHORT' ? 'var(--rose)' : 'var(--sub)';
-        let cuerpo = `<div style="font-size:12.5px;line-height:1.55;">${wallets.resumen}</div>`;
-        if(wallets.razones?.length){
-          cuerpo += `<div style="margin-top:7px;font-size:11.5px;color:#c3ccd6;">` +
-            wallets.razones.map(r=>`• ${r}`).join('<br>') + `</div>`;
-        }
-        cuerpo += `<div style="margin-top:6px;font-size:10.5px;color:var(--sub);">Las wallets se clasifican por su comportamiento. Los movimientos internos de exchanges se descartan para no contar el mismo dinero dos veces.</div>`;
-        pWallets.innerHTML = tarjeta(col, `🐋 WALLETS · confianza ${wallets.confianza}%`, cuerpo);
-        pWallets.style.display = '';
-      }
-      // Si no hay datos de wallets NO se muestra nada. Antes salía un cartel diciendo que la
-      // moneda no tenía contrato soportado, y como casi ninguna lo tiene, ese cartel aparecía
-      // en todos los análisis ocupando espacio sin aportar. El bot lo sigue registrando igual.
+      // El panel de Wallets no va en la web: necesita la clave de Alchemy, que no se puede
+      // exponer en un archivo público. El bot sí lo calcula, lo muestra en Telegram y lo
+      // registra en cada operación, y el Research Center lo mide igual.
 
       // LECTURA UNIFICADA: junta todo lo anterior con la liquidez
       // La liquidez se calcula acá mismo: la pantalla de análisis no la tenía (estaba solo en
@@ -1448,7 +1430,8 @@ function renderResults(data, result, setup){
         data.contract || _ci?.contrato, data.network || _ci?.red, null).catch(()=>null);
       const uni = TheHatonEngine.lecturaUnificada({
         liquidez: capaLiq, libro, flujo,
-        wallets, onchain: onchainWeb,
+        wallets: null,   // solo en el bot
+        onchain: onchainWeb,
         anomalia: window._ultimaAnomalia || null, dirTesis: null,
       });
       if(uni){
