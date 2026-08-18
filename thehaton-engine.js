@@ -391,8 +391,15 @@ async function tryOKXPerp(symbolRaw, tf, variante){
   const res = await fetchJSON(`https://www.okx.com/api/v5/market/candles?instId=${instId}&bar=${bar}&limit=220`);
   const filas = res?.data;
   if(!Array.isArray(filas) || filas.length < 20) throw new Error('OKX perpetuo sin datos');
-  const candles = filas.map(k=>({ t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }))
-    .filter(v=>Number.isFinite(v.c)).sort((a,b)=>a.t-b.t);
+  // OKX no publica el volumen comprador agresivo. Se aproxima por dónde cerró la vela dentro
+  // de su rango: si cerró cerca del máximo, dominaron los compradores. Es una estimación, no el
+  // dato real — pero es mejor que dejar la capa de flujo en null.
+  const candles = filas.map(k=>{
+    const o=+k[1], h=+k[2], l=+k[3], cl=+k[4], v=+k[5];
+    const rango = h-l;
+    const pctComp = rango > 0 ? (cl-l)/rango : 0.5;
+    return { t:+k[0], o, h, l, c:cl, v, vc: v*pctComp, vv: v*(1-pctComp), estimado:true };
+  }).filter(v=>Number.isFinite(v.c)).sort((a,b)=>a.t-b.t);
   if(candles.length < 20) throw new Error('OKX perpetuo con pocas velas');
   let price = candles.at(-1).c, change24h = 0, funding = null;
   try{
@@ -420,8 +427,13 @@ async function tryBybitPerp(symbolRaw, tf, variante){
   const res = await fetchJSON(`https://api.bybit.com/v5/market/kline?category=linear&symbol=${pair}&interval=${interval}&limit=200`);
   const filas = res?.result?.list;
   if(!Array.isArray(filas) || filas.length < 20) throw new Error('Bybit perpetuo sin datos');
-  const candles = filas.map(k=>({ t:+k[0], o:+k[1], h:+k[2], l:+k[3], c:+k[4], v:+k[5] }))
-    .filter(v=>Number.isFinite(v.c)).sort((a,b)=>a.t-b.t);
+  // Bybit tampoco publica el volumen comprador: misma estimación que en OKX.
+  const candles = filas.map(k=>{
+    const o=+k[1], h=+k[2], l=+k[3], cl=+k[4], v=+k[5];
+    const rango = h-l;
+    const pctComp = rango > 0 ? (cl-l)/rango : 0.5;
+    return { t:+k[0], o, h, l, c:cl, v, vc: v*pctComp, vv: v*(1-pctComp), estimado:true };
+  }).filter(v=>Number.isFinite(v.c)).sort((a,b)=>a.t-b.t);
   if(candles.length < 20) throw new Error('Bybit perpetuo con pocas velas');
   let price = candles.at(-1).c, change24h = 0, funding = null, oi = null;
   try{
@@ -504,7 +516,12 @@ async function tryBitunix(symbolRaw, tf, variante){
 
   const res1 = await traer();
   if(res1?.code !== 0 && res1?.code !== '0') throw new Error('Bitunix: ' + (res1?.msg || 'sin datos'));
-  let candles = normalizar(res1.data);
+  let candles = normalizar(res1.data).map(v => {
+    // Bitunix no publica volumen comprador: se estima por dónde cerró la vela en su rango
+    const rango = v.h - v.l;
+    const pctComp = rango > 0 ? (v.c - v.l)/rango : 0.5;
+    return { ...v, vc: v.v*pctComp, vv: v.v*(1-pctComp), estimado:true };
+  });
   if(candles.length < 20) throw new Error('Bitunix sin velas suficientes');
 
   // Segunda tanda hacia atrás, para llegar a las 220 que necesitan los indicadores largos
@@ -4746,9 +4763,53 @@ function calcularPresionFlujo(candles, velas = 24){
              : cambio < -6 ? 'los vendedores vienen ganando terreno'
              : 'sin cambio claro en las últimas velas',
     velas: v.length,
-    resumen: `${pctComprador.toFixed(0)}% del volumen de las últimas ${v.length} velas fue de compradores agrediendo el libro${Math.abs(cambio)>6 ? ` — y ${cambio>0?'subiendo':'bajando'}` : ''}.`,
+    // Se avisa cuando el dato es estimado: OKX, Bybit y Bitunix no publican el volumen
+    // comprador real, se aproxima por dónde cerró la vela en su rango.
+    estimado: v.some(x => x.estimado),
+    resumen: `${pctComprador.toFixed(0)}% del volumen de las últimas ${v.length} velas fue de compradores${v.some(x=>x.estimado) ? ' (estimado: esta fuente no publica el dato exacto)' : ' agrediendo el libro'}${Math.abs(cambio)>6 ? ` — y ${cambio>0?'subiendo':'bajando'}` : ''}.`,
     aclaracion: 'Mide quién ejecuta contra el libro (quien tiene urgencia), no las órdenes que esperan.',
   };
+}
+
+// ═══ BUSCAR EL CONTRATO DE UN TOKEN ═══
+// EL BUG QUE ARREGLA: de las 12 fuentes de velas, SOLO GeckoTerminal devuelve la dirección del
+// contrato. Y como Gecko es la última que se prueba, casi nunca se usa — si la moneda está en
+// Binance, los datos vienen de ahí y el contrato queda en null.
+// Resultado: el panel de Wallets y la actividad DEX no aparecían NUNCA, porque las dos necesitan
+// contrato y red. Ahora el contrato se busca aparte, sin importar de dónde salieron las velas.
+const _cacheContrato = new Map();
+export async function buscarContratoToken(symbolRaw){
+  const sym = normalizarSimbolo(symbolRaw);
+  if(!sym) return null;
+  if(_cacheContrato.has(sym)) return _cacheContrato.get(sym);
+
+  const guardar = (v) => { _cacheContrato.set(sym, v); return v; };
+  try{
+    // GeckoTerminal busca por símbolo y devuelve los pools con su red y su contrato
+    const res = await fetchJSON(`${GECKO}/search/pools?query=${encodeURIComponent(sym)}&page=1`);
+    const pools = res?.data;
+    if(!Array.isArray(pools) || !pools.length) return guardar(null);
+
+    // Se elige el pool con más liquidez cuyo token base coincida con el símbolo buscado:
+    // sin ese filtro se podía terminar tomando el contrato de otra moneda parecida.
+    const candidatos = pools
+      .map(p => {
+        const nombre = String(p.attributes?.name || '');
+        const base = nombre.split('/')[0]?.trim().toUpperCase();
+        return {
+          base,
+          liquidez: parseFloat(p.attributes?.reserve_in_usd) || 0,
+          red: p.relationships?.network?.data?.id || null,
+          contrato: p.relationships?.base_token?.data?.id?.split('_').pop() || null,
+        };
+      })
+      .filter(x => x.contrato && x.red && x.base === sym && x.liquidez > 1000)
+      .sort((a,b) => b.liquidez - a.liquidez);
+
+    if(!candidatos.length) return guardar(null);
+    const mejor = candidatos[0];
+    return guardar({ contrato: mejor.contrato, red: mejor.red, liquidez: mejor.liquidez });
+  }catch(e){ return guardar(null); }
 }
 
 // ═══ WALLET INTELLIGENCE: TRAER LAS TRANSFERENCIAS ═══

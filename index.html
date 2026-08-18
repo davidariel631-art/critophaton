@@ -1380,7 +1380,16 @@ function renderResults(data, result, setup){
         TheHatonEngine.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null),
         (async()=>{
           try{
-            const tr = await TheHatonEngine.fetchTransferenciasToken(data.contract, data.network, 24);
+            // El contrato casi nunca viene con los datos (solo GeckoTerminal lo devuelve, y es la
+            // última fuente que se prueba). Se busca aparte: sin esto el panel de Wallets no
+            // aparecía nunca para monedas que resuelven desde un exchange centralizado.
+            let ct = data.contract, rd = data.network;
+            if(!ct){
+              const info = await TheHatonEngine.buscarContratoToken(data.displayName).catch(()=>null);
+              if(info){ ct = info.contrato; rd = info.red; }
+            }
+            window._contratoActual = ct ? { contrato:ct, red:rd } : null;
+            const tr = await TheHatonEngine.fetchTransferenciasToken(ct, rd, 24);
             if(!tr?.length) return null;
             const conUsd = tr.map(t => ({ ...t, valueUsd: t.cantidad * (data.price||0) }));
             const a = window.analizarTransferencias?.(conUsd, data.network, { minUsd:5000 });
@@ -1434,7 +1443,9 @@ function renderResults(data, result, setup){
         }
       }catch(e){ /* sin liquidez, la unificada usa las demás capas */ }
 
-      const onchainWeb = await TheHatonEngine.fetchOnChainPressure(data.contract, data.network, null).catch(()=>null);
+      const _ci = window._contratoActual;
+      const onchainWeb = await TheHatonEngine.fetchOnChainPressure(
+        data.contract || _ci?.contrato, data.network || _ci?.red, null).catch(()=>null);
       const uni = TheHatonEngine.lecturaUnificada({
         liquidez: capaLiq, libro, flujo,
         wallets, onchain: onchainWeb,
@@ -1733,7 +1744,9 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
         compresion: E.detectTrianguloCompresion(data.candles),
         fase: (E.detectMarketPhase(data.candles) || {}).fase,
         dirTesis: result.recommendation === 'NO OPERAR' ? null : result.recommendation,
-        setup: result.setup,
+        // renderResults ya recibe el setup como parámetro. `result.setup` no existe —
+        // usarlo dejaba los objetivos vacíos y el escenario de continuación no aparecía.
+        setup,
       });
       if(!esc){ box.style.display='none'; return; }
 
