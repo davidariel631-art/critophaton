@@ -4321,7 +4321,7 @@ function verificarDatosSanos(data, opciones = {}){
 //    los apalancados, no compradores reales. Típico de las monedas que se desploman de golpe.
 //  · L/S global vs L/S de cuentas grandes: cuando difieren, los grandes están del lado
 //    contrario a la mayoría — y suelen tener razón.
-export async function fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpotUsd){
+async function _fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpotUsd){
   const sym = normalizarSimbolo(symbolRaw);
   const pair = sym.endsWith('USDT') ? sym : sym + 'USDT';
   const out = { oiUsd:null, oiSobreMcap:null, futSobreSpot:null,
@@ -4562,6 +4562,29 @@ export function escenariosProbables({ price, structure, liquidez, compresion, fa
   return { escenarios, areaCritica, conclusion };
 }
 
+// Envoltorios con cache: la misma consulta se pedía dos veces por moneda (una para el mensaje,
+// otra para el registro). Con el cache, la segunda reutiliza el resultado de la primera.
+export function fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpotUsd){
+  return conCache(`ratios:${normalizarSimbolo(symbolRaw)}`, 120000,
+    () => _fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpotUsd));
+}
+export function fetchLibroOrdenes(symbolRaw, fuente = 'Binance'){
+  return conCache(`libro:${normalizarSimbolo(symbolRaw)}:${fuente}`, 60000,
+    () => _fetchLibroOrdenes(symbolRaw, fuente));
+}
+export function fetchTransferenciasTokenCached(contrato, red, horas = 24){
+  if(!contrato || !red) return Promise.resolve(null);
+  return conCache(`transfers:${red}:${contrato}`, 180000,
+    () => fetchTransferenciasToken(contrato, red, horas));
+}
+export function fetchOnChainPressureCached(contrato, red, dirTesis){
+  if(!contrato || !red) return Promise.resolve(null);
+  // La dirección de la tesis NO va en la clave: el análisis es el mismo, solo cambia
+  // la interpretación de si acompaña o contradice, que se calcula al final.
+  return conCache(`onchain:${red}:${contrato}`, 180000,
+    () => fetchOnChainPressure(contrato, red, dirTesis));
+}
+
 // ═══ LECTURA UNIFICADA DE LIQUIDEZ Y FLUJO ═══
 // El problema que resuelve: el mensaje mostraba cinco bloques sueltos (liquidez, libro de órdenes,
 // flujo, wallets, actividad anómala). Si tres decían lo mismo no se notaba, y si se contradecían
@@ -4652,6 +4675,24 @@ export function lecturaUnificada({ liquidez, libro, flujo, wallets, onchain, ano
   };
 }
 
+// ═══ CACHE DE UNA CORRIDA ═══
+// Varias de estas consultas se hacían DOS VECES por moneda: una para armar el mensaje y otra
+// para guardar el registro. Como dentro de la misma corrida el dato no cambia, se cachea por
+// 2 minutos. Eso corta a la mitad las llamadas de libro, apalancamiento, wallets y DEX.
+const _cacheCorrida = new Map();
+function conCache(clave, ttlMs, fn){
+  const hit = _cacheCorrida.get(clave);
+  if(hit && (Date.now() - hit.ts) < ttlMs) return hit.valor;
+  const valor = fn();   // se guarda la PROMESA, así dos llamadas simultáneas comparten el pedido
+  _cacheCorrida.set(clave, { ts: Date.now(), valor });
+  // Limpieza para que el mapa no crezca sin control en corridas largas
+  if(_cacheCorrida.size > 400){
+    const viejo = Date.now() - ttlMs;
+    for(const [k,v] of _cacheCorrida) if(v.ts < viejo) _cacheCorrida.delete(k);
+  }
+  return valor;
+}
+
 // ═══ LIBRO DE ÓRDENES ═══
 // La diferencia con lo que veníamos haciendo: hasta ahora la liquidez se RECONSTRUÍA a partir de
 // las velas (dónde hubo toques, dónde se acumuló volumen). Eso es inferir dónde PUDO haber
@@ -4661,7 +4702,7 @@ export function lecturaUnificada({ liquidez, libro, flujo, wallets, onchain, ano
 // LIMITACIÓN HONESTA: el libro es una foto del momento y se puede retirar en un segundo. Un muro
 // grande puede ser real o puede ser alguien tratando de asustar. Por eso se muestra como
 // contexto, no como una verdad fija.
-async function fetchLibroOrdenes(symbolRaw, fuente = 'Binance'){
+async function _fetchLibroOrdenes(symbolRaw, fuente = 'Binance'){
   const sym = normalizarSimbolo(symbolRaw);
   try{
     let bids = [], asks = [];
@@ -6032,7 +6073,7 @@ function computeFilterEffectiveness(closedTrades, expiredTheses){
 // EXPORTS — misma lista para el navegador (script type=module) y para Node
 // ============================================================
 export {
-  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, fotoAntesDespues, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
+  computeGodPerformance, computeFilterEffectiveness, computeStatsDesglosadas, computeHistorialMoneda, buscarEnBiblioteca, buscarTesisParecidas, generarReporteResearch, postMortem, simularStops, monteCarlo, expectancyPorEstrategia, combinacionDioses, simularTPs, validarFueraDeMuestra, calcularCosteReal, resumenCostes, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken,  calcularPresionFlujo, verificarDatosSanos, analisisMfeMaePorResultado, analizarCorrelacion, metricasCompletas, rendimientoPorRegimen, compararVersiones, fotoAntesDespues, calidadDecision, resumenCalidadDecisiones, explicarAnalisis, seguirHipotesis, getSaludAPIs, detectMarketPhase,
   BINANCE, FUTURES, GECKO, TF_MAP,
   fetchJSON, fetchTokenData, fetchMacroTrend, fetchRelevantNews, fetchBTCReference,
   fetchOpenInterestTrend, fetchFundingTrend, fetchTopTraderRatio, fetchOIToMarketCapRatio, fetchSpotFuturesFlow, classifyTrend, marketContextMatrix, MARKET_CONTEXT_TABLE,
