@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2145,10 +2145,24 @@ async function confirmTheses(state, capitalFlow){
         const contratoFinal = data15.contract || contratoInfo?.contrato || null;
         const redFinal = data15.network || contratoInfo?.red || null;
 
+        // ═══ DIAGNÓSTICO DE WALLET INTELLIGENCE ═══
+        // Sin esto no había forma de saber si el análisis de wallets estaba funcionando: si no
+        // aparecía la línea, podía ser porque la moneda no aplica o porque algo estaba roto.
+        // Ahora el log de GitHub Actions dice exactamente qué pasó en cada moneda.
+        try{
+          const est = estadoWalletIntelligence(redFinal);
+          if(!est.ok) console.log(`  🐋 ${thesis.symbol}: sin análisis de wallets — ${est.motivo}`);
+          else console.log(`  🐋 ${thesis.symbol}: consultando wallets en ${redFinal} (${contratoFinal.slice(0,10)}...)`);
+        }catch(e){}
+
         const wallets = await (async()=>{
           try{
             const transfers = await fetchTransferenciasToken(contratoFinal, redFinal, 24);
-            if(!transfers?.length) return null;
+            if(!transfers?.length){
+              console.log(`  🐋 ${thesis.symbol}: Alchemy respondió pero no hubo transferencias en 24h.`);
+              return null;
+            }
+            console.log(`  🐋 ${thesis.symbol}: ${transfers.length} transferencias analizadas.`);
             // Las cantidades vienen en tokens: se pasan a dólares con el precio actual
             const conUsd = transfers.map(t => ({ ...t, valueUsd: t.cantidad * (data15.price||0) }));
             const analisis = analizarTransferencias(conUsd, data15.network, { minUsd: 5000 });
@@ -2953,6 +2967,20 @@ async function main(){
 
   // allSettled, no all: con Promise.all, si UNA promesa se rechazaba se cancelaban todas las
   // demás y se perdían los mensajes de esa corrida entera.
+  // ═══ RESUMEN DE FUENTES DE DATOS ═══
+  // Al final de cada corrida se dice qué capas funcionaron y cuáles no. Sirve para saber de un
+  // vistazo si algo dejó de andar, sin tener que leer todo el log línea por línea.
+  try{
+    const est = estadoWalletIntelligence('eth');
+    console.log('');
+    console.log('═══ ESTADO DE LAS FUENTES ═══');
+    console.log(`  🐋 Wallet Intelligence: ${est.ok ? 'clave configurada, funcionando' : est.motivo}`);
+    console.log(`  📖 Libro de órdenes: sin clave, siempre disponible`);
+    console.log(`  ⚡ Flujo comprador: real en Binance, estimado en OKX/Bybit/Bitunix`);
+    console.log(`  📅 Calendario macro: fechas locales, sin API`);
+    console.log('');
+  }catch(e){}
+
   const resultados = await Promise.allSettled(sendPromises);
   const fallidos = resultados.filter(r => r.status === 'rejected');
   if(fallidos.length){
