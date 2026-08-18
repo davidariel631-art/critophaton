@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2006,7 +2006,7 @@ async function confirmTheses(state, capitalFlow){
           // Presión on-chain: se guarda como EVIDENCIA, no suma al score. Dentro de unas semanas
           // el Research Center va a poder decir si realmente predice algo.
           onChain: await (async()=>{ try{
-            const oc = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir);
+            const oc = await fetchOnChainPressureCached(data15.contract, data15.network, thesis.dir);
             return oc ? { presion:oc.presion, direccion:oc.direccion, fuerza:oc.fuerza, acompana:oc.acompana } : null;
           }catch(e){ return null; } })(),
           apalancamiento: await (async()=>{ try{
@@ -2026,7 +2026,7 @@ async function confirmTheses(state, capitalFlow){
           }catch(e){ return null; } })(),
           // Wallet Intelligence: evidencia para medir después si predice algo
           wallets: await (async()=>{ try{
-            const tr = await fetchTransferenciasToken(data15.contract, data15.network, 24);
+            const tr = await fetchTransferenciasTokenCached(data15.contract, data15.network, 24);
             if(!tr?.length) return null;
             const a = analizarTransferencias(tr.map(t=>({...t, valueUsd:t.cantidad*(data15.price||0)})), data15.network, { minUsd:5000 });
             const ev = construirEvidenciaOnChain(a, thesis.dir);
@@ -2157,7 +2157,7 @@ async function confirmTheses(state, capitalFlow){
 
         const wallets = await (async()=>{
           try{
-            const transfers = await fetchTransferenciasToken(contratoFinal, redFinal, 24);
+            const transfers = await fetchTransferenciasTokenCached(contratoFinal, redFinal, 24);
             if(!transfers?.length){
               console.log(`  🐋 ${thesis.symbol}: Alchemy respondió pero no hubo transferencias en 24h.`);
               return null;
@@ -2184,7 +2184,7 @@ async function confirmTheses(state, capitalFlow){
         }catch(e){ /* si falla, el mensaje sale sin esta sección */ }
 
         // Presión on-chain: qué está pasando en los pools de DEX de verdad
-        const onchain = await fetchOnChainPressure(contratoFinal, redFinal, thesis.dir).catch(()=>null);
+        const onchain = await fetchOnChainPressureCached(contratoFinal, redFinal, thesis.dir).catch(()=>null);
         if(onchain){
           const icono = onchain.acompana === 'acompaña' ? '🟢' : onchain.acompana === 'contradice' ? '🔴' : '⚪';
           const detalles = onchain.señales.filter(s=>s.alerta || s.sesgo!=='neutro')
