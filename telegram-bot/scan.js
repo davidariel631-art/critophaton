@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2135,9 +2135,19 @@ async function confirmTheses(state, capitalFlow){
         // Mira las transferencias individuales del token: quién manda a dónde, si es un depósito
         // real a un exchange o plata moviéndose dentro del mismo exchange (que no cuenta).
         // Solo funciona si hay clave de Alchemy configurada; si no, esta parte se saltea sola.
+        // El contrato casi nunca viene con los datos: solo GeckoTerminal lo devuelve, y esa es
+        // la última fuente que se prueba. Se busca aparte para que las wallets y la actividad
+        // DEX funcionen aunque las velas vengan de Binance o Bitunix.
+        let contratoInfo = null;
+        if(!data15.contract){
+          contratoInfo = await buscarContratoToken(thesis.symbol).catch(()=>null);
+        }
+        const contratoFinal = data15.contract || contratoInfo?.contrato || null;
+        const redFinal = data15.network || contratoInfo?.red || null;
+
         const wallets = await (async()=>{
           try{
-            const transfers = await fetchTransferenciasToken(data15.contract, data15.network, 24);
+            const transfers = await fetchTransferenciasToken(contratoFinal, redFinal, 24);
             if(!transfers?.length) return null;
             // Las cantidades vienen en tokens: se pasan a dólares con el precio actual
             const conUsd = transfers.map(t => ({ ...t, valueUsd: t.cantidad * (data15.price||0) }));
@@ -2160,7 +2170,7 @@ async function confirmTheses(state, capitalFlow){
         }catch(e){ /* si falla, el mensaje sale sin esta sección */ }
 
         // Presión on-chain: qué está pasando en los pools de DEX de verdad
-        const onchain = await fetchOnChainPressure(data15.contract, data15.network, thesis.dir).catch(()=>null);
+        const onchain = await fetchOnChainPressure(contratoFinal, redFinal, thesis.dir).catch(()=>null);
         if(onchain){
           const icono = onchain.acompana === 'acompaña' ? '🟢' : onchain.acompana === 'contradice' ? '🔴' : '⚪';
           const detalles = onchain.señales.filter(s=>s.alerta || s.sesgo!=='neutro')
