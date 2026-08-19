@@ -2797,9 +2797,31 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             <div><div style="font-size:10px;color:var(--sub);">VENTA ±2%</div><div style="font-size:15px;font-weight:800;color:var(--rose);">$${(libro.usdVenta/1000).toFixed(0)}K</div></div>
             <div><div style="font-size:10px;color:var(--sub);">SPREAD</div><div style="font-size:15px;font-weight:800;">${libro.spreadPct}%</div></div>
           </div>`;
+          // ═══ MAPA DE NIVELES ═══
+          // Saber que "pesa del lado comprador" no sirve para operar: hace falta ver EN QUÉ
+          // PRECIOS está la concentración. Cada barra muestra cuánto dinero hay en ese nivel.
+          if(libro.niveles?.length){
+            const maxUsd = Math.max(...libro.niveles.map(n => n.usd));
+            cuerpo += `<div style="margin-top:11px;">
+              <div style="font-size:10px;color:var(--sub);letter-spacing:.5px;margin-bottom:6px;">DÓNDE ESTÁN LAS ÓRDENES</div>`;
+            for(const n of libro.niveles.slice(0, 8)){
+              const ancho = Math.max(4, Math.round(n.usd / maxUsd * 100));
+              const col = n.lado === 'compra' ? 'var(--teal)' : 'var(--rose)';
+              const signo = n.distPct >= 0 ? '↑' : '↓';
+              cuerpo += `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:11px;">
+                <span style="width:92px;color:${col};font-family:var(--display);font-weight:700;">$${fmt(n.precio)}</span>
+                <span style="width:46px;color:var(--sub);">${signo}${Math.abs(n.distPct)}%</span>
+                <span style="flex:1;background:rgba(255,255,255,.05);border-radius:3px;height:11px;position:relative;">
+                  <span style="position:absolute;left:0;top:0;bottom:0;width:${ancho}%;background:${col};opacity:.55;border-radius:3px;"></span>
+                </span>
+                <span style="width:56px;text-align:right;color:var(--sub);">$${(n.usd/1000).toFixed(0)}K</span>
+              </div>`;
+            }
+            cuerpo += `</div>`;
+          }
           if(libro.muros?.length){
             cuerpo += `<div style="margin-top:9px;font-size:11.5px;">` + libro.muros.map(m =>
-              `🧱 Muro de ${m.lado} en <b>$${m.precio}</b> a ${m.distPct.toFixed(2)}% — $${(m.usd/1000).toFixed(0)}K`).join('<br>') + `</div>`;
+              `🧱 Muro de ${m.lado} en <b>$${fmt(m.precio)}</b> a ${m.distPct.toFixed(2)}% — $${(m.usd/1000).toFixed(0)}K`).join('<br>') + `</div>`;
           }
           if(libro.alertaSpread) cuerpo += `<div style="margin-top:7px;font-size:11px;color:var(--amber);">⚠️ ${libro.alertaSpread}</div>`;
         }
