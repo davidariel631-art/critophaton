@@ -4269,14 +4269,14 @@ async function loadTheHaton(){
       <summary style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;list-style:none;">
         <div>
           <div>${t.symbol}${t.tag||''}</div>
-          <div style="font-size:10px;color:var(--sub);margin-top:2px;">Entrada $${t.entry?.toFixed?.(6)}${t.partialTaken?' · 60% ya tomado':''}</div>
+          <div style="font-size:10px;color:var(--sub);margin-top:2px;">Entrada $${fmt(t.entry)}${t.partialTaken?' · 60% ya tomado':''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="badge ${t.dir==='LONG'?'badge-long':'badge-short'}">${t.dir}${t.partialTaken?' · BE':''}</span>
           <span style="color:var(--sub);font-size:10px;">▾</span>
         </div>
       </summary>
-      <div class="subrow" style="margin-top:6px;">Entrada $${t.entry?.toFixed?.(6)} · Stop $${t.stop?.toFixed?.(6)} · TP1 $${t.tp1?.toFixed?.(6)??'—'}${t.tp2!=null?` · TP2 $${t.tp2.toFixed(6)}`:''}${t.partialTaken?' — el 60% se tomó en TP1, el 40% restante corre con el stop en el punto de entrada':''}</div>
+      <div class="subrow" style="margin-top:6px;">Entrada $${fmt(t.entry)} · Stop $${fmt(t.stop)} · TP1 $${fmt(t.tp1)}${t.tp2!=null?` · TP2 $${fmt(t.tp2)}`:''}${t.partialTaken?' — el 60% se tomó en TP1, el 40% restante corre con el stop en el punto de entrada':''}</div>
       ${journalHtml(t)}
     </details>`).join('') : 'Ninguna en este momento.';
 
