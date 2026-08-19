@@ -1505,8 +1505,8 @@ function detectTrianguloCompresion(candles, lookback=50){
     descripcion: tipo==='simétrico'
       ? `triángulo simétrico: los máximos vienen bajando y los mínimos subiendo, el rango se comprimió un ${compresionPct.toFixed(0)}% — se está acumulando energía, pero todavía no define para qué lado rompe`
       : tipo==='ascendente'
-      ? `triángulo ascendente: el techo se mantiene plano (~$${maxUlt.valor.toFixed(6)}) mientras los mínimos suben — presión compradora empujando contra una resistencia fija`
-      : `triángulo descendente: el piso se mantiene plano (~$${minUlt.valor.toFixed(6)}) mientras los máximos bajan — presión vendedora empujando contra un soporte fijo`
+      ? `triángulo ascendente: el techo se mantiene plano (~$${fmtPrecio(maxUlt.valor)}) mientras los mínimos suben — presión compradora empujando contra una resistencia fija`
+      : `triángulo descendente: el piso se mantiene plano (~$${fmtPrecio(minUlt.valor)}) mientras los máximos bajan — presión vendedora empujando contra un soporte fijo`
   };
 }
 
@@ -1574,8 +1574,8 @@ function analizarRupturaCompresion(candles, triangulo){
     nivelRupturaArriba: triangulo.techo,
     nivelRupturaAbajo: triangulo.piso,
     resumen: sesgo==='indefinido' || sesgo==='parejo'
-      ? `las señales están parejas — no hay una inclinación clara hacia ningún lado todavía. Conviene esperar a que rompa de verdad ${triangulo.techo?`$${triangulo.techo.toFixed(6)}`:'el techo'} o ${triangulo.piso?`$${triangulo.piso.toFixed(6)}`:'el piso'} antes de tomar posición.`
-      : `las señales se inclinan hacia una ruptura ${sesgo} (${confianza}% de las señales apuntan ahí): ${señales.join('; ')}. El nivel a vigilar es ${sesgo==='arriba'?`$${triangulo.techo.toFixed(6)}`:`$${triangulo.piso.toFixed(6)}`} — recién con una ruptura real de ese nivel se confirmaría.`
+      ? `las señales están parejas — no hay una inclinación clara hacia ningún lado todavía. Conviene esperar a que rompa de verdad ${triangulo.techo?`$${fmtPrecio(triangulo.techo)}`:'el techo'} o ${triangulo.piso?`$${fmtPrecio(triangulo.piso)}`:'el piso'} antes de tomar posición.`
+      : `las señales se inclinan hacia una ruptura ${sesgo} (${confianza}% de las señales apuntan ahí): ${señales.join('; ')}. El nivel a vigilar es ${sesgo==='arriba'?`$${fmtPrecio(triangulo.techo)}`:`$${fmtPrecio(triangulo.piso)}`} — recién con una ruptura real de ese nivel se confirmaría.`
   };
 }
 
@@ -2885,7 +2885,7 @@ function computeScore(data, macro, newsItems, sharedMemory, marketContext, btcRe
     const stdevBand = vwapData.upper1 - vwapData.vwap;
     vwapSignal = stdevBand>0 ? Math.max(-1, Math.min(1, (price-vwapData.vwap)/(stdevBand*1.5))) : 0;
     const zona = price>vwapData.upper2 ? 'muy por encima de +2 desviaciones (extendido)' : price>vwapData.upper1 ? 'por encima de +1 desviación' : price>vwapData.vwap ? 'por encima del VWAP' : price>vwapData.lower1 ? 'por debajo del VWAP' : price>vwapData.lower2 ? 'por debajo de -1 desviación' : 'muy por debajo de -2 desviaciones (extendido)';
-    vwapNote = `Precio $${price.toFixed(6)} está ${zona} ($${vwapData.vwap.toFixed(6)}) — nivel real donde ejecutan los grandes jugadores.`;
+    vwapNote = `Precio $${fmtPrecio(price)} está ${zona} ($${fmtPrecio(vwapData.vwap)}) — nivel real donde ejecutan los grandes jugadores.`;
   }
   committee.push({name:'📊 Dios VWAP', signal:vwapSignal, vote:vote(vwapSignal), note:vwapNote});
 
