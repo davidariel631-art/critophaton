@@ -3364,7 +3364,11 @@ async function fetchRelevantNews(coinName){
 }
 
 
-function fmt(n){ if(n==null||isNaN(n)) return '—'; if(n>=1000) return n.toLocaleString('en-US',{maximumFractionDigits:2}); if(n>=1) return n.toFixed(4); return n.toPrecision(4); }
+// Delega en fmtPrecio, que elige los decimales según el tamaño del número.
+// Antes usaba toPrecision(4): con 4 dígitos significativos, 0.058325 se mostraba como
+// "0.05832" y 0.0583251 como "0.05833" — redondeaba justo donde más importa el valor exacto,
+// que es en los niveles de liquidez de monedas de precio chico.
+function fmt(n){ return fmtPrecio(n); }
 function fmtPct(n){ return (n>=0?'+':'')+n.toFixed(1)+'%'; }
 
 // ---- Memoria estadística por "Dios": qué especialista acertó más históricamente ----
@@ -4573,17 +4577,25 @@ export function fmtPrecio(v, opciones = {}){
   const abs = Math.abs(n);
   if(abs === 0) return '0';
 
+  // ═══ NO REDONDEAR: MOSTRAR EL VALOR EXACTO ═══
+  // La idea es la de TradingView: el número que se ve es el número que es. En un nivel de
+  // liquidez el valor exacto ES el dato — es dónde va la orden. Redondear 0.058325 a 0.05833
+  // cambia el nivel.
+  // Se toman los decimales que el número REALMENTE tiene, con un techo por si viene con
+  // basura de coma flotante (0.1+0.2 = 0.30000000000000004).
+  const texto = String(n);
+  const decimalesReales = texto.includes('e')
+    ? 12                                        // notación científica: se expande abajo
+    : (texto.split('.')[1] || '').length;
+
   let decimales;
-  if(abs >= 1000) decimales = 2;        // 63.310,34
-  else if(abs >= 100) decimales = 2;    // 142,50
-  else if(abs >= 1) decimales = 4;      // 3,2419
-  else if(abs >= 0.01) decimales = 5;   // 0,13630
-  else if(abs >= 0.0001) decimales = 7; // 0,0089350
+  if(abs >= 1000) decimales = Math.min(2, decimalesReales);
+  else if(abs >= 1) decimales = Math.min(6, decimalesReales);
+  else if(abs >= 0.0001) decimales = Math.min(10, decimalesReales);
   else {
-    // Para valores muy chicos se cuentan los ceros después de la coma y se agregan
-    // 4 dígitos significativos. Así 0.00000842 sale completo y no como 0.000008.
+    // Muy chico: se cuentan los ceros y se dejan los dígitos que haya de verdad
     const ceros = Math.floor(-Math.log10(abs));
-    decimales = Math.min(12, ceros + 4);
+    decimales = Math.min(18, Math.max(ceros + 4, decimalesReales));
   }
 
   const fijo = n.toFixed(decimales);
