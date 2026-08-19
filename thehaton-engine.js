@@ -5024,6 +5024,41 @@ async function _fetchLibroOrdenes(symbolRaw, fuente = 'Binance'){
     const muros = [...detectarMuros(bidsCerca, 'compra'), ...detectarMuros(asksCerca, 'venta')]
       .sort((a,b) => a.distPct - b.distPct);
 
+    // ═══ MAPA DE NIVELES ═══
+    // Saber que "el libro pesa del lado comprador" no alcanza: hace falta ver DÓNDE están
+    // esas órdenes. Se agrupa el libro en escalones de 0.25% alrededor del precio, para
+    // poder mostrar en qué niveles concretos está concentrado el dinero.
+    const escalon = 0.0025;
+    const agrupar = (ordenes, lado) => {
+      const cubos = new Map();
+      for(const [p, q] of ordenes){
+        const dist = (p - medio) / medio;
+        const cubo = Math.round(dist / escalon);
+        const usd = p * q;
+        const prev = cubos.get(cubo) || { usd:0, precioMin:p, precioMax:p, ordenes:0 };
+        cubos.set(cubo, {
+          usd: prev.usd + usd,
+          precioMin: Math.min(prev.precioMin, p),
+          precioMax: Math.max(prev.precioMax, p),
+          ordenes: prev.ordenes + 1,
+        });
+      }
+      return [...cubos.entries()].map(([cubo, v]) => ({
+        lado,
+        distPct: +(cubo * escalon * 100).toFixed(2),
+        precio: (v.precioMin + v.precioMax) / 2,
+        precioDesde: v.precioMin, precioHasta: v.precioMax,
+        usd: Math.round(v.usd), ordenes: v.ordenes,
+      })).filter(x => x.usd > 0);
+    };
+
+    const nivelesCompra = agrupar(bidsCerca, 'compra').sort((a,b) => b.usd - a.usd);
+    const nivelesVenta = agrupar(asksCerca, 'venta').sort((a,b) => b.usd - a.usd);
+
+    // Los cinco escalones con más dinero de cada lado: son los que de verdad importan
+    const concentracion = [...nivelesCompra.slice(0,5), ...nivelesVenta.slice(0,5)]
+      .sort((a,b) => Math.abs(a.distPct) - Math.abs(b.distPct));
+
     return {
       fuente, precioMedio: medio,
       spreadPct: +spreadPct.toFixed(4),
@@ -5031,6 +5066,13 @@ async function _fetchLibroOrdenes(symbolRaw, fuente = 'Binance'){
       desbalance: +desbalance.toFixed(3),
       sesgo: desbalance > 0.2 ? 'COMPRADOR' : desbalance < -0.2 ? 'VENDEDOR' : 'EQUILIBRADO',
       muros: muros.map(m => ({ ...m, precio:+m.precio.toFixed(8), usd:Math.round(m.usd), distPct:+m.distPct.toFixed(2) })),
+      // El mapa completo: dónde está concentrado el dinero, no solo cuánto hay
+      niveles: concentracion.map(n => ({
+        lado: n.lado, precio: n.precio, distPct: n.distPct, usd: n.usd, ordenes: n.ordenes,
+      })),
+      // Los dos niveles más gruesos de cada lado, que son los que frenan el precio
+      soporteMasFuerte: nivelesCompra[0] || null,
+      resistenciaMasFuerte: nivelesVenta[0] || null,
       // Un spread ancho avisa de un problema práctico: la orden se ejecuta peor de lo esperado
       alertaSpread: spreadPct > 0.5 ? `Spread de ${spreadPct.toFixed(2)}%: el libro está fino, la orden se puede ejecutar bastante peor que el precio que ves.` : null,
       resumen: (() => {
@@ -5040,8 +5082,12 @@ async function _fetchLibroOrdenes(symbolRaw, fuente = 'Binance'){
           : desbalance < -0.2
           ? `Hay $${(usdVenta/1000).toFixed(0)}K de órdenes de venta contra $${(usdCompra/1000).toFixed(0)}K de compra cerca del precio: el libro pesa del lado vendedor.`
           : `Las órdenes de compra y venta cerca del precio están parejas.`);
+        // DÓNDE está el dinero, no solo cuánto: es lo que hace falta para operar
+        const sop = nivelesCompra[0], res = nivelesVenta[0];
+        if(sop) p.push(`La mayor concentración de compras está en $${fmtPrecio(sop.precio)} (${Math.abs(sop.distPct)}% por debajo) con $${(sop.usd/1000).toFixed(0)}K en ${sop.ordenes} órdenes: ahí hay soporte real.`);
+        if(res) p.push(`La mayor concentración de ventas está en $${fmtPrecio(res.precio)} (${res.distPct}% por encima) con $${(res.usd/1000).toFixed(0)}K: ahí el precio puede frenar.`);
         const primero = muros[0];
-        if(primero) p.push(`El muro más cercano es de ${primero.lado} en $${primero.precio}, a ${primero.distPct.toFixed(2)}%, con $${(primero.usd/1000).toFixed(0)}K: ahí el precio puede frenar.`);
+        if(primero) p.push(`El muro individual más cercano es de ${primero.lado} en $${fmtPrecio(primero.precio)}, a ${primero.distPct.toFixed(2)}%, con $${(primero.usd/1000).toFixed(0)}K.`);
         return p.join(' ');
       })(),
       aclaracion: 'El libro es una foto del momento: las órdenes se pueden retirar en cualquier instante. Sirve para ver dónde hay peso ahora, no para dar por hecho que va a seguir ahí.',
