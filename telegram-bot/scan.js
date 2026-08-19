@@ -219,8 +219,17 @@ async function runMarketPulse(state, capitalFlow){
           if(libro){
             const ic = libro.sesgo==='COMPRADOR'?'🟢':libro.sesgo==='VENDEDOR'?'🔴':'⚪';
             p.push(`${ic} Órdenes puestas: $${(libro.usdCompra/1e6).toFixed(1)}M de compra contra $${(libro.usdVenta/1e6).toFixed(1)}M de venta (±2% del precio).`);
+            // Los niveles concretos donde está el dinero: sin esto solo se sabía de qué lado
+            // pesaba el libro, no en qué precios podía frenar el movimiento.
+            if(libro.niveles?.length){
+              for(const n of libro.niveles.slice(0, 3)){
+                const ic2 = n.lado === 'compra' ? '🟢' : '🔴';
+                const signo = n.distPct >= 0 ? '↑' : '↓';
+                p.push(`   ${ic2} $${fmtPrecio(n.precio)} ${signo}${Math.abs(n.distPct)}% — $${(n.usd/1e6).toFixed(1)}M`);
+              }
+            }
             const muro = libro.muros[0];
-            if(muro) p.push(`   🧱 Muro de ${muro.lado} en $${Math.round(muro.precio).toLocaleString()} a ${muro.distPct.toFixed(2)}%: ahí puede frenar.`);
+            if(muro) p.push(`   🧱 Muro de ${muro.lado} en $${fmtPrecio(muro.precio)} a ${muro.distPct.toFixed(2)}%: ahí puede frenar.`);
           }
           return p.join('\n') + '\n\n';
         }catch(e){ return ''; }
@@ -564,19 +573,51 @@ async function enviarUno(text, sinHtml = false){
 // avisos que se generan en cada corrida mientras la situación no cambia.
 // Se guarda una huella de cada mensaje enviado; si el mismo texto vuelve a salir dentro de la
 // ventana, no se manda.
-const _huellasEnviadas = new Map();
+// LAS HUELLAS VAN EN EL ESTADO, NO EN MEMORIA.
+// Este era el error: `new Map()` se borra cuando termina la corrida. El bot arranca cada
+// 30 minutos desde cero, así que el filtro solo evitaba repetidos DENTRO de una corrida —
+// y el problema era justamente entre corridas: el mismo mensaje 20 veces en 10 horas.
+// Guardándolas en state.json (que se commitea al repo) sí persisten.
+let _huellasEnviadas = new Map();
 const VENTANA_ANTIREPETIDO = 6 * 3600 * 1000;   // 6 horas
 
+function cargarHuellas(state){
+  _huellasEnviadas = new Map(Object.entries(state.huellasMensajes || {}));
+  // Se limpian las vencidas al cargar, para que el estado no crezca
+  const corte = Date.now() - VENTANA_ANTIREPETIDO;
+  for(const [k, v] of _huellasEnviadas) if(v < corte) _huellasEnviadas.delete(k);
+}
+function guardarHuellas(state){
+  state.huellasMensajes = Object.fromEntries(_huellasEnviadas);
+}
+
 function huellaDe(texto){
-  // Se ignoran los números que cambian solo por el paso del tiempo (precios, horas, P&L),
-  // para que "sigue esperando, precio 0.0089" y "sigue esperando, precio 0.0091" cuenten
-  // como el mismo mensaje y no llegue uno cada media hora.
-  const limpio = String(texto)
-    .replace(/\$?\d[\d.,]*/g, '#')          // cualquier número
+  // ═══ CÓMO SE ARMA LA HUELLA ═══
+  // Se ignoran los números que cambian solos (precios, horas, P&L), para que
+  // "esperando, precio 0.0089" y "esperando, precio 0.0091" cuenten como el mismo aviso.
+  //
+  // PERO el símbolo de la moneda SE CONSERVA. Sin eso, "esperando: Fear & Greed adverso"
+  // para JUP y para FOGO daban la misma huella y el segundo no se enviaba nunca — un aviso
+  // legítimo perdido. Con el símbolo adentro, cada moneda tiene su propia huella.
+  const t = String(texto);
+
+  // Los símbolos aparecen como $WIF, <b>WIF</b> o "WIF (cap chico)". Se extraen todos
+  // los que estén en mayúsculas de 2 a 12 caracteres, que es el formato de los tickers.
+  const simbolos = [...new Set(
+    (t.match(/\$([A-Z0-9]{2,12})\b/g) || []).concat(t.match(/\b([A-Z0-9]{2,12})(?=\s*\((?:cap chico|custom)\))/g) || [])
+  )].join('|');
+
+  const limpio = t
+    .replace(/<[^>]+>/g, '')                 // etiquetas HTML
+    .replace(/\$?\d[\d.,]*%?/g, '#')         // cualquier número
     .replace(/\s+/g, ' ')
-    .slice(0, 400);
+    .trim()
+    .slice(0, 500);
+
+  // La huella junta el símbolo con el texto sin números
+  const base = `${simbolos}::${limpio}`;
   let h = 0;
-  for(let i = 0; i < limpio.length; i++){ h = ((h << 5) - h + limpio.charCodeAt(i)) | 0; }
+  for(let i = 0; i < base.length; i++){ h = ((h << 5) - h + base.charCodeAt(i)) | 0; }
   return String(h);
 }
 
@@ -849,6 +890,9 @@ function loadState(){
 }
 function saveState(state){
   fs.mkdirSync('telegram-bot', {recursive:true});
+  // Las huellas se guardan para que la próxima corrida sepa qué ya se envió
+  guardarHuellas(state);
+
   // ═══ ARCHIVO PERMANENTE POR MES ═══
   // Nada se borra nunca. Pero tampoco se guarda todo en un solo archivo, porque state.json se lee
   // y se reescribe COMPLETO en cada corrida (cada 30 min). Con 5 años de historia adentro, cada
@@ -2981,6 +3025,9 @@ async function getMidCapCandidates(state){
 async function main(){
   if(!BOT_TOKEN || !CHAT_ID){ console.error('Faltan TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID.'); process.exit(1); }
   const state = loadState();
+  // Se cargan las huellas de mensajes ya enviados en corridas anteriores: sin esto el filtro
+  // arranca vacío cada 30 minutos y el mismo aviso se manda una y otra vez.
+  cargarHuellas(state);
 
   console.log('--- Fase 0: chequeando flujo de capital global (DeFiLlama) y referencia de BTC (4h, una sola vez) ---');
   const capitalFlow = await fetchCapitalFlowContext();
