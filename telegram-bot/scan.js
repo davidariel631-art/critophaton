@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -354,8 +354,8 @@ function lecturaDeLiquidez(candles, estructura, dirTesis, candles4h){
     // 1 y 2: liquidez más cercana arriba y abajo, con su fuerza
     const arriba = liq?.cercanaArriba || liq?.lejanaArriba;
     const abajo  = liq?.cercanaAbajo  || liq?.lejanaAbajo;
-    if(arriba) lineas.push(`• Más cercana arriba: <code>$${arriba.precio.toFixed(6)}</code> (${arriba.distPct.toFixed(1)}%) — ${fuerzaTxt(arriba.toques)} (${arriba.toques} toques)${arriba.consumida?' · ya barrida':''}`);
-    if(abajo)  lineas.push(`• Más cercana abajo: <code>$${abajo.precio.toFixed(6)}</code> (${abajo.distPct.toFixed(1)}%) — ${fuerzaTxt(abajo.toques)} (${abajo.toques} toques)${abajo.consumida?' · ya barrida':''}`);
+    if(arriba) lineas.push(`• Más cercana arriba: <code>$${fmtPrecio(arriba.precio)}</code> (${arriba.distPct.toFixed(1)}%) — ${fuerzaTxt(arriba.toques)} (${arriba.toques} toques)${arriba.consumida?' · ya barrida':''}`);
+    if(abajo)  lineas.push(`• Más cercana abajo: <code>$${fmtPrecio(abajo.precio)}</code> (${abajo.distPct.toFixed(1)}%) — ${fuerzaTxt(abajo.toques)} (${abajo.toques} toques)${abajo.consumida?' · ya barrida':''}`);
 
     // 3: cuál es la más fuerte
     let ladoFuerte = null;
@@ -365,7 +365,7 @@ function lecturaDeLiquidez(candles, estructura, dirTesis, candles4h){
     } else if(arriba){ ladoFuerte='arriba'; lineas.push('• Liquidez más fuerte: <b>arriba</b> (abajo no hay nivel claro)'); }
     else if(abajo){ ladoFuerte='abajo'; lineas.push('• Liquidez más fuerte: <b>abajo</b> (arriba no hay nivel claro)'); }
 
-    if(perfil?.poc) lineas.push(`• POC (mayor volumen): <code>$${perfil.poc.toFixed(6)}</code>`);
+    if(perfil?.poc) lineas.push(`• POC (mayor volumen): <code>$${fmtPrecio(perfil.poc)}</code>`);
 
     // ═══ LIQUIDEZ DEL MARCO MAYOR ═══
     // Los niveles de 4h pesan más: llevan semanas acumulando órdenes. Cuando uno de 15m
@@ -376,8 +376,8 @@ function lecturaDeLiquidez(candles, estructura, dirTesis, candles4h){
         liq4h = detectLiquidezPorHorizonte(candles4h);
         const a4 = liq4h?.cercanaArriba || liq4h?.lejanaArriba;
         const b4 = liq4h?.cercanaAbajo || liq4h?.lejanaAbajo;
-        if(a4) lineas.push(`• <b>4h</b> arriba: <code>$${a4.precio.toFixed(6)}</code> (${a4.distPct.toFixed(1)}%) — ${fuerzaTxt(a4.toques)}`);
-        if(b4) lineas.push(`• <b>4h</b> abajo: <code>$${b4.precio.toFixed(6)}</code> (${b4.distPct.toFixed(1)}%) — ${fuerzaTxt(b4.toques)}`);
+        if(a4) lineas.push(`• <b>4h</b> arriba: <code>$${fmtPrecio(a4.precio)}</code> (${a4.distPct.toFixed(1)}%) — ${fuerzaTxt(a4.toques)}`);
+        if(b4) lineas.push(`• <b>4h</b> abajo: <code>$${fmtPrecio(b4.precio)}</code> (${b4.distPct.toFixed(1)}%) — ${fuerzaTxt(b4.toques)}`);
 
         // ¿Coincide algún nivel de 15m con uno de 4h? Ese es el nivel que hay que mirar.
         const coincide = (n1, n2) => n1 && n2 && Math.abs(n1.precio - n2.precio)/n2.precio < 0.012;
@@ -412,7 +412,7 @@ function lecturaDeLiquidez(candles, estructura, dirTesis, candles4h){
 
       // La confluencia entre marcos es la señal más fuerte de todas
       if(confluencia){
-        interpretacion.push(`🎯 El nivel de $${confluencia.precio.toFixed(6)} (${confluencia.dist.toFixed(1)}% ${confluencia.lado}) aparece en 15m Y en 4h: es el nivel más importante del gráfico ahora, porque lleva semanas acumulando órdenes.`);
+        interpretacion.push(`🎯 El nivel de $${fmtPrecio(confluencia.precio)} (${confluencia.dist.toFixed(1)}% ${confluencia.lado}) aparece en 15m Y en 4h: es el nivel más importante del gráfico ahora, porque lleva semanas acumulando órdenes.`);
       }
 
       // Advertencia si la liquidez fuerte va en contra de la tesis
@@ -558,7 +558,45 @@ async function enviarUno(text, sinHtml = false){
   return false;
 }
 
-async function sendTelegram(text){
+// ═══ EVITAR MENSAJES REPETIDOS ═══
+// GitHub Actions a veces ejecuta la misma corrida dos veces (reintentos, corridas superpuestas
+// cuando una tarda más de 30 min), y ahí llegaban mensajes duplicados. También pasaba con los
+// avisos que se generan en cada corrida mientras la situación no cambia.
+// Se guarda una huella de cada mensaje enviado; si el mismo texto vuelve a salir dentro de la
+// ventana, no se manda.
+const _huellasEnviadas = new Map();
+const VENTANA_ANTIREPETIDO = 6 * 3600 * 1000;   // 6 horas
+
+function huellaDe(texto){
+  // Se ignoran los números que cambian solo por el paso del tiempo (precios, horas, P&L),
+  // para que "sigue esperando, precio 0.0089" y "sigue esperando, precio 0.0091" cuenten
+  // como el mismo mensaje y no llegue uno cada media hora.
+  const limpio = String(texto)
+    .replace(/\$?\d[\d.,]*/g, '#')          // cualquier número
+    .replace(/\s+/g, ' ')
+    .slice(0, 400);
+  let h = 0;
+  for(let i = 0; i < limpio.length; i++){ h = ((h << 5) - h + limpio.charCodeAt(i)) | 0; }
+  return String(h);
+}
+
+async function sendTelegram(text, opciones = {}){
+  // Los mensajes importantes (señales, cierres) nunca se filtran: si se repiten, es porque
+  // pasó algo de verdad dos veces.
+  if(!opciones.permitirRepetido){
+    const h = huellaDe(text);
+    const previo = _huellasEnviadas.get(h);
+    if(previo && (Date.now() - previo) < VENTANA_ANTIREPETIDO){
+      console.log(`  🔇 Mensaje repetido omitido (ya se envió hace ${((Date.now()-previo)/60000).toFixed(0)} min).`);
+      return true;
+    }
+    _huellasEnviadas.set(h, Date.now());
+    // Limpieza para que el mapa no crezca sin control
+    if(_huellasEnviadas.size > 300){
+      const corte = Date.now() - VENTANA_ANTIREPETIDO;
+      for(const [k, v] of _huellasEnviadas) if(v < corte) _huellasEnviadas.delete(k);
+    }
+  }
   try{
     const partes = partirMensaje(String(text||''));
     if(partes.length > 1) console.log(`  ✂️ Mensaje de ${text.length} caracteres partido en ${partes.length} partes.`);
@@ -1064,7 +1102,7 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
         `Capital: ${acc.capital.toFixed(2)} USDT · pico: ${acc.peakCapital.toFixed(2)} USDT\n\n` +
         `El bot <b>sigue operando</b>. Todas las operaciones que se abran a partir de acá quedan marcadas como "abiertas en drawdown alto", para poder analizarlas por separado después.\n\n` +
         `Si la cuenta llega a cero, se archiva el historial y se abre una cuenta nueva de 100 USDT automáticamente.`
-      ));
+      ), { permitirRepetido: true });
       state.killSwitchNotifiedDate = todayKey2;
     }
     console.log(`⚠️ Drawdown alto (${(drawdownNow*100).toFixed(1)}%) — se sigue operando, todo queda registrado.`);
@@ -1211,15 +1249,15 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
 
         `${DIVR}\n⏳ <b>QUÉ TIENE QUE PASAR EN 15m</b>\n` +
         `Se confirma si:\n` +
-        `1. Rompe <code>$${nivelClave?.toFixed(6)}</code> (${nivelLabel} en 4h) con volumen\n` +
+        `1. Rompe <code>$${fmtPrecio(nivelClave)}</code> (${nivelLabel} en 4h) con volumen\n` +
         `2. Aparece un Bear/Bull Trap a favor\n` +
         `3. Confluencia fuerte (MACD + Estocástico + estructura)\n\n` +
 
         `${DIVR}\n📐 <b>SETUP ESTIMADO</b> <i>(puede cambiar)</i>\n` +
-        `Entrada: <code>$${result.metrics.price.toFixed(6)}</code>\n` +
-        `Stop: <code>$${theoSetup.stop.toFixed(6)}</code> (${pctR(theoSetup.stop).toFixed(2)}%)\n` +
-        `TP1: <code>$${theoSetup.t1.toFixed(6)}</code> (${pctR(theoSetup.t1)>=0?'+':''}${pctR(theoSetup.t1).toFixed(2)}%)\n` +
-        `TP2 (cierre): <code>$${theoSetup.t2.toFixed(6)}</code> (${pctR(theoSetup.t2)>=0?'+':''}${pctR(theoSetup.t2).toFixed(2)}%)\n\n` +
+        `Entrada: <code>$${fmtPrecio(result.metrics.price)}</code>\n` +
+        `Stop: <code>$${fmtPrecio(theoSetup.stop)}</code> (${pctR(theoSetup.stop).toFixed(2)}%)\n` +
+        `TP1: <code>$${fmtPrecio(theoSetup.t1)}</code> (${pctR(theoSetup.t1)>=0?'+':''}${pctR(theoSetup.t1).toFixed(2)}%)\n` +
+        `TP2 (cierre): <code>$${fmtPrecio(theoSetup.t2)}</code> (${pctR(theoSetup.t2)>=0?'+':''}${pctR(theoSetup.t2).toFixed(2)}%)\n\n` +
 
         (lecturaLiqRadar ? `${DIVR}\n${lecturaLiqRadar.texto}\n\n` : '') +
 
@@ -1363,8 +1401,8 @@ async function confirmTheses(state, capitalFlow){
             if((enDemanda || tocandoLiq) && estocBajoYFrenando){
               entradaEnZona = true;
               zonaNota = enDemanda
-                ? `el precio entró en una zona de demanda sin mitigar ($${enDemanda.piso.toFixed(6)}–$${enDemanda.techo.toFixed(6)}) con el Estocástico en ${kE.toFixed(0)} dejando de caer`
-                : `el precio está tocando liquidez sin barrer en $${liqAbajo.precio.toFixed(6)} (${liqAbajo.toques} toques) con el Estocástico en ${kE.toFixed(0)} frenando`;
+                ? `el precio entró en una zona de demanda sin mitigar ($${fmtPrecio(enDemanda.piso)}–$${fmtPrecio(enDemanda.techo)}) con el Estocástico en ${kE.toFixed(0)} dejando de caer`
+                : `el precio está tocando liquidez sin barrer en $${fmtPrecio(liqAbajo.precio)} (${liqAbajo.toques} toques) con el Estocástico en ${kE.toFixed(0)} frenando`;
             }
           } else {
             const enOferta = zonasE.oferta.find(z => priceNow >= z.piso*0.995 && priceNow <= z.techo*1.01);
@@ -1374,8 +1412,8 @@ async function confirmTheses(state, capitalFlow){
             if((enOferta || tocandoLiq) && estocAltoYFrenando){
               entradaEnZona = true;
               zonaNota = enOferta
-                ? `el precio entró en una zona de oferta sin mitigar ($${enOferta.piso.toFixed(6)}–$${enOferta.techo.toFixed(6)}) con el Estocástico en ${kE.toFixed(0)} dejando de subir`
-                : `el precio está tocando liquidez sin barrer en $${liqArriba.precio.toFixed(6)} (${liqArriba.toques} toques) con el Estocástico en ${kE.toFixed(0)} frenando`;
+                ? `el precio entró en una zona de oferta sin mitigar ($${fmtPrecio(enOferta.piso)}–$${fmtPrecio(enOferta.techo)}) con el Estocástico en ${kE.toFixed(0)} dejando de subir`
+                : `el precio está tocando liquidez sin barrer en $${fmtPrecio(liqArriba.precio)} (${liqArriba.toques} toques) con el Estocástico en ${kE.toFixed(0)} frenando`;
             }
           }
         }
@@ -1409,7 +1447,7 @@ async function confirmTheses(state, capitalFlow){
               const motivo = thesis.dir==='LONG'
                 ? (enDemanda ? 'sobre una zona de demanda sin mitigar' : `con la fuerza del volumen del lado comprador (${fuerza.probUp.toFixed(0)}%)`)
                 : (enOferta ? 'sobre una zona de oferta sin mitigar' : `con la fuerza del volumen del lado vendedor (${fuerza.probDown.toFixed(0)}%)`);
-              fibNota = `el precio retrocedió justo a la mitad del swing (zona Fibonacci 0,5–0,618, entre $${zonaBaja.toFixed(6)} y $${zonaAlta.toFixed(6)}) y llegó ahí ${motivo}`;
+              fibNota = `el precio retrocedió justo a la mitad del swing (zona Fibonacci 0,5–0,618, entre $${fmtPrecio(zonaBaja)} y $${fmtPrecio(zonaAlta)}) y llegó ahí ${motivo}`;
             }
           }
         }
@@ -1504,7 +1542,7 @@ async function confirmTheses(state, capitalFlow){
           const liqTarget = thesis.dir==='LONG' ? st15?.eqHighs : st15?.eqLows;
           const liqEnDireccion = liqTarget!=null && (thesis.dir==='LONG' ? liqTarget>priceNow : liqTarget<priceNow);
           liquidityMagnetConfirmacion = htfConEspacio && ltfExtremo && liqEnDireccion && alineado && !sweepEnContra;
-          htfNote = `1D RSI ${rsi1d?.toFixed(0)??'—'} (${htfConEspacio?'con espacio':'sin espacio'}), LTF RSI ${rsiLTF?.toFixed(0)??'—'} (${ltfExtremo?'pullback local':'sin extremo'}), liquidez objetivo ${liqEnDireccion?`detectada a favor (~$${liqTarget.toFixed(6)})`:'no detectada a favor'}.`;
+          htfNote = `1D RSI ${rsi1d?.toFixed(0)??'—'} (${htfConEspacio?'con espacio':'sin espacio'}), LTF RSI ${rsiLTF?.toFixed(0)??'—'} (${ltfExtremo?'pullback local':'sin extremo'}), liquidez objetivo ${liqEnDireccion?`detectada a favor (~$${fmtPrecio(liqTarget)})`:'no detectada a favor'}.`;
 
           // "¿Tiene tiempo/espacio real de subir (o bajar)?" — no alcanza con que el marco de entrada
           // (15m) se vea bien: si el Estocástico del marco MAYOR (4h/1D) ya está muy extendido, o el
@@ -1622,13 +1660,13 @@ async function confirmTheses(state, capitalFlow){
 
           // LONG después de una subida enorme = comprar el techo
           if(thesis.dir==='LONG' && subidaPct >= 60){
-            journal(thesis, `Confirmación descartada: el precio ya subió ${subidaPct.toFixed(0)}% desde el mínimo reciente ($${minVentana.toFixed(6)}). Comprar al final de un movimiento vertical es comprar el techo — lo que suele venir después es la corrección, no la continuación.`);
+            journal(thesis, `Confirmación descartada: el precio ya subió ${subidaPct.toFixed(0)}% desde el mínimo reciente ($${fmtPrecio(minVentana)}). Comprar al final de un movimiento vertical es comprar el techo — lo que suele venir después es la corrección, no la continuación.`);
             stillWatching.push(thesis);
             continue;
           }
           // SHORT después de una caída enorme = vender el piso
           if(thesis.dir==='SHORT' && bajadaPct >= 45){
-            journal(thesis, `Confirmación descartada: el precio ya cayó ${bajadaPct.toFixed(0)}% desde el máximo reciente ($${maxVentana.toFixed(6)}). Vender al final de una caída vertical es vender el piso — el riesgo de rebote es alto.`);
+            journal(thesis, `Confirmación descartada: el precio ya cayó ${bajadaPct.toFixed(0)}% desde el máximo reciente ($${fmtPrecio(maxVentana)}). Vender al final de una caída vertical es vender el piso — el riesgo de rebote es alto.`);
             stillWatching.push(thesis);
             continue;
           }
@@ -1772,7 +1810,7 @@ async function confirmTheses(state, capitalFlow){
           ? (setup.stop < entryPrice && setup.t1 > entryPrice && setup.t2 > setup.t1)
           : (setup.stop > entryPrice && setup.t1 < entryPrice && setup.t2 < setup.t1);
         if(!nivelesCoherentes){
-          journal(thesis, `Confirmación descartada: los niveles calculados no son coherentes con la dirección ${thesis.dir} (entrada $${entryPrice.toFixed(6)}, stop $${setup.stop.toFixed(6)}, TP1 $${setup.t1.toFixed(6)}). Probablemente el análisis de 15m cambió de dirección respecto a la tesis de 4h — se descarta en vez de abrir una operación con stop y objetivo invertidos.`);
+          journal(thesis, `Confirmación descartada: los niveles calculados no son coherentes con la dirección ${thesis.dir} (entrada $${fmtPrecio(entryPrice)}, stop $${fmtPrecio(setup.stop)}, TP1 $${fmtPrecio(setup.t1)}). Probablemente el análisis de 15m cambió de dirección respecto a la tesis de 4h — se descarta en vez de abrir una operación con stop y objetivo invertidos.`);
           stillWatching.push(thesis);
           continue;
         }
@@ -1833,7 +1871,7 @@ async function confirmTheses(state, capitalFlow){
               ? (objetivo.precio < setup.t2 && objetivo.precio > setup.t1)
               : (objetivo.precio > setup.t2 && objetivo.precio < setup.t1);
             if(masCercaQueTP2){
-              journal(thesis, `TP2 ajustado a $${objetivo.precio.toFixed(6)}: ahí hay liquidez acumulada (${objetivo.toques} toques previos), que es un objetivo real hacia donde el precio tiende a ir — más realista que el múltiplo de R calculado.`);
+              journal(thesis, `TP2 ajustado a $${fmtPrecio(objetivo.precio)}: ahí hay liquidez acumulada (${objetivo.toques} toques previos), que es un objetivo real hacia donde el precio tiende a ir — más realista que el múltiplo de R calculado.`);
               setup.t2 = objetivo.precio;
             }
           }
@@ -1850,7 +1888,7 @@ async function confirmTheses(state, capitalFlow){
         const domDiff = thesis.dir==='LONG' ? (liqProfilePre.domUpPct-liqProfilePre.domDownPct) : (liqProfilePre.domDownPct-liqProfilePre.domUpPct);
         const pocMuyCerca = nearestPOC && Math.abs(nearestPOC.price-entryPrice)/entryPrice < 0.02;
         if(pocMuyCerca && domDiff > 15){
-          journal(thesis, `Todavía esperando confirmación: hay una concentración fuerte de liquidez muy cerca (~$${nearestPOC.price.toFixed(6)}, ${thesis.dir==='LONG'?'Dom. Arriba':'Dom. Abajo'} ${(thesis.dir==='LONG'?liqProfilePre.domUpPct:liqProfilePre.domDownPct).toFixed(0)}%) — parece más una caza de liquidez que una entrada real, se espera a que la barra o se aleje.`);
+          journal(thesis, `Todavía esperando confirmación: hay una concentración fuerte de liquidez muy cerca (~$${fmtPrecio(nearestPOC.price)}, ${thesis.dir==='LONG'?'Dom. Arriba':'Dom. Abajo'} ${(thesis.dir==='LONG'?liqProfilePre.domUpPct:liqProfilePre.domDownPct).toFixed(0)}%) — parece más una caza de liquidez que una entrada real, se espera a que la barra o se aleje.`);
           stillWatching.push(thesis);
           continue;
         }
@@ -1871,10 +1909,10 @@ async function confirmTheses(state, capitalFlow){
             const tp1Ajustado = barrera * margen;
             const rrAjustado = Math.abs(tp1Ajustado-entryPrice)/distance;
             if(rrAjustado >= 1.0){
-              journal(thesis, `TP1 ajustado de $${setup.t1.toFixed(6)} a $${tp1Ajustado.toFixed(6)}: hay una barrera de liquidez en $${barrera.toFixed(6)} (${toquesBarrera} toques previos sin romper) en el camino. Es más realista tomar ganancia antes de ese nivel que esperar que lo atraviese.`);
+              journal(thesis, `TP1 ajustado de $${fmtPrecio(setup.t1)} a $${fmtPrecio(tp1Ajustado)}: hay una barrera de liquidez en $${fmtPrecio(barrera)} (${toquesBarrera} toques previos sin romper) en el camino. Es más realista tomar ganancia antes de ese nivel que esperar que lo atraviese.`);
               setup.t1 = tp1Ajustado;
             } else {
-              journal(thesis, `Confirmación descartada: el TP1 quedaría detrás de una barrera de liquidez ($${barrera.toFixed(6)}, ${toquesBarrera} toques) y ajustarlo antes de esa barrera daría un R:R de solo ${rrAjustado.toFixed(2)}:1. No vale la pena la operación.`);
+              journal(thesis, `Confirmación descartada: el TP1 quedaría detrás de una barrera de liquidez ($${fmtPrecio(barrera)}, ${toquesBarrera} toques) y ajustarlo antes de esa barrera daría un R:R de solo ${rrAjustado.toFixed(2)}:1. No vale la pena la operación.`);
               stillWatching.push(thesis);
               continue;
             }
@@ -2045,7 +2083,7 @@ async function confirmTheses(state, capitalFlow){
           }catch(e){ return null; } })(),
         };
         hito(thesis, '🟢 Confirmada', `por ${setupsActivos || 'confluencia'}`);
-        hito(thesis, '🚀 Entrada', `$${entryPrice.toFixed(6)}`);
+        hito(thesis, '🚀 Entrada', `$${fmtPrecio(entryPrice)}`);
         thesis.entry = entryPrice; thesis.stop = setup.stop; thesis.tp1 = setup.t1; thesis.tp2 = setup.t2; thesis.tp3 = setup.t3; thesis.units = units; thesis.originalUnits = units;
         thesis.riskPct = riskPct; thesis.confirmedAt = Date.now(); thesis.partialTaken = false;
         // ═══ ESTADO ORIGINAL — NUNCA CAMBIA ═══
@@ -2066,7 +2104,7 @@ async function confirmTheses(state, capitalFlow){
         thesis.horaConfirmacion = new Date(thesis.confirmedAt).getUTCHours();
         thesis.committeeSnapshot = result15.committee.map(c=>({name:c.name, vote:c.vote})); // para la memoria estadística por Dios
         const motivoConfirmacion = patronCompletoConfirmacion ? `Patrón completo ${thesis.dir==='LONG'?'Acumulación + Bear Trap':'Distribución + Bull Trap'} (rango testeado ${thesis.dir==='LONG'?result15.structure.accBearTrap.testPumpCount:result15.structure.distBullTrap.testDumpCount} veces antes de la barrida)` : bosAFavor ? 'BOS a favor detectado' : sfpConfirmacion ? (thesis.dir==='LONG' ? sfp.bullishNote : sfp.bearishNote) : bearTrapConfirmacion ? `${thesis.dir==='LONG'?'Bear Trap':'Bull Trap'} barrido y rechazado (liquidez tomada en contra del mercado, a favor de la tesis)` : ema50ShortConfirmacion ? `Precio cerca de la EMA50 en 4h (zona de rebote), en tendencia bajista, con el Estocástico en 15m cruzando hacia abajo desde sobrecompra — combo probado con backtest real (profit factor 1.0-2.33 en 3 períodos)` : liquidityMagnetConfirmacion ? `Imán de liquidez multi-timeframe (${htfNote})` : pullbackConfirmacion ? `Momentum Continuation: pullback a ${nearOB?'Order Block':nearEMA20?'EMA20':'EMA50'} dentro de una tendencia ya fuerte` : confluenceAFavor ? `Score de Confluencia (${thesis.dir==='LONG'?confluence.bullConfluence:confluence.bearConfluence}/5: MACD, Stochastic, velas fuertes, volumen, ADX)` : macdEarlyAFavor ? `MACD histograma achicándose (entrada temprana), confirmado con ADX ${confluence.adxVal?.toFixed(0)} (tendencia real) y Estocástico ${confluence.lastStoch?.toFixed(0)} alineado` : `la confianza del motor subió a ${result15.confidence}%`;
-        journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${entryPrice.toFixed(6)}, Stop: $${setup.stop.toFixed(6)}, TP1: $${setup.t1.toFixed(6)}, TP2: $${setup.t2.toFixed(6)}. ${reason}.`);
+        journal(thesis, `Entrada CONFIRMADA en 15m (${motivoConfirmacion}). Entrada: $${fmtPrecio(entryPrice)}, Stop: $${fmtPrecio(setup.stop)}, TP1: $${fmtPrecio(setup.t1)}, TP2: $${fmtPrecio(setup.t2)}. ${reason}.`);
         if(!acc.tradesToday) acc.tradesToday = {date: todayKey(), count:0};
         acc.tradesToday.count++;
 
@@ -2076,7 +2114,7 @@ async function confirmTheses(state, capitalFlow){
         // El texto tiene que coincidir con lo que hace el gestor: el stop se ejecuta cuando el
         // precio TOCA el nivel, no cuando la vela cierra. Antes decía "cierre de vela" y eso no
         // era lo que pasaba en la práctica.
-        const invalidacion = `El precio toca $${setup.stop.toFixed(6)} (el stop se ejecuta al tocar, como en el exchange).`;
+        const invalidacion = `El precio toca $${fmtPrecio(setup.stop)} (el stop se ejecuta al tocar, como en el exchange).`;
 
         // Datos reales adicionales para el relato numerado — solo lo que realmente se puede conseguir
         // gratis (estructura, OI, funding, flujo spot/futuros, ratio Long/Short de traders grandes).
@@ -2222,7 +2260,7 @@ async function confirmTheses(state, capitalFlow){
           const dominante = fuerzaVol.probUp >= fuerzaVol.probDown ? 'compradora' : 'vendedora';
           const pct = Math.max(fuerzaVol.probUp, fuerzaVol.probDown);
           const aFavor = (thesis.dir==='LONG' && fuerzaVol.probUp > fuerzaVol.probDown) || (thesis.dir==='SHORT' && fuerzaVol.probDown > fuerzaVol.probUp);
-          relato.push(`⚡ Índice de fuerza: el ${pct.toFixed(0)}% del volumen reciente es de presión ${dominante}${aFavor ? ', o sea a favor de esta operación' : ', que va en contra de esta operación'}. La línea central del rango está en $${fuerzaVol.centerPrice.toFixed(6)} — ahí es donde el precio suele reaccionar más seguido.`);
+          relato.push(`⚡ Índice de fuerza: el ${pct.toFixed(0)}% del volumen reciente es de presión ${dominante}${aFavor ? ', o sea a favor de esta operación' : ', que va en contra de esta operación'}. La línea central del rango está en $${fmtPrecio(fuerzaVol.centerPrice)} — ahí es donde el precio suele reaccionar más seguido.`);
         }
 
         // Modo reversión / lateral: explica por qué se opera contra la tendencia aparente.
@@ -2272,7 +2310,7 @@ async function confirmTheses(state, capitalFlow){
           const rol = estaArriba
             ? (esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como resistencia en el camino')
             : ' — el precio ya lo superó, así que ahora funciona como soporte por debajo';
-          liqPartes.push(`${estaArriba?'arriba':'abajo'}, a un ${distPct(st.eqHighs).toFixed(1)}% del precio actual (~$${st.eqHighs.toFixed(6)}), hay liquidez compradora acumulada — el precio ya tocó ese nivel ${st.eqHighsCount} veces sin romperlo del todo${rol}`);
+          liqPartes.push(`${estaArriba?'arriba':'abajo'}, a un ${distPct(st.eqHighs).toFixed(1)}% del precio actual (~$${fmtPrecio(st.eqHighs)}), hay liquidez compradora acumulada — el precio ya tocó ese nivel ${st.eqHighsCount} veces sin romperlo del todo${rol}`);
         }
         if(st.eqLows){
           const estaAbajo = st.eqLows < priceNow15;
@@ -2280,12 +2318,12 @@ async function confirmTheses(state, capitalFlow){
           const rol = estaAbajo
             ? (esObjetivo ? ', y es justo hacia donde apunta esta operación' : ', un nivel a tener en cuenta como soporte en el camino')
             : ' — el precio ya lo perforó, así que ahora funciona como resistencia por encima';
-          liqPartes.push(`${estaAbajo?'abajo':'arriba'}, a un ${distPct(st.eqLows).toFixed(1)}% del precio actual (~$${st.eqLows.toFixed(6)}), hay liquidez vendedora acumulada (${st.eqLowsCount} toques previos)${rol}`);
+          liqPartes.push(`${estaAbajo?'abajo':'arriba'}, a un ${distPct(st.eqLows).toFixed(1)}% del precio actual (~$${fmtPrecio(st.eqLows)}), hay liquidez vendedora acumulada (${st.eqLowsCount} toques previos)${rol}`);
         }
         if(liqPartes.length){
           relato.push(`En cuanto a liquidez: ${liqPartes.join('; y ')}. El mercado tiende a moverse hacia estas zonas antes de girar, porque ahí es donde se concentran los stops y las órdenes pendientes que el precio "atrae" como un imán.`);
         }
-        relato.push(`Mirando el perfil de volumen completo, la concentración general está ${liqProfile.domUpPct>liqProfile.domDownPct?'más arriba':'más abajo'} del precio actual (${liqProfile.domUpPct.toFixed(0)}% arriba / ${liqProfile.domDownPct.toFixed(0)}% abajo)${liqProfile.pocAbove?`, con el bloque de mayor volumen negociado cerca de $${liqProfile.pocAbove.price.toFixed(6)}`:''}${liqProfile.pocBelow?`${liqProfile.pocAbove?' y otro bloque grande':', con un bloque grande'} cerca de $${liqProfile.pocBelow.price.toFixed(6)}`:''} — son zonas donde ya se negoció mucho volumen antes, así que el precio suele reaccionar (rebotar o frenarse) al volver a pasar por ahí.`);
+        relato.push(`Mirando el perfil de volumen completo, la concentración general está ${liqProfile.domUpPct>liqProfile.domDownPct?'más arriba':'más abajo'} del precio actual (${liqProfile.domUpPct.toFixed(0)}% arriba / ${liqProfile.domDownPct.toFixed(0)}% abajo)${liqProfile.pocAbove?`, con el bloque de mayor volumen negociado cerca de $${fmtPrecio(liqProfile.pocAbove.price)}`:''}${liqProfile.pocBelow?`${liqProfile.pocAbove?' y otro bloque grande':', con un bloque grande'} cerca de $${fmtPrecio(liqProfile.pocBelow.price)}`:''} — son zonas donde ya se negoció mucho volumen antes, así que el precio suele reaccionar (rebotar o frenarse) al volver a pasar por ahí.`);
         if(oiTrendData?.trend){
           relato.push(oiTrendData.trend==='RISING'
             ? 'Mientras tanto, está entrando capital nuevo apalancado (el Open Interest viene subiendo) — hay convicción real detrás del movimiento, no es solo ruido'
@@ -2346,15 +2384,35 @@ async function confirmTheses(state, capitalFlow){
           ` · ${setupsActivos}</i>\n\n` +
 
           `${DIV}\n📌 <b>OPERACIÓN</b>\n` +
-          `Entrada: <code>$${entryPrice.toFixed(6)}</code>\n` +
-          `Stop: <code>$${setup.stop.toFixed(6)}</code> (${pct(setup.stop).toFixed(2)}%)\n` +
-          `TP1: <code>$${setup.t1.toFixed(6)}</code> (${pct(setup.t1)>=0?'+':''}${pct(setup.t1).toFixed(2)}%) · R:R ${rrTp1}\n` +
-          `TP2: <code>$${setup.t2.toFixed(6)}</code> (${pct(setup.t2)>=0?'+':''}${pct(setup.t2).toFixed(2)}%) · R:R ${rrTp2}\n` +
+          `Entrada: <code>$${fmtPrecio(entryPrice)}</code>\n` +
+          `Stop: <code>$${fmtPrecio(setup.stop)}</code> (${pct(setup.stop).toFixed(2)}%)\n` +
+          `TP1: <code>$${fmtPrecio(setup.t1)}</code> (${pct(setup.t1)>=0?'+':''}${pct(setup.t1).toFixed(2)}%) · R:R ${rrTp1}\n` +
+          `TP2: <code>$${fmtPrecio(setup.t2)}</code> (${pct(setup.t2)>=0?'+':''}${pct(setup.t2).toFixed(2)}%) · R:R ${rrTp2}\n` +
 
           `Riesgo: ${(riskPct*100).toFixed(1)}% del capital · Apalancamiento ${setup.leverage}\n` +
           `Gestión: 60% en TP1 (stop pasa al punto de entrada) + 40% hasta TP2\n\n` +
 
           // Todo el contexto de mercado en una sola sección, ya calculado arriba
+          // ═══ ESTADO DE LA CINTA ═══
+          // Equivale a la tabla informativa del indicador original: dice si la tendencia es
+          // limpia o débil. Y muestra los niveles por volatilidad al lado de los que usa el bot,
+          // para poder comparar después cuál habría rendido mejor.
+          (() => {
+            try{
+              const k = calidadTendenciaCinta(data15.candles);
+              if(!k) return '';
+              const ic = k.limpia ? (k.direccion === thesis.dir ? '🟢' : '🔴') : '⚪';
+              const donde = k.tocoLaCinta
+                ? `El precio volvió a la zona de las medias hace ${k.velasDesdeElToque} vela(s).`
+                : `El precio está a ${k.distanciaALaCinta}% de la cinta: no hubo retroceso.`;
+              const nv = nivelesCintaATR(data15.candles, thesis.dir);
+              const alt = nv
+                ? `\n<i>Con niveles por volatilidad (ATR): stop $${nv.stop.toPrecision(6)} (${nv.stopPct}%) · TP1 R:R ${nv.rrTp1} · TP2 R:R ${nv.rrTp2}</i>`
+                : '';
+              return `${DIV}\n${ic} <b>CINTA DE MEDIAS</b> — ${k.estado}\n${k.motivo}\n${donde}${alt}\n\n`;
+            }catch(e){ return ''; }
+          })() +
+
           (matrizGrandes && matrizGrandes.cuadrante !== 'SIN DEFINIR'
             ? `${DIV}\n${matrizGrandes.alineado===true?'🟢':matrizGrandes.alineado===false?'🔴':'⚪'} <b>${matrizGrandes.cuadrante}</b>\n${matrizGrandes.texto}\n${matrizGrandes.aviso?`⚠️ ${matrizGrandes.aviso}\n`:''}\n` : '') +
           (lecturaMercado ? `${DIV}\n${lecturaMercado.texto}\n\n` : '') +
@@ -2424,10 +2482,10 @@ async function confirmTheses(state, capitalFlow){
           `${DIV}\n❌ Invalidación: ${invalidacion}\n` +
           `💰 Capital: ${acc.capital.toFixed(2)} USDT (cuenta #${acc.id})\n\n` +
           `⚠️ Solo educativo. DYOR y gestioná tu riesgo. 🛡️`
-        ));
+        ), { permitirRepetido: true });
         sendPromises.push(sendPushToAll(
           `${thesis.dir==='LONG'?'🟢':'🔴'} Señal: ${thesis.symbol} ${thesis.dir}`,
-          `Entrada $${entryPrice.toFixed(6)} · Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`, null, 'senal', thesis.symbol));
+          `Entrada $${fmtPrecio(entryPrice)} · Score ${Math.max(result15.longScore,result15.shortScore).toFixed(1)}/10`, null, 'senal', thesis.symbol));
         stillWatching.push(thesis); // CRÍTICO: sin esto, la tesis recién confirmada se perdía al reemplazar acc.theses al final
       } else {
         journal(thesis, `Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando.`);
@@ -2617,7 +2675,7 @@ async function manageActiveTheses(state){
         journal(thesis, `Actualización día ${daysOpen}: ${veredicto} P&L flotante: ${pnlFloat>=0?'+':''}${pnlFloat.toFixed(2)} USDT.`);
         sendPromises.push(sendTelegram(
           `📅 <b>Actualización — ${thesis.symbol}${thesis.tag||''} ${thesis.dir} (día ${daysOpen})</b>\n\n` +
-          `${veredicto}\n\nP&L flotante: ${pnlFloat>=0?'+':''}${pnlFloat.toFixed(2)} USDT\nPrecio actual: $${price.toFixed(6)}`
+          `${veredicto}\n\nP&L flotante: ${pnlFloat>=0?'+':''}${pnlFloat.toFixed(2)} USDT\nPrecio actual: $${fmtPrecio(price)}`
         ));
         thesis.lastNarrationAt = Date.now();
       }catch(e){ console.error('Error en narración diaria de', thesis.symbol, e.message); }
@@ -2627,12 +2685,12 @@ async function manageActiveTheses(state){
     if(thesis.forceClose){
       const pnl = thesis.units * (price-thesis.entry) * (thesis.dir==='LONG'?1:-1);
       acc.capital = +(acc.capital+pnl).toFixed(4);
-      journal(thesis, `Cierre forzado por antigüedad (más de ${MAX_DAYS_OPEN_LIMIT} días abierta sin resolver). Cerrada al precio actual $${price.toFixed(6)} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT).`);
+      journal(thesis, `Cierre forzado por antigüedad (más de ${MAX_DAYS_OPEN_LIMIT} días abierta sin resolver). Cerrada al precio actual $${fmtPrecio(price)} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT).`);
       cerrarOperacion(acc, thesis, price, pnl, 'antigüedad', sendPromises);
       sendPromises.push(sendTelegram(
         `⏰ <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir} por antigüedad</b>\n` +
         `Llevaba abierta demasiado tiempo sin tocar TP ni Stop. Resultado: ${pnl>=0?'GANÓ':'PERDIÓ'} (${pnl>=0?'+':''}${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
-      ));
+      ), { permitirRepetido: true });
       continue;
     }
 
@@ -2666,7 +2724,7 @@ async function manageActiveTheses(state){
           ? (aud?.minDesdeEntrada != null ? aud.minDesdeEntrada <= thesis.stop : true)
           : (aud?.maxDesdeEntrada != null ? aud.maxDesdeEntrada >= thesis.stop : true);
         if(!cruzoDeVerdad){
-          journal(thesis, `⚠️ El rango dice que tocó el stop ($${thesis.stop.toFixed(6)}), pero el ${thesis.dir==='LONG'?'mínimo':'máximo'} medido desde la entrada es $${(thesis.dir==='LONG'?aud.minDesdeEntrada:aud.maxDesdeEntrada).toFixed(6)}, que no llega al nivel. No se cierra sin evidencia.`);
+          journal(thesis, `⚠️ El rango dice que tocó el stop ($${fmtPrecio(thesis.stop)}), pero el ${thesis.dir==='LONG'?'mínimo':'máximo'} medido desde la entrada es $${(thesis.dir==='LONG'?aud.minDesdeEntrada:aud.maxDesdeEntrada).toFixed(6)}, que no llega al nivel. No se cierra sin evidencia.`);
           hitSL = false;
         }
       }
@@ -2678,7 +2736,7 @@ async function manageActiveTheses(state){
       // Esto es lo que habría evitado el cierre falso de INX, donde el post-mortem decía
       // "retroceso máximo de 0R" y aun así se cerró por stop.
       if(hitSL && thesis.registro && thesis.registro.mae === 0 && thesis.registro.mfe > 0.2){
-        journal(thesis, `⚠️ Contradicción detectada: el rango de precios dice que tocó el stop ($${thesis.stop.toFixed(6)}), pero el seguimiento desde la entrada registró 0 de retroceso y ${thesis.registro.mfe}R a favor. No se cierra: se vuelve a verificar en la próxima corrida.`);
+        journal(thesis, `⚠️ Contradicción detectada: el rango de precios dice que tocó el stop ($${fmtPrecio(thesis.stop)}), pero el seguimiento desde la entrada registró 0 de retroceso y ${thesis.registro.mfe}R a favor. No se cierra: se vuelve a verificar en la próxima corrida.`);
         hitSL = false;
         thesis.contradiccionesStop = (thesis.contradiccionesStop||0) + 1;
         // Si se repite tres veces, es que el rango tiene razón y el MAE no se está actualizando
@@ -2712,15 +2770,15 @@ async function manageActiveTheses(state){
         thesis.auditoria = thesis.auditoria || {};
         thesis.auditoria.minDesdeBE = null;
         thesis.auditoria.maxDesdeBE = null;
-        journal(thesis, `TP1 alcanzado ($${thesis.tp1.toFixed(6)}). Se tomó el 60% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 40% restante sigue corriendo hacia TP2 ($${thesis.tp2.toFixed(6)}), con el stop ya en el punto de entrada.`);
+        journal(thesis, `TP1 alcanzado ($${fmtPrecio(thesis.tp1)}). Se tomó el 60% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 40% restante sigue corriendo hacia TP2 ($${fmtPrecio(thesis.tp2)}), con el stop ya en el punto de entrada.`);
         thesis.partialPnl = pnl;
         sendPromises.push(sendTelegram(
           (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
           `💰 <b>TheHaton tomó 60% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
-          `TP1 alcanzado: $${thesis.tp1.toFixed(6)} (+${pnl.toFixed(2)} USDT realizados)\n` +
-          `Stop movido a breakeven ($${thesis.entry.toFixed(6)}): el resto ya no puede terminar en pérdida.\n` +
+          `TP1 alcanzado: $${fmtPrecio(thesis.tp1)} (+${pnl.toFixed(2)} USDT realizados)\n` +
+          `Stop movido a breakeven ($${fmtPrecio(thesis.entry)}): el resto ya no puede terminar en pérdida.\n` +
           `El 40% restante sigue corriendo hacia TP2.\nCapital: ${acc.capital.toFixed(2)} USDT`
-        ));
+        ), { permitirRepetido: true });
         hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 60% y el stop pasó a breakeven');
         sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`, null, 'gestion', thesis.symbol));
         stillOpen.push(thesis);
@@ -2734,7 +2792,7 @@ async function manageActiveTheses(state){
           (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
           `🛑 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
           `PERDIÓ (${pnl.toFixed(2)} USDT)\nCapital actual: ${acc.capital.toFixed(2)} USDT`
-        ));
+        ), { permitirRepetido: true });
         sendPromises.push(sendPushToAll(`🛑 Stop tocado: ${thesis.symbol}`, `${pnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
       } else {
         stillOpen.push(thesis);
@@ -2785,15 +2843,15 @@ async function manageActiveTheses(state){
       acc.capital = +(acc.capital+pnl).toFixed(4);
       const totalPnl = (thesis.partialPnl||0) + pnl;
       thesis.tp2HitAt = Date.now();
-      journal(thesis, `TP2 alcanzado ($${thesis.tp2.toFixed(6)}): se cierra el 40% final (+${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
+      journal(thesis, `TP2 alcanzado ($${fmtPrecio(thesis.tp2)}): se cierra el 40% final (+${pnl.toFixed(2)} USDT). Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT. Capital: ${acc.capital.toFixed(2)}.`);
       hito(thesis, '🎯 TP2 alcanzado', `cierre completo · ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`);
       cerrarOperacion(acc, thesis, thesis.tp2, totalPnl, 'TP2', sendPromises);
       sendPromises.push(sendTelegram(
         (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
         `🎯 <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir} en TP2</b>\n` +
-        `TP2 alcanzado: $${thesis.tp2.toFixed(6)} ✅\n` +
+        `TP2 alcanzado: $${fmtPrecio(thesis.tp2)} ✅\n` +
         `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
-      ));
+      ), { permitirRepetido: true });
       sendPromises.push(sendPushToAll(`🎯 TP2 alcanzado: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
       continue;
     }
@@ -2810,7 +2868,7 @@ async function manageActiveTheses(state){
         `⚖️ <b>TheHaton cerró el resto de ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
         `El precio volvió al punto de entrada después de haber tomado ganancia en TP1.\n` +
         `Resultado total de la operación: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT\nCapital actual: ${acc.capital.toFixed(2)} USDT`
-      ));
+      ), { permitirRepetido: true });
       sendPromises.push(sendPushToAll(`⚖️ Breakeven: ${thesis.symbol}`, `Total: ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)} USDT`, null, 'cierre', thesis.symbol));
       continue;
     }
@@ -2830,7 +2888,7 @@ async function manageActiveTheses(state){
       `· ${cerradasPrev} operaciones registradas (${ganadorasPrev} ganadoras, ${cerradasPrev-ganadorasPrev} perdedoras)\n` +
       `· ${acc.expiredTheses?.length || 0} tesis expiraron sin confirmar\n\n` +
       `Se abre la cuenta #${acc.id+1} con 100 USDT. El historial completo queda archivado y se puede seguir analizando en el panel Intelligence.`
-    ));
+    ), { permitirRepetido: true });
     state.accountHistory.push({ id:acc.id, finalCapital:acc.capital, closedTrades:acc.closedTrades,
       expiredTheses:acc.expiredTheses, closedAt:Date.now(),
       // Se guarda también cómo evolucionó el drawdown de esta cuenta
