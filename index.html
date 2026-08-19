@@ -2856,7 +2856,9 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
     const profile = computeLiquidityProfile(data.candles, price);
     // Área de valor: el rango donde se negoció el 70% del volumen. Fuera de él, el precio se mueve
     // rápido; adentro, lento. El motor ya lo calculaba pero la web no lo mostraba.
-    const _fmtP = v => v==null ? '—' : (v>=1000 ? v.toLocaleString('en-US',{maximumFractionDigits:2}) : v>=1 ? v.toFixed(4) : v.toPrecision(4));
+    // Usa el formateador del motor: muestra el valor exacto en vez de redondear a 4 dígitos.
+    // En los niveles de liquidez el número exacto es lo que importa — es dónde poner la orden.
+    const _fmtP = v => fmt(v);
     if(profile?.vah!=null){
       document.getElementById('liqVAH').textContent = '$'+_fmtP(profile.vah);
       document.getElementById('liqVAL').textContent = '$'+_fmtP(profile.val);
