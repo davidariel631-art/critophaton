@@ -2702,6 +2702,13 @@ async function manageActiveTheses(state){
     // y cuenta cómo va evolucionando (sigue en pie / se debilita / conviene cerrar el resto ya).
     const lastNarration = thesis.lastNarrationAt || thesis.confirmedAt || thesis.detectedAt;
     if(Date.now() - lastNarration > 24*3600*1000){
+      // ═══ LA FECHA SE MARCA ANTES, NO DESPUÉS ═══
+      // BUG CORREGIDO: la marca estaba al final del try. Si algo fallaba en el medio
+      // (fetchTokenData con timeout, una moneda que no se encuentra), se saltaba al catch y
+      // lastNarrationAt NUNCA se actualizaba. Entonces a los 30 minutos volvía a entrar acá,
+      // y otra vez, y otra vez — el mismo mensaje cada media hora durante días.
+      // Marcándola primero, aunque el intento falle no se reintenta hasta dentro de 24h.
+      thesis.lastNarrationAt = Date.now();
       try{
         const d = await fetchTokenData(thesis.symbol, '4h');
         const macroN = await fetchMacroTrend(thesis.symbol).catch(()=>null);
@@ -2721,7 +2728,6 @@ async function manageActiveTheses(state){
           `📅 <b>Actualización — ${thesis.symbol}${thesis.tag||''} ${thesis.dir} (día ${daysOpen})</b>\n\n` +
           `${veredicto}\n\nP&L flotante: ${pnlFloat>=0?'+':''}${pnlFloat.toFixed(2)} USDT\nPrecio actual: $${fmtPrecio(price)}`
         ));
-        thesis.lastNarrationAt = Date.now();
       }catch(e){ console.error('Error en narración diaria de', thesis.symbol, e.message); }
     }
 
@@ -2768,7 +2774,7 @@ async function manageActiveTheses(state){
           ? (aud?.minDesdeEntrada != null ? aud.minDesdeEntrada <= thesis.stop : true)
           : (aud?.maxDesdeEntrada != null ? aud.maxDesdeEntrada >= thesis.stop : true);
         if(!cruzoDeVerdad){
-          journal(thesis, `⚠️ El rango dice que tocó el stop ($${fmtPrecio(thesis.stop)}), pero el ${thesis.dir==='LONG'?'mínimo':'máximo'} medido desde la entrada es $${(thesis.dir==='LONG'?aud.minDesdeEntrada:aud.maxDesdeEntrada).toFixed(6)}, que no llega al nivel. No se cierra sin evidencia.`);
+          journal(thesis, `⚠️ El rango dice que tocó el stop ($${fmtPrecio(thesis.stop)}), pero el ${thesis.dir==='LONG'?'mínimo':'máximo'} medido desde la entrada es $${fmtPrecio(thesis.dir==='LONG'?aud.minDesdeEntrada:aud.maxDesdeEntrada)}, que no llega al nivel. No se cierra sin evidencia.`);
           hitSL = false;
         }
       }
