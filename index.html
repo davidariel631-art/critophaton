@@ -1226,6 +1226,36 @@ function showChartExplain(label, explain){
   box.style.display = 'block';
   box.innerHTML = `<b>${label}</b><br>${explain}`;
 }
+// ═══ PRECISIÓN DEL EJE DE PRECIOS ═══
+// Sin esto, Lightweight Charts usa 2 decimales por defecto y el eje muestra "0.06" cuando
+// el precio real es 0.05828. En monedas de precio chico eso hace el gráfico inservible:
+// todos los niveles se ven en el mismo valor.
+// La precisión se calcula según el tamaño del precio, igual que fmtPrecio.
+function formatoPrecio(precio){
+  const p = Math.abs(Number(precio) || 0);
+  // Se cuentan los dígitos significativos que hacen falta para distinguir niveles cercanos:
+  // 5 dígitos alcanzan para que 0.058280 y 0.058310 se vean distintos.
+  // Antes: 2 decimales fijos, o sea que un precio de 0.05828 se mostraba como "0.06".
+  let precision;
+  if(p >= 1000) precision = 2;         // 63310.34
+  else if(p >= 100) precision = 3;     // 142.500
+  else if(p >= 1) precision = 4;       // 14.2318
+  else if(p >= 0.01) precision = 6;    // 0.058280
+  else if(p >= 0.0001) precision = 7;  // 0.0089350
+  else {
+    // Muy chico: se cuentan los ceros y se suman 5 dígitos útiles
+    const ceros = p > 0 ? Math.floor(-Math.log10(p)) : 8;
+    precision = Math.min(14, ceros + 5);
+  }
+  // toFixed evita la basura de coma flotante: Math.pow(10,-4) da 0.00009999999999999999
+  return {
+    type: 'price',
+    precision,
+    minMove: Number(Math.pow(10, -precision).toFixed(precision)),
+  };
+}
+
+
 function drawCandles(candles, series, support, resistance, structure, setup){
   chartHotzones = [];
   const container = document.getElementById('candleChartContainer');
@@ -1242,6 +1272,7 @@ function drawCandles(candles, series, support, resistance, structure, setup){
   });
 
   const candleSeries = candleChart.addCandlestickSeries({
+    priceFormat: formatoPrecio(candles.at(-1)?.c),
     upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444',
   });
   const candleData = candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c }));
@@ -1254,7 +1285,8 @@ function drawCandles(candles, series, support, resistance, structure, setup){
 
   // EMAs
   function addEma(arr, color){
-    const line = candleChart.addLineSeries({ color, lineWidth:1.3, priceLineVisible:false, lastValueVisible:false });
+    const line = candleChart.addLineSeries({ color, lineWidth:1.3, priceLineVisible:false, lastValueVisible:false,
+      priceFormat: formatoPrecio(candles.at(-1)?.c) });
     line.setData(candles.map((c,i)=> arr[i]!=null ? { time: Math.floor(c.t/1000), value: arr[i] } : null).filter(Boolean));
   }
   // Solo DOS medias: la rápida (20) para el corto plazo y la lenta (200) que define la tendencia
@@ -2846,7 +2878,13 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       rightPriceScale: { borderColor:'#1a1a1a' },
       timeScale: { borderColor:'#1a1a1a', timeVisible:true, rightOffset:90 }, // espacio vacío grande después de la última vela — antes era muy chico (8) y el perfil casi no tenía dónde dibujarse
     });
-    const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444' });
+    // Misma precisión que en el gráfico de análisis: sin esto el eje muestra 0.06 cuando
+    // el precio real es 0.05828, y todos los niveles de liquidez se ven en el mismo valor.
+    const _precioRef = data.candles.at(-1)?.c || data.price || 1;
+    // Se reutiliza la misma función que el gráfico de análisis: si la lógica está en dos
+    // lugares, tarde o temprano una se corrige y la otra no.
+    const _fmtEje = formatoPrecio(_precioRef);
+    const candleSeries = liqChart.addCandlestickSeries({ upColor:'#10b981', downColor:'#ef4444', borderVisible:false, wickUpColor:'#10b981', wickDownColor:'#ef4444', priceFormat:_fmtEje });
     candleSeries.setData(data.candles.map(c=>({ time: Math.floor(c.t/1000), open:c.o, high:c.h, low:c.l, close:c.c })));
     liqChart.timeScale().fitContent();
 
