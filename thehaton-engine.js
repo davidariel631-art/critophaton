@@ -3712,6 +3712,7 @@ function expectancyPorEstrategia(closedTrades, minMuestra = 10){
     ...agrupar('Estado de la cuenta', t => t.abiertaEnDrawdownAlto == null ? null : (t.abiertaEnDrawdownAlto ? 'drawdown alto' : 'cuenta sana')),
     ...agrupar('Wallets', t => t.registro?.wallets?.acompana ?? null),
     ...agrupar('Libro de órdenes', t => t.registro?.libro?.sesgo ?? null),
+    ...agrupar('Cinta de medias', t => t.registro?.cinta == null ? null : (t.registro.cinta.limpia ? 'limpia' : 'plana')),
     ...agrupar('Flujo de órdenes', t => t.registro?.flujoOrdenes?.sesgo ?? null),
   ].sort((a,b)=> b.expectancy - a.expectancy);
 
@@ -3850,6 +3851,54 @@ function resumenCalidadDecisiones(closedTrades){
       return `➖ No hay diferencia clara entre decisiones buenas y débiles (${wrBuenas}% vs ${wrMalas}%). El criterio de calidad todavía no demuestra valor.`;
     })(),
     nota: `${ganóConMala} operación(es) ganaron con una decisión débil y ${perdióConBuena} perdieron con una decisión buena. Esos casos son ruido, no evidencia — no conviene sacar conclusiones de ellos.`,
+  };
+}
+
+// ═══ ¿HABRÍAN SIDO MEJORES LOS NIVELES POR VOLATILIDAD? ═══
+// El bot calcula stop y objetivos por ESTRUCTURA (soportes, resistencias, order blocks).
+// La estrategia de la cinta los calcula por VOLATILIDAD (múltiplos de ATR). Ninguno es
+// obviamente mejor: esto lo compara con las operaciones reales usando el MFE y el MAE.
+export function compararNivelesEstructuraVsATR(closedTrades){
+  const trades = (closedTrades||[]).filter(t =>
+    t.registro?.cinta?.nivelesATR && t.registro?.mfe != null && t.registro?.mae != null &&
+    t.registro?.gestion?.stopPct > 0);
+  if(trades.length < 10) return { listo:false,
+    nota:`Hacen falta al menos 10 operaciones con los dos sistemas de niveles registrados. Hay ${trades.length}.` };
+
+  let ganaEstructura = 0, ganaATR = 0, empate = 0;
+  const detalle = [];
+  for(const t of trades){
+    const alt = t.registro.cinta.nivelesATR;
+    const stopReal = t.registro.gestion.stopPct;
+    const stopAlt = alt.stopPct;
+    // ¿El stop por ATR habría aguantado el retroceso que hubo? (el MAE está en R del stop real)
+    const maeEnPct = Math.abs(t.registro.mae) * stopReal;
+    const aguantaATR = maeEnPct < stopAlt;
+    const aguantaReal = Math.abs(t.registro.mae) < 1;
+    // ¿El objetivo por ATR se habría alcanzado? (el MFE también está en R del stop real)
+    const mfeEnPct = t.registro.mfe * stopReal;
+    const llegaTp1ATR = mfeEnPct >= (alt.rrTp1 * stopAlt);
+    const llegaTp1Real = t.alcanzoTp1;
+
+    if(aguantaATR && !aguantaReal) ganaATR++;            // el stop por ATR habría salvado la operación
+    else if(!aguantaATR && aguantaReal) ganaEstructura++;  // el de estructura fue mejor
+    else if(llegaTp1ATR && !llegaTp1Real) ganaATR++;
+    else if(!llegaTp1ATR && llegaTp1Real) ganaEstructura++;
+    else empate++;
+    detalle.push({ symbol:t.symbol, stopReal, stopAlt, aguantaATR, aguantaReal, llegaTp1ATR, llegaTp1Real });
+  }
+
+  const total = trades.length;
+  const dif = ganaATR - ganaEstructura;
+  return {
+    listo: true, operaciones: total,
+    ganaEstructura, ganaATR, empate,
+    veredicto: Math.abs(dif) < Math.max(3, total*0.15)
+      ? `Los dos sistemas rinden parecido (${ganaEstructura} a favor de estructura, ${ganaATR} a favor de ATR, ${empate} iguales). No hay motivo para cambiar.`
+      : dif > 0
+      ? `⚠️ Los niveles por volatilidad habrían sido mejores en ${ganaATR} de ${total} casos contra ${ganaEstructura}. Vale la pena probarlos.`
+      : `Los niveles por estructura fueron mejores (${ganaEstructura} contra ${ganaATR}). Conviene dejarlos como están.`,
+    nota: 'La comparación usa el MFE y el MAE: cuánto avanzó y cuánto retrocedió cada operación. No es un backtest completo, pero indica si vale la pena investigar el cambio.',
   };
 }
 
@@ -4367,6 +4416,219 @@ async function _fetchRatiosApalancamiento(symbolRaw, marketCapUsd, volSpotUsd){
     }
     return (out.oiUsd || out.lsGlobal) ? out : null;
   }catch(e){ return null; }
+}
+
+// ═══ CALIDAD DE LA TENDENCIA — CINTA DE MEDIAS ═══
+// Adaptado de la estrategia Madrid Ribbon Pullback. Lo valioso no es la cinta en sí, sino el
+// FILTRO DE CALIDAD que trae: no alcanza con que las medias estén ordenadas, tienen que estar
+// INCLINADAS y SEPARADAS. Una cinta plana o comprimida significa que no hay tendencia real,
+// aunque técnicamente la media rápida esté arriba de la lenta.
+//
+// Por qué importa para este bot: hoy la tendencia se evalúa por posición (precio sobre las
+// medias) y por ADX. Esto agrega una tercera medida —la inclinación y la apertura de la cinta—
+// que descarta los rangos disfrazados de tendencia, que es donde más falsas señales se generan.
+//
+// Los umbrales se miden en ATR, no en porcentaje fijo: así funciona igual en una moneda que
+// se mueve 1% por día y en una que se mueve 30%.
+export function calidadTendenciaCinta(candles, opciones = {}){
+  if(!Array.isArray(candles) || candles.length < 100) return null;
+  const cierres = candles.map(c => c.c);
+  const usarEMA = opciones.exponencial !== false;
+  // ema() y sma() devuelven la SERIE completa, no el último valor
+  const media = (len) => usarEMA ? ema(cierres, len) : sma(cierres, len);
+
+  const m75 = media(75), m90 = media(90);
+  if(!m75?.length || !m90?.length) return null;
+  const a75 = m75.at(-1), a90 = m90.at(-1);
+  if(!Number.isFinite(a75) || !Number.isFinite(a90)) return null;
+
+  // ATR para escalar los umbrales al tamaño real de los movimientos de esta moneda
+  // atr() también devuelve serie: se toma el último valor
+  const atrSerie = atr(candles, opciones.atrLen || 14);
+  const atrActual = Array.isArray(atrSerie) ? atrSerie.at(-1) : atrSerie;
+  if(!Number.isFinite(atrActual) || atrActual <= 0) return null;
+
+  const lookback = opciones.lookback || 5;
+  const previo75 = m75.at(-1 - lookback);
+  if(!Number.isFinite(previo75)) return null;
+
+  const ordenAlcista = a75 > a90;
+  const pendiente = a75 - previo75;                 // cuánto subió o bajó la media rápida
+  const separacion = Math.abs(a75 - a90);           // qué tan abierta está la cinta
+
+  const umbralPendiente = atrActual * (opciones.sensPendiente ?? 0.05);
+  const umbralSeparacion = atrActual * (opciones.sensSeparacion ?? 0.15);
+
+  const pendienteOk = ordenAlcista ? pendiente > umbralPendiente : (-pendiente) > umbralPendiente;
+  const separacionOk = separacion > umbralSeparacion;
+  const limpia = pendienteOk && separacionOk;
+
+  // La zona de la cinta: es donde tiene sentido esperar el retroceso
+  const techo = Math.max(a75, a90), piso = Math.min(a75, a90);
+  const precio = cierres.at(-1);
+  const dentroDeLaCinta = candles.at(-1).l <= techo && candles.at(-1).h >= piso;
+
+  // ¿Hubo un retroceso hasta la cinta? Segunda condición: no alcanza con operar cerca,
+  // el precio tiene que haber ENTRADO en la zona.
+  // El índice de la última vela que tocó importa para verificar el ORDEN de los eventos:
+  // en el original el toque tiene que haber pasado ANTES de la ruptura de estructura
+  // (ribbonTouched[1]), no después. Si rompe primero y vuelve después, es un patrón distinto
+  // y más débil — el precio rompió y no sostuvo.
+  const ventana = candles.slice(-10);
+  let idxUltimoToque = -1;
+  ventana.forEach((v, k) => { if(v.l <= techo && v.h >= piso) idxUltimoToque = k; });
+  const tocoLaCinta = idxUltimoToque >= 0;
+  // Cuántas velas atrás fue el toque (0 = la vela actual)
+  const velasDesdeElToque = tocoLaCinta ? (ventana.length - 1 - idxUltimoToque) : null;
+
+  const estado = limpia ? (ordenAlcista ? 'ALCISTA LIMPIA' : 'BAJISTA LIMPIA')
+               : ordenAlcista ? 'alcista débil' : 'bajista débil';
+
+  return {
+    limpia, direccion: ordenAlcista ? 'LONG' : 'SHORT',
+    estado,
+    pendiente: +(pendiente/atrActual).toFixed(2),      // en múltiplos de ATR, comparable entre monedas
+    separacion: +(separacion/atrActual).toFixed(2),
+    pendienteOk, separacionOk,
+    techo, piso, dentroDeLaCinta, tocoLaCinta, velasDesdeElToque,
+    distanciaALaCinta: +((precio - (ordenAlcista ? techo : piso)) / precio * 100).toFixed(2),
+    motivo: limpia
+      ? `La cinta de medias está ${ordenAlcista?'subiendo':'bajando'} con inclinación (${(pendiente/atrActual).toFixed(2)} ATR) y bien abierta (${(separacion/atrActual).toFixed(2)} ATR): hay tendencia real.`
+      : !pendienteOk && !separacionOk
+      ? `La cinta está plana y comprimida: las medias están ordenadas pero no hay tendencia real, solo un rango. Es donde más falsas señales aparecen.`
+      : !pendienteOk
+      ? `La cinta está ordenada pero casi sin inclinación (${(pendiente/atrActual).toFixed(2)} ATR): la tendencia perdió fuerza.`
+      : `Las medias están muy juntas (${(separacion/atrActual).toFixed(2)} ATR): la tendencia todavía no se definió.`,
+  };
+}
+
+// ═══ ENTRADA POR RETROCESO A LA CINTA ═══
+// Las tres condiciones de la estrategia, juntas. Cada una sola genera muchas falsas señales;
+// las tres a la vez son bastante más selectivas.
+export function entradaRetrocesoCinta(candles, structure, dirTesis, candlesHTF){
+  const cinta = calidadTendenciaCinta(candles);
+  if(!cinta) return null;
+
+  const faltan = [];
+  // 1) La cinta tiene que estar limpia y en la dirección de la tesis
+  if(!cinta.limpia) faltan.push(cinta.motivo);
+  else if(dirTesis && cinta.direccion !== dirTesis) faltan.push(`La cinta apunta a ${cinta.direccion}, no a ${dirTesis}.`);
+
+  // 2) Tiene que haber habido un retroceso hasta la zona de la cinta
+  if(!cinta.tocoLaCinta) faltan.push(`El precio no retrocedió hasta la cinta (está a ${cinta.distanciaALaCinta}%): entrar acá es perseguir el movimiento.`);
+
+  // 3) Y una ruptura de estructura que confirme que vuelven a entrar
+  const hayBOS = /bull|bear/i.test(String(structure?.events?.bos || ''));
+  const hayCHoCH = !!structure?.events?.choch;
+  if(!hayBOS && !hayCHoCH) faltan.push('Falta una ruptura de estructura (BOS o CHoCH) que confirme la reanudación.');
+
+  // 3b) EL ORDEN IMPORTA: el toque tiene que haber sido ANTES de la ruptura.
+  // Si el precio está DENTRO de la cinta justo ahora y recién rompe, todavía no se alejó:
+  // el patrón correcto es retroceder, y desde ahí romper para reanudar.
+  if(cinta.tocoLaCinta && cinta.velasDesdeElToque === 0 && (hayBOS || hayCHoCH)){
+    faltan.push('El precio todavía está dentro de la cinta: el retroceso y la ruptura tienen que pasar en ese orden, no a la vez.');
+  }
+
+  // 4) No vender contra una cinta que sigue alcista y limpia (y viceversa).
+  // Es la protección del original: evita el peor SHORT posible, el que va contra
+  // una tendencia que todavía está sana.
+  if(dirTesis === 'SHORT' && cinta.limpia && cinta.direccion === 'LONG'){
+    faltan.push('La cinta sigue alcista y limpia: vender acá es operar contra una tendencia que todavía está sana.');
+  }
+  if(dirTesis === 'LONG' && cinta.limpia && cinta.direccion === 'SHORT'){
+    faltan.push('La cinta sigue bajista y limpia: comprar acá es operar contra una tendencia que todavía está sana.');
+  }
+
+  // El marco mayor tiene que acompañar
+  let htfOk = true;
+  if(candlesHTF?.length >= 100){
+    const cintaHTF = calidadTendenciaCinta(candlesHTF);
+    if(cintaHTF && dirTesis && cintaHTF.direccion !== dirTesis){
+      htfOk = false;
+      faltan.push(`El marco mayor apunta a ${cintaHTF.direccion}: operar contra él baja mucho la probabilidad.`);
+    }
+  }
+
+  const confirma = faltan.length === 0;
+  return {
+    confirma, cinta, htfOk,
+    faltan,
+    texto: confirma
+      ? `🎀 Retroceso a la cinta confirmado: tendencia limpia ${cinta.direccion}, el precio volvió a la zona de las medias (${cinta.piso.toPrecision(6)}–${cinta.techo.toPrecision(6)}) y apareció ${hayCHoCH?'un CHoCH':'un BOS'} confirmando la reanudación.`
+      : `Retroceso a la cinta: no se cumple. ${faltan.join(' ')}`,
+  };
+}
+
+// ═══ FORMATO DE PRECIOS ═══
+// El problema que resuelve: toFixed(6) fijo daba "63310.340000" en Bitcoin (seis decimales
+// que no aportan nada) y "0.000008" en PEPE, donde el valor real es 0.00000842 — o sea que
+// PERDÍA precisión justo en las monedas donde más importa saber el nivel exacto.
+//
+// Ahora los decimales se eligen según el tamaño del número: los precios grandes van con
+// separador de miles y pocos decimales, y los muy chicos con todos los que hagan falta para
+// no perder información.
+export function fmtPrecio(v, opciones = {}){
+  const n = Number(v);
+  if(!Number.isFinite(n)) return '—';
+  const abs = Math.abs(n);
+  if(abs === 0) return '0';
+
+  let decimales;
+  if(abs >= 1000) decimales = 2;        // 63.310,34
+  else if(abs >= 100) decimales = 2;    // 142,50
+  else if(abs >= 1) decimales = 4;      // 3,2419
+  else if(abs >= 0.01) decimales = 5;   // 0,13630
+  else if(abs >= 0.0001) decimales = 7; // 0,0089350
+  else {
+    // Para valores muy chicos se cuentan los ceros después de la coma y se agregan
+    // 4 dígitos significativos. Así 0.00000842 sale completo y no como 0.000008.
+    const ceros = Math.floor(-Math.log10(abs));
+    decimales = Math.min(12, ceros + 4);
+  }
+
+  const fijo = n.toFixed(decimales);
+  // Se quitan los ceros de la derecha que no aportan (63310.34 en vez de 63310.340000)
+  const limpio = fijo.includes('.') ? fijo.replace(/0+$/, '').replace(/\.$/, '') : fijo;
+
+  if(opciones.sinMiles || abs < 1000) return limpio;
+  // Separador de miles para que 63310.34 se lea como 63.310,34 de un vistazo
+  const [ent, dec] = limpio.split('.');
+  const conMiles = ent.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return dec ? `${conMiles}.${dec}` : conMiles;
+}
+
+// ═══ NIVELES POR ATR DE LA ESTRATEGIA DE LA CINTA ═══
+// Los multiplicadores del original: SL a 1.5 ATR, TP1 a 2.0 ATR, TP2 a 4.0 ATR.
+// Eso da un R:R de 1.33 en TP1 y 2.67 en TP2 — bastante más ambicioso que los niveles
+// que calcula el bot por estructura.
+//
+// NO reemplaza al setup normal: se devuelve aparte para poder COMPARAR. Si dentro de unas
+// semanas los niveles por ATR resultan mejores que los de estructura, ahí se cambia con datos.
+export function nivelesCintaATR(candles, dir, opciones = {}){
+  if(!Array.isArray(candles) || candles.length < 20) return null;
+  const atrSerie = atr(candles, opciones.atrLen || 14);
+  const a = Array.isArray(atrSerie) ? atrSerie.at(-1) : atrSerie;
+  if(!Number.isFinite(a) || a <= 0) return null;
+
+  const precio = candles.at(-1).c;
+  const esLong = dir === 'LONG';
+  const signo = esLong ? 1 : -1;
+  const mSL = opciones.slMult ?? 1.5, mTP1 = opciones.tp1Mult ?? 2.0, mTP2 = opciones.tp2Mult ?? 4.0;
+
+  const stop = precio - signo * a * mSL;
+  const tp1 = precio + signo * a * mTP1;
+  const tp2 = precio + signo * a * mTP2;
+  const riesgo = Math.abs(precio - stop);
+
+  return {
+    entrada: precio, stop, tp1, tp2,
+    atr: a,
+    atrPct: +(a/precio*100).toFixed(2),
+    rrTp1: +(Math.abs(tp1-precio)/riesgo).toFixed(2),
+    rrTp2: +(Math.abs(tp2-precio)/riesgo).toFixed(2),
+    stopPct: +(riesgo/precio*100).toFixed(2),
+    nota: `Niveles por volatilidad: stop a ${mSL} ATR, TP1 a ${mTP1} ATR y TP2 a ${mTP2} ATR. Se adaptan solos a cuánto se mueve la moneda, en vez de fijarse en niveles del gráfico.`,
+  };
 }
 
 // ═══ PRECIO vs POSICIONAMIENTO DE LOS GRANDES ═══
@@ -5782,6 +6044,17 @@ function generarReporteResearch(closedTrades, opciones = {}){
   analizarPor(null, 'Wallets', t => t.registro?.wallets?.acompana ?? (t.registro?.wallets ? 'neutro' : null));
   // Libro de órdenes y flujo real: ¿predicen algo o son ruido llamativo?
   analizarPor(null, 'Libro de órdenes', t => t.registro?.libro?.sesgo ?? null);
+  // La afirmación central de la estrategia de la cinta: operar con cinta plana rinde peor.
+  // Esto lo comprueba con datos reales en vez de darlo por cierto.
+  // ¿El retroceso a la cinta rinde distinto que entrar sin retroceso?
+  analizarPor(null, 'Retroceso a la cinta', t => t.registro?.cinta == null ? null
+    : (t.registro.cinta.tocoLaCinta ? 'volvió a la cinta' : 'entró sin retroceso'));
+  analizarPor(null, 'Cinta de medias', t => t.registro?.cinta == null ? null
+    : (t.registro.cinta.limpia ? (t.registro.cinta.alineada ? 'limpia y alineada' : 'limpia pero contraria') : 'plana o comprimida'));
+  // La afirmación central de la estrategia de la cinta: operar con cinta plana rinde peor.
+  // Esto lo comprueba con datos reales en vez de darlo por cierto.
+  analizarPor(null, 'Cinta de medias', t => t.registro?.cinta == null ? null
+    : (t.registro.cinta.limpia ? (t.registro.cinta.alineada ? 'limpia y alineada' : 'limpia pero contraria') : 'plana o comprimida'));
   // ¿El apalancamiento excesivo predice algo? Es la sospecha clásica: OI muy alto respecto al
   // market cap suele preceder movimientos violentos, pero hay que comprobarlo.
   analizarPor(null, 'Apalancamiento', t => {
