@@ -755,7 +755,9 @@
     </div><!-- /subgroup indicadores -->
 
     <div class="analyze-subgroup" data-subgroup="analisis" style="display:none;">
-      <!-- Los escenarios van PRIMERO: es lo que se quiere saber después de ver todos los datos -->
+      <!-- La síntesis va primero: cruza todas las capas en una sola lectura -->
+      <div id="sintesisBox" style="display:none;"></div>
+      <!-- Después los escenarios: qué puede pasar -->
       <div id="escenariosBox" style="display:none;"></div>
     <div class="card" style="margin-top:18px;">
       <h2>🧠 Modo Analista</h2>
@@ -1745,6 +1747,133 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
 
 ⚠️ Análisis automatizado, no asesoría financiera. DYOR.`;
   document.getElementById('signalText').textContent = signal;
+  // ═══ LA TESIS, CRUZADA ═══
+  // Cada capa hablaba por su cuenta y quien leía tenía que hacer la síntesis en la cabeza.
+  // Esto las relaciona: "la estructura favorece LONG pero hay una pared vendedora a 0.5%
+  // que puede frenar el avance antes de TP1".
+  (async () => {
+    const box = document.getElementById('sintesisBox');
+    try{
+      const E = window.TheHatonEngine;
+      const libro = await E.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null);
+      const s = E.sintetizarTesis({
+        result, setup,
+        liquidez: (()=>{ try{
+          const lh = E.detectLiquidezPorHorizonte(data.candles);
+          const ar = lh?.cercanaArriba || lh?.lejanaArriba, ab = lh?.cercanaAbajo || lh?.lejanaAbajo;
+          if(!ar && !ab) return null;
+          const fa = ar?.toques||0, fb = ab?.toques||0;
+          return { ladoFuerte: fa>fb ? 'arriba' : fb>fa ? 'abajo' : 'pareja' };
+        }catch(e){ return null; } })(),
+        libro,
+        flujo: E.calcularPresionFlujo(data.candles, 24),
+        wallets: null,   // el análisis de wallets vive en el bot
+        onchain: await E.fetchOnChainPressure(data.contract || window._contratoActual?.contrato,
+                                              data.network || window._contratoActual?.red, null).catch(()=>null),
+        apalancamiento: await E.fetchRatiosApalancamiento(data.displayName, data.marketCap, data.vol24h).catch(()=>null),
+        compresion: E.detectTrianguloCompresion(data.candles),
+        cinta: E.calidadTendenciaCinta(data.candles),
+        fase: (E.detectMarketPhase(data.candles)||{}).fase,
+        calendario: E.calendarioMacro(),
+        // Los detalles chicos: rotación del volumen contra el market cap, números redondos,
+        // absorción, rango ya agotado. Cosas que cambian la lectura y que nadie mira.
+        detalles: E.detallesQueImportan({
+          candles: data.candles, price: data.price,
+          marketCap: data.marketCap, vol24hUsd: data.vol24h,
+          atrPct: result.metrics?.atrPct,
+          dirTesis: result.recommendation === 'NO OPERAR' ? null : result.recommendation }),
+        dirTesis: result.recommendation === 'NO OPERAR' ? null : result.recommendation,
+      });
+      if(!s){ box.style.display='none'; return; }
+
+      // ═══ LA DECISIÓN, ARRIBA DE TODO ═══
+      // Lo primero que se lee no es el análisis: es qué hacer con él.
+      const d = E.decidirQueHacer({
+        sintesis: s, result, setup,
+        liquidez: (()=>{ try{
+          const lh = E.detectLiquidezPorHorizonte(data.candles);
+          const ar = lh?.cercanaArriba || lh?.lejanaArriba, ab = lh?.cercanaAbajo || lh?.lejanaAbajo;
+          if(!ar && !ab) return null;
+          return { ladoFuerte: (ar?.toques||0) > (ab?.toques||0) ? 'arriba' : 'abajo',
+                   cercanaArriba: ar, cercanaAbajo: ab };
+        }catch(e){ return null; } })(),
+        libro,
+        compresion: E.detectTrianguloCompresion(data.candles),
+        cinta: E.calidadTendenciaCinta(data.candles),
+        apalancamiento: await E.fetchRatiosApalancamiento(data.displayName, data.marketCap, data.vol24h).catch(()=>null),
+        calendario: E.calendarioMacro(),
+        flujo: E.calcularPresionFlujo(data.candles, 24),
+        retrocesoCinta: (()=>{ try{ return E.entradaRetrocesoCinta(data.candles, result.structure,
+          result.recommendation === 'NO OPERAR' ? null : result.recommendation, null); }catch(e){ return null; } })(),
+      });
+      const colD = d.accion === 'DESCARTAR' ? 'var(--rose)'
+                 : d.accion === 'ESPERAR' ? 'var(--amber)'
+                 : d.accion === 'ENTRAR REDUCIDO' ? '#f59e0b' : 'var(--teal)';
+      const bloqueDecision = `<div style="background:${colD}12;border:1px solid ${colD}44;border-radius:14px;padding:15px;margin-bottom:13px;">
+        <div style="font-size:15px;font-weight:800;color:${colD};font-family:var(--display);">${d.titulo}</div>
+        <div style="font-size:12.5px;color:#c3ccd6;line-height:1.6;margin-top:7px;">${d.detalle}</div>
+        ${d.esperas?.length ? `<div style="margin-top:9px;font-size:12px;">
+          <span style="color:var(--sub);">Qué esperar:</span> ${d.esperas.map(e=>e.queEsperar).join(' · ')}
+        </div>` : ''}
+        ${d.tamanoSugerido > 0 && d.tamanoSugerido < 100 ? `<div style="margin-top:7px;font-size:12px;color:var(--amber);">
+          Tamaño sugerido: ${d.tamanoSugerido}% del habitual</div>` : ''}
+      </div>`;
+
+      const col = s.veredicto === 'CAMINO DESPEJADO' ? 'var(--teal)'
+                : s.veredicto === 'CON RESERVAS' ? 'var(--amber)'
+                : s.veredicto === 'TESIS CONDICIONADA' ? '#f59e0b' : 'var(--sub)';
+      // ═══ CADA OBSERVACIÓN LLEVA A SU MÓDULO ═══
+      // Sin esto, la síntesis dice "hay una pared vendedora en $0.00918" y no hay forma de
+      // ver esa pared. Ahora tocar la frase abre la sección que la produjo.
+      const irA = { libro:'detalle', liquidez:'detalle', apalancamiento:'detalle',
+                    wallets:'detalle', grafico:'grafico', calendario:'detalle' };
+      const chipModulo = (mod) => {
+        if(!mod || !irA[mod]) return '';
+        const nombre = { libro:'📖 ver el libro', liquidez:'💧 ver liquidez',
+                         apalancamiento:'⚖️ ver apalancamiento', wallets:'🐋 ver wallets',
+                         grafico:'📉 ver en el gráfico', calendario:'📅 ver agenda' }[mod];
+        return `<span class="ir-a-modulo" data-sub="${irA[mod]}" style="cursor:pointer;font-size:10px;
+          color:var(--amber);border:1px solid rgba(0,217,255,.3);border-radius:99px;padding:2px 8px;
+          margin-left:6px;white-space:nowrap;">${nombre}</span>`;
+      };
+
+      const parrafos = s.texto.split('\n\n').map(p => {
+        const esAviso = p.startsWith('⚠️'), esApoyo = p.startsWith('✅');
+        const c2 = esAviso ? 'var(--amber)' : esApoyo ? 'var(--teal)' : '#c3ccd6';
+        // A los párrafos de obstáculos y apoyos se les agregan los enlaces de sus módulos
+        let extra = '';
+        if(esAviso || esApoyo){
+          const mods = [...new Set(s.cruces.filter(x => x.modulo &&
+            (esAviso ? x.tipo !== 'apoyo' : x.tipo === 'apoyo')).map(x => x.modulo))];
+          extra = mods.map(chipModulo).join('');
+        }
+        return `<div style="font-size:12.5px;line-height:1.65;color:${c2};margin-bottom:9px;">${p}${extra?`<div style="margin-top:6px;">${extra}</div>`:''}</div>`;
+      }).join('');
+
+      box.innerHTML = `<div class="card" style="border-color:${col}44;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;">
+          <h2 style="margin:0;color:${col};">🧠 La tesis</h2>
+          <span style="font-size:10px;color:${col};letter-spacing:.6px;font-weight:700;">${s.veredicto}</span>
+        </div>
+        ${bloqueDecision}
+        ${parrafos}
+      </div>`;
+      box.style.display = '';
+      // Al tocar un enlace se cambia a la sub-pestaña que contiene ese módulo
+      box.querySelectorAll('.ir-a-modulo').forEach(el => el.addEventListener('click', () => {
+        const destino = el.dataset.sub;
+        document.querySelectorAll('.asub-btn').forEach(b => {
+          if(b.dataset.subgroup === destino) b.click();
+        });
+        // Y se scrollea a esa zona para que se vea sin buscarla
+        setTimeout(() => {
+          const panel = document.querySelector(`.analyze-subgroup[data-subgroup="${destino}"]`);
+          panel?.scrollIntoView({ behavior:'smooth', block:'start' });
+        }, 60);
+      }));
+    }catch(e){ box.style.display='none'; }
+  })();
+
   // ═══ QUÉ PUEDE PASAR ═══
   // Se calcula al final, cuando ya están todos los datos: estructura, liquidez, compresión y fase.
   // Es lo que le faltaba al análisis — después de mostrar todo, decir hacia dónde puede ir.
