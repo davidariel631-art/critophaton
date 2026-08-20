@@ -48987,7 +48987,7 @@
     ],
     "tradesToday": {
       "date": "2026-08-20",
-      "count": 5
+      "count": 6
     },
     "peakCapital": 100,
     "theses": [
@@ -49129,16 +49129,12 @@
           }
         ],
         "priceFailCount": 0,
-        "lastCheckedAt": 1787234474902,
+        "lastCheckedAt": 1787236262751,
         "lastNarrationAt": 1787190313546,
         "auditoria": {
           "minDesdeEntrada": 0.00827,
           "maxDesdeEntrada": 0.008994,
           "eventos": [
-            {
-              "ts": 1787212867736,
-              "precio": 0.008828
-            },
             {
               "ts": 1787214660797,
               "precio": 0.008904
@@ -49214,15 +49210,19 @@
             {
               "ts": 1787234474902,
               "precio": 0.008927
+            },
+            {
+              "ts": 1787236262751,
+              "precio": 0.008908
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787234474902,
-            "desde": 1787211674901,
+            "ts": 1787236262751,
+            "desde": 1787213462751,
             "velas": 26,
-            "low": 0.008806,
+            "low": 0.008866,
             "high": 0.008981,
-            "precio": 0.008927
+            "precio": 0.008908
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
@@ -49334,6 +49334,10 @@
           {
             "ts": 1787234487457,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 97 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236276441,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.04867,
@@ -49456,6 +49460,10 @@
           {
             "ts": 1787234489703,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236278728,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.043242,
@@ -49477,7 +49485,7 @@
         "symbol": "DUSK",
         "dir": "LONG",
         "tag": " (cap chico)",
-        "status": "WATCHING",
+        "status": "ACTIVE",
         "conviction": 79,
         "detectedAt": 1787209216938,
         "expiresAt": 1787274016938,
@@ -49578,6 +49586,10 @@
           {
             "ts": 1787234491381,
             "note": "Confirmación técnica presente pero R:R a TP1 es solo 0.95:1 (mínimo exigido 1:1). Se sigue observando en vez de forzar una entrada con mala relación riesgo/beneficio."
+          },
+          {
+            "ts": 1787236280503,
+            "note": "Entrada CONFIRMADA en 15m (BOS a favor detectado). Entrada: $0.07254, Stop: $0.06860525, TP1: $0.07706496, TP2: $0.07962255. riesgo reducido a 1.0% (drawdown 41% o 1 pérdidas seguidas) · patrón de alta calidad (BOS/Bear-Trap): tamaño ligeramente mayor."
           }
         ],
         "theoEntry": 0.0694,
@@ -49588,11 +49600,178 @@
             "ts": 1787209216938,
             "etapa": "🔭 Detectada",
             "detalle": "score 7.9/10 en 4h"
+          },
+          {
+            "ts": 1787236280503,
+            "etapa": "🟢 Confirmada",
+            "detalle": "por BOS + Confluencia"
+          },
+          {
+            "ts": 1787236280503,
+            "etapa": "🚀 Entrada",
+            "detalle": "$0.07254"
           }
         ],
         "abiertaEnDrawdownAlto": true,
         "drawdownAlDetectar": 41.73,
-        "score4h": 7.9
+        "score4h": 7.9,
+        "score15m": 6.5,
+        "score": 7.9,
+        "confianza": 30,
+        "dataQuality": 76,
+        "marketPhase": "EXPANSIÓN ALCISTA",
+        "registro": {
+          "componentes": [
+            {
+              "n": "Macro (4h)",
+              "aporte": 1.1,
+              "senal": 1
+            },
+            {
+              "n": "Estructura",
+              "aporte": 0.9,
+              "senal": 1
+            },
+            {
+              "n": "Derivados",
+              "aporte": 0.2,
+              "senal": 0.3
+            },
+            {
+              "n": "Momentum",
+              "aporte": 0.03,
+              "senal": 0.04
+            },
+            {
+              "n": "Tendencia",
+              "aporte": 0,
+              "senal": 0
+            },
+            {
+              "n": "Dominancias",
+              "aporte": 0,
+              "senal": 0
+            }
+          ],
+          "ajusteCalidad": -0.74,
+          "estocastico": 86.72063253012043,
+          "rsi": 71.16704148327791,
+          "adx": 37.60931111596513,
+          "divergencia": null,
+          "triangulo": null,
+          "liquidezAFavor": null,
+          "fuerzaVolumen": 47,
+          "caminos": "BOS + Confluencia",
+          "horasHastaConfirmar": 7.5,
+          "porValvulaEscape": false,
+          "gestion": {
+            "stopPct": 5.42,
+            "rTp1": 1.15,
+            "rTp2": 1.8,
+            "rTp3": 2.5,
+            "atrPct": 0.97,
+            "stopEstructural": null
+          },
+          "mfe": 0,
+          "mae": 0,
+          "ifvg": "soporte",
+          "imbalance": null,
+          "rupturaTriangulo": null,
+          "onChain": null,
+          "apalancamiento": null,
+          "libro": null,
+          "flujoOrdenes": null,
+          "wallets": null,
+          "actividadAnomala": null,
+          "diosesAFavor": [
+            "Dios Smart Money",
+            "Dios Derivados",
+            "Dios Macro (4h)",
+            "Dios de Fuerza Relativa (vs BTC)",
+            "Dios VWAP"
+          ],
+          "parecidasAlEntrar": {
+            "cantidad": 58,
+            "winRate": 41.4
+          }
+        },
+        "entry": 0.07254,
+        "stop": 0.06860525,
+        "tp1": 0.07706496249999997,
+        "tp2": 0.07962254999999997,
+        "tp3": 0.08237687499999996,
+        "units": 179.54817968104769,
+        "originalUnits": 179.54817968104769,
+        "riskPct": 0.012,
+        "confirmedAt": 1787236280503,
+        "partialTaken": false,
+        "originalStop": 0.06860525,
+        "originalRisk": 0.003934749999999987,
+        "entryAt": 1787236280503,
+        "stopHistory": [
+          {
+            "tipo": "ORIGINAL",
+            "precio": 0.06860525,
+            "desde": 1787236280503,
+            "hasta": null
+          }
+        ],
+        "tipoSetup": "BOS",
+        "horaConfirmacion": 14,
+        "committeeSnapshot": [
+          {
+            "name": "📈 Dios de Tendencia",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "⚡ Dios Momentum",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "🧠 Dios Smart Money",
+            "vote": "LONG"
+          },
+          {
+            "name": "💰 Dios Derivados",
+            "vote": "LONG"
+          },
+          {
+            "name": "🌐 Dios Macro (4h)",
+            "vote": "LONG"
+          },
+          {
+            "name": "💧 Dios Capital Flow",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "⚠️ Dios Gestión de Riesgo",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📡 Dios Radar del Mercado",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "🧠 Dios Memoria",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
+            "vote": "LONG"
+          },
+          {
+            "name": "📊 Dios VWAP",
+            "vote": "LONG"
+          },
+          {
+            "name": "📉 Dios CVD",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios Market Context Matrix",
+            "vote": "NEUTRAL"
+          }
+        ]
       },
       {
         "id": "1787209307318_SSV",
@@ -49695,6 +49874,10 @@
           },
           {
             "ts": 1787234492956,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236284338,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -49814,6 +49997,10 @@
           {
             "ts": 1787234494600,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 77% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787236286336,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 72% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.0484,
@@ -49932,6 +50119,10 @@
           {
             "ts": 1787234496400,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 74% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787236288344,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 77% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.2648,
@@ -50050,6 +50241,10 @@
           {
             "ts": 1787234498228,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236290408,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.05439,
@@ -50160,6 +50355,10 @@
           {
             "ts": 1787234499869,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 100% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787236292346,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 98% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.06253,
@@ -50265,6 +50464,10 @@
           },
           {
             "ts": 1787234501476,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236294302,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -50559,21 +50762,25 @@
             {
               "ts": 1787234475290,
               "precio": 0.02044
+            },
+            {
+              "ts": 1787236263139,
+              "precio": 0.02055
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787234475290,
+            "ts": 1787236263139,
             "desde": 1787222397517,
-            "velas": 14,
+            "velas": 16,
             "low": 0.02024,
             "high": 0.0206,
-            "precio": 0.02044
+            "precio": 0.02055
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787234475290
+        "lastCheckedAt": 1787236263139
       },
       {
         "id": "1787212920162_USUAL",
@@ -50665,6 +50872,10 @@
           {
             "ts": 1787234503330,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236296351,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 86 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.009133,
@@ -50771,6 +50982,10 @@
           {
             "ts": 1787234505189,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236298563,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.00845,
@@ -50999,7 +51214,7 @@
           }
         ],
         "auditoria": {
-          "minDesdeEntrada": 0.4426,
+          "minDesdeEntrada": 0.4414,
           "maxDesdeEntrada": 0.4594,
           "eventos": [
             {
@@ -51057,21 +51272,25 @@
             {
               "ts": 1787234475652,
               "precio": 0.4437
+            },
+            {
+              "ts": 1787236263551,
+              "precio": 0.446
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787234475652,
+            "ts": 1787236263551,
             "desde": 1787219040343,
-            "velas": 18,
-            "low": 0.4426,
+            "velas": 20,
+            "low": 0.4414,
             "high": 0.4594,
-            "precio": 0.4437
+            "precio": 0.446
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787234475652
+        "lastCheckedAt": 1787236263551
       },
       {
         "id": "1787214725241_CGPT",
@@ -51159,6 +51378,10 @@
           {
             "ts": 1787234506699,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236300587,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.02074,
@@ -51261,6 +51484,10 @@
           {
             "ts": 1787234508356,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236302573,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.007358,
@@ -51363,6 +51590,10 @@
           {
             "ts": 1787234509961,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 9 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236304538,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 10 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.02868,
@@ -51465,6 +51696,10 @@
           {
             "ts": 1787234511576,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236306494,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.003827,
@@ -51567,6 +51802,10 @@
           {
             "ts": 1787234513495,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236308448,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.07428,
@@ -51664,6 +51903,10 @@
           },
           {
             "ts": 1787234515527,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236310360,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -51763,6 +52006,10 @@
           {
             "ts": 1787234517265,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 81 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236312298,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.01858,
@@ -51857,6 +52104,10 @@
           {
             "ts": 1787234518920,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 73% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787236314324,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 75% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.1393,
@@ -51943,6 +52194,10 @@
           {
             "ts": 1787234520520,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236316248,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.007295,
@@ -52025,6 +52280,10 @@
           {
             "ts": 1787234521747,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236317601,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 71757.4,
@@ -52103,6 +52362,10 @@
           {
             "ts": 1787234525958,
             "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 0.5hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
+          },
+          {
+            "ts": 1787236321150,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 76% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.99958,
@@ -52184,6 +52447,10 @@
           },
           {
             "ts": 1787234527515,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 81 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236322921,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 81 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -52267,6 +52534,10 @@
           {
             "ts": 1787234529297,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236324674,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.33462,
@@ -52349,6 +52620,10 @@
           {
             "ts": 1787234530946,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236326384,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.3621,
@@ -52598,7 +52873,7 @@
         ],
         "auditoria": {
           "minDesdeEntrada": 0.06065,
-          "maxDesdeEntrada": 0.06167,
+          "maxDesdeEntrada": 0.06214,
           "eventos": [
             {
               "ts": 1787222377589,
@@ -52647,21 +52922,25 @@
             {
               "ts": 1787234476009,
               "precio": 0.06119
+            },
+            {
+              "ts": 1787236263942,
+              "precio": 0.06133
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787234476009,
+            "ts": 1787236263942,
             "desde": 1787221911932,
-            "velas": 14,
+            "velas": 16,
             "low": 0.06066,
-            "high": 0.06167,
-            "precio": 0.06119
+            "high": 0.06214,
+            "precio": 0.06133
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787234476009
+        "lastCheckedAt": 1787236263942
       },
       {
         "id": "1787220179854_TNSR",
@@ -52729,6 +53008,10 @@
           {
             "ts": 1787234536961,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236332451,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.03343,
@@ -52810,6 +53093,10 @@
           },
           {
             "ts": 1787234538547,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 84 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236334325,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 84 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -52893,6 +53180,10 @@
           {
             "ts": 1787234540416,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 81% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787236336332,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 80% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.0914,
@@ -52971,6 +53262,10 @@
           {
             "ts": 1787234542032,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 72% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787236338407,
+            "note": "Todavía esperando confirmación (Peticiones de desempleo semanales fue hace 1.0hs — se exige BOS claro o un Bear/Bull Trap confirmado hasta que el mercado se asiente)."
           }
         ],
         "theoEntry": 0.01291,
@@ -115488,16 +115783,16 @@
       "ts": 1784278669251
     },
     "SEI": {
-      "lastRecommendation": "LONG",
-      "ts": 1787234543305
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1787236339822
     },
     "JUP": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234543859
+      "ts": 1787236340420
     },
     "STRK": {
       "lastRecommendation": "LONG",
-      "ts": 1787234546342
+      "ts": 1787236343249
     },
     "ENA": {
       "lastRecommendation": "LONG",
@@ -115505,7 +115800,7 @@
     },
     "W": {
       "lastRecommendation": "LONG",
-      "ts": 1787234546887
+      "ts": 1787236343902
     },
     "TNSR": {
       "lastRecommendation": "LONG",
@@ -115677,7 +115972,7 @@
     },
     "TIA": {
       "lastRecommendation": "LONG",
-      "ts": 1787234542588
+      "ts": 1787236339206
     },
     "CATE": {
       "lastRecommendation": "NO OPERAR",
@@ -115781,7 +116076,7 @@
     },
     "SAPIEN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234555325
+      "ts": 1787236353363
     },
     "Cate": {
       "lastRecommendation": "NO OPERAR",
@@ -115853,15 +116148,15 @@
     },
     "ORDI": {
       "lastRecommendation": "LONG",
-      "ts": 1787234545551
+      "ts": 1787236342448
     },
     "PYTH": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1787234544466
+      "lastRecommendation": "LONG",
+      "ts": 1787236341193
     },
     "BANK": {
       "lastRecommendation": "SHORT",
-      "ts": 1787234553509
+      "ts": 1787236351410
     },
     "ICNT": {
       "lastRecommendation": "SHORT",
@@ -115888,8 +116183,8 @@
       "ts": 1787227129886
     },
     "WIF": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1787234544996
+      "lastRecommendation": "LONG",
+      "ts": 1787236341811
     },
     "LUNA": {
       "lastRecommendation": "NO OPERAR",
@@ -116133,7 +116428,7 @@
     },
     "TREE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234558752
+      "ts": 1787236357393
     },
     "NIL": {
       "lastRecommendation": "NO OPERAR",
@@ -116181,11 +116476,11 @@
     },
     "CELR": {
       "lastRecommendation": "LONG",
-      "ts": 1787234548870
+      "ts": 1787236345949
     },
     "CLO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234550530
+      "ts": 1787236347964
     },
     "CTK": {
       "lastRecommendation": "LONG",
@@ -116405,7 +116700,7 @@
     },
     "BIGTIME": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234552948
+      "ts": 1787236350806
     },
     "GIGGLE": {
       "lastRecommendation": "NO OPERAR",
@@ -116676,8 +116971,8 @@
       "ts": 1787209331345
     },
     "RECALL": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1787234548318
+      "lastRecommendation": "LONG",
+      "ts": 1787236345338
     },
     "CELO": {
       "lastRecommendation": "LONG",
@@ -116744,8 +117039,8 @@
       "ts": 1787028333219
     },
     "BANANA": {
-      "lastRecommendation": "LONG",
-      "ts": 1787234552385
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1787236350201
     },
     "SOPH": {
       "lastRecommendation": "NO OPERAR",
@@ -116757,19 +117052,19 @@
     },
     "WET": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234547529
+      "ts": 1787236344523
     },
     "SLX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234549451
+      "ts": 1787236346567
     },
     "BIRB": {
       "lastRecommendation": "SHORT",
-      "ts": 1787234555856
+      "ts": 1787236353961
     },
     "TAIKO": {
       "lastRecommendation": "LONG",
-      "ts": 1787234556924
+      "ts": 1787236355400
     },
     "MOVR": {
       "lastRecommendation": "SHORT",
@@ -116793,7 +117088,7 @@
     },
     "BLUAI": {
       "lastRecommendation": "SHORT",
-      "ts": 1787234549985
+      "ts": 1787236347368
     },
     "CAP": {
       "lastRecommendation": "LONG",
@@ -117029,15 +117324,15 @@
     },
     "WCT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234551841
+      "ts": 1787236349397
     },
     "DIA": {
       "lastRecommendation": "LONG",
-      "ts": 1787234551249
+      "ts": 1787236348593
     },
     "SOMI": {
-      "lastRecommendation": "LONG",
-      "ts": 1787234554611
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1787236352598
     },
     "XAI": {
       "lastRecommendation": "LONG",
@@ -117045,11 +117340,11 @@
     },
     "AGLD": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234557464
+      "ts": 1787236356201
     },
     "C98": {
       "lastRecommendation": "LONG",
-      "ts": 1787234558186
+      "ts": 1787236356798
     },
     "BROCCOLI": {
       "lastRecommendation": "LONG",
@@ -117057,7 +117352,7 @@
     },
     "AVA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234556387
+      "ts": 1787236354564
     },
     "ACE": {
       "lastRecommendation": "LONG",
@@ -117205,7 +117500,7 @@
     },
     "KAT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787234559291
+      "ts": 1787236357986
     },
     "HEMI": {
       "lastRecommendation": "LONG",
@@ -140260,8 +140555,9 @@
       "tp2": 0.018721542196640503,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786966509220,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "sin definir",
+      "evaluadaEn": 1787236268218
     },
     {
       "symbol": "HOLO",
@@ -140276,8 +140572,9 @@
       "tp2": 0.04757984275025056,
       "marketPhase": "CAPITULACIÓN",
       "detectadaEn": 1786966510138,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236268867
     },
     {
       "symbol": "ZIL",
@@ -140292,8 +140589,9 @@
       "tp2": 0.0020938938000000006,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786966510548,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236269533
     },
     {
       "symbol": "IO",
@@ -140308,8 +140606,9 @@
       "tp2": 0.09800210000000001,
       "marketPhase": "ACUMULACIÓN",
       "detectadaEn": 1786966512229,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236270213
     },
     {
       "symbol": "TOSHI",
@@ -140324,8 +140623,9 @@
       "tp2": 0.00009075850000000002,
       "marketPhase": "ACUMULACIÓN",
       "detectadaEn": 1786966512624,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236270845
     },
     {
       "symbol": "BABY",
@@ -140340,8 +140640,9 @@
       "tp2": 0.009054416158577633,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786966513133,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236271481
     },
     {
       "symbol": "ROSE",
@@ -140356,8 +140657,9 @@
       "tp2": 0.00497154,
       "marketPhase": "RANGO",
       "detectadaEn": 1786966513536,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236272154
     },
     {
       "symbol": "POPCAT",
@@ -140372,8 +140674,9 @@
       "tp2": 0.03864105,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786966514317,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236272808
     },
     {
       "symbol": "CKB",
@@ -140388,8 +140691,9 @@
       "tp2": 0.0007476770000000001,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786966514720,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236273472
     },
     {
       "symbol": "POLYX",
@@ -140404,8 +140708,9 @@
       "tp2": 0.026932619999999997,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786966517739,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787236274117
     },
     {
       "symbol": "BRETT",
@@ -169046,6 +169351,118 @@
       "detectadaEn": 1787234558187,
       "evaluada": false,
       "resultado": null
+    },
+    {
+      "symbol": "TIA",
+      "tag": " (custom)",
+      "dir": "LONG",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 46,
+      "precio": 0.3338,
+      "stop": 0.3176442,
+      "tp1": 0.3648529280248409,
+      "tp2": 0.3822674,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1787236339208,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ORDI",
+      "tag": " (custom)",
+      "dir": "LONG",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 44,
+      "precio": 4.161,
+      "stop": 3.9113399999999996,
+      "tp1": 4.446,
+      "tp2": 4.921049183348833,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787236342450,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "STRK",
+      "tag": " (custom)",
+      "dir": "LONG",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 46,
+      "precio": 0.02553,
+      "stop": 0.02445178432108892,
+      "tp1": 0.02710278013196535,
+      "tp2": 0.028764647036733242,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1787236343251,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "CELR",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 35,
+      "precio": 0.002034,
+      "stop": 0.0019509114959282785,
+      "tp1": 0.0021485219381923003,
+      "tp2": 0.002183559307329098,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787236345949,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "BLUAI",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 37,
+      "precio": 0.012776,
+      "stop": 0.013681184999999998,
+      "tp1": 0.011482586927754508,
+      "tp2": 0.011120512927754508,
+      "marketPhase": "CAPITULACIÓN",
+      "detectadaEn": 1787236347369,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "DIA",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 46,
+      "precio": 0.1341,
+      "stop": 0.119776,
+      "tp1": 0.1505726,
+      "tp2": 0.1598832,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787236348593,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "C98",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 36,
+      "precio": 0.01498,
+      "stop": 0.01441662,
+      "tp1": 0.015627887,
+      "tp2": 0.015994084000000002,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787236356799,
+      "evaluada": false,
+      "resultado": null
     }
   ],
   "killSwitchNotifiedDate": "2026-08-20",
@@ -172001,12 +172418,28 @@
       "drawdownPct": 41.13,
       "operacionesCerradas": 141,
       "tesisAbiertas": 34
+    },
+    {
+      "ts": 1787236338422,
+      "cuenta": 1,
+      "capital": 58.8731,
+      "pico": 100,
+      "drawdownPct": 41.13,
+      "operacionesCerradas": 141,
+      "tesisAbiertas": 34
+    },
+    {
+      "ts": 1787236343903,
+      "cuenta": 1,
+      "capital": 58.8731,
+      "pico": 100,
+      "drawdownPct": 41.13,
+      "operacionesCerradas": 141,
+      "tesisAbiertas": 34
     }
   ],
   "mesesArchivados": [],
   "huellasMensajes": {
-    "86890490": 1787212911715,
-    "211506389": 1787212920163,
     "280073895": 1787222423247,
     "297510939": 1787214725242,
     "330471923": 1787220125316,
@@ -172020,12 +172453,11 @@
     "778472671": 1787234474540,
     "807472732": 1787230872231,
     "977369950": 1787221930212,
+    "980057522": 1787236282122,
     "1137857182": 1787215899275,
     "1237343103": 1787220195377,
     "1269189830": 1787214745230,
     "1336026155": 1787219063192,
-    "1382411469": 1787212905223,
-    "1571050504": 1787212923669,
     "1712688938": 1787220122531,
     "1768730357": 1787230872233,
     "1922235700": 1787225459787,
