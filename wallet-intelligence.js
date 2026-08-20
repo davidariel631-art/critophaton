@@ -280,6 +280,89 @@ export function analizarTransferencias(transferencias, red, opciones = {}){
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+// 3b. PERFIL TEMPORAL — COMPORTAMIENTO, NO TRANSFERENCIAS SUELTAS
+// Una transferencia aislada no dice nada: puede ser cualquier cosa. Lo que importa es el
+// COMPORTAMIENTO SOSTENIDO en el tiempo. Diez retiros repartidos en 24 horas significan algo
+// muy distinto a un solo retiro grande.
+//
+// Por eso además del sesgo se mide la PERSISTENCIA: si el flujo va siempre para el mismo lado
+// o se contradice. Un flujo persistente vale mucho más que uno intenso pero errático.
+// ───────────────────────────────────────────────────────────────────────────
+export function perfilTemporalWallets(analisis, horas = 24){
+  if(!analisis?.hayDatos || !analisis.movimientos?.length) return null;
+  const movs = analisis.movimientos.filter(m => m.cuenta && m.ts);
+  if(movs.length < 2) return null;
+
+  const ahora = Date.now();
+  const desde = ahora - horas * 3600e3;
+  const dentro = movs.filter(m => m.ts >= desde);
+  if(!dentro.length) return null;
+
+  // Se divide la ventana en 4 tramos para ver si el flujo se sostiene o cambia
+  const tramos = [[], [], [], []];
+  const largoTramo = (horas * 3600e3) / 4;
+  for(const m of dentro){
+    const idx = Math.min(3, Math.floor((m.ts - desde) / largoTramo));
+    tramos[idx].push(m);
+  }
+
+  const sesgoDe = (arr) => {
+    const sale = arr.filter(m => m.sesgo === 'ALCISTA').reduce((s,m)=>s+m.usd, 0);
+    const entra = arr.filter(m => m.sesgo === 'BAJISTA').reduce((s,m)=>s+m.usd, 0);
+    const tot = sale + entra;
+    return tot > 0 ? (sale - entra) / tot : null;   // +1 acumulación, -1 distribución
+  };
+
+  const porTramo = tramos.map(sesgoDe);
+  const conDatos = porTramo.filter(x => x != null);
+
+  // PERSISTENCIA: qué porcentaje de los tramos con datos apunta al mismo lado que el total
+  const sesgoTotal = sesgoDe(dentro);
+  let persistencia = null;
+  if(conDatos.length >= 2 && sesgoTotal != null && Math.abs(sesgoTotal) > 0.05){
+    const mismoLado = conDatos.filter(x => (x > 0) === (sesgoTotal > 0)).length;
+    persistencia = Math.round(mismoLado / conDatos.length * 100);
+  }
+
+  const salidaUsd = dentro.filter(m => m.sesgo === 'ALCISTA').reduce((s,m)=>s+m.usd, 0);
+  const entradaUsd = dentro.filter(m => m.sesgo === 'BAJISTA').reduce((s,m)=>s+m.usd, 0);
+  const total = salidaUsd + entradaUsd;
+
+  // Los porcentajes para las barras
+  const acumulacion = total > 0 ? Math.round(salidaUsd / total * 100) : 0;
+  const distribucion = total > 0 ? Math.round(entradaUsd / total * 100) : 0;
+
+  // La confianza no es solo la magnitud: un flujo persistente y repartido vale más que
+  // un solo movimiento grande, aunque el monto sea parecido.
+  const confianza = (() => {
+    if(persistencia == null) return 'débil';
+    const puntos = (persistencia >= 75 ? 2 : persistencia >= 50 ? 1 : 0)
+                 + (dentro.length >= 8 ? 2 : dentro.length >= 4 ? 1 : 0)
+                 + (Math.abs(sesgoTotal) >= 0.5 ? 1 : 0);
+    return puntos >= 4 ? 'fuerte' : puntos >= 2 ? 'moderada' : 'débil';
+  })();
+
+  return {
+    horas, movimientos: dentro.length,
+    acumulacion, distribucion, persistencia,
+    salidaUsd: Math.round(salidaUsd), entradaUsd: Math.round(entradaUsd),
+    netoUsd: Math.round(salidaUsd - entradaUsd),
+    direccion: sesgoTotal > 0.15 ? 'ACUMULACIÓN' : sesgoTotal < -0.15 ? 'DISTRIBUCIÓN' : 'EQUILIBRADO',
+    confianza,
+    porTramo: porTramo.map(x => x == null ? null : +x.toFixed(2)),
+    resumen: (() => {
+      const dir = sesgoTotal > 0.15 ? 'acumulación' : sesgoTotal < -0.15 ? 'distribución' : 'sin sesgo claro';
+      if(dir === 'sin sesgo claro') return `En las últimas ${horas}h los flujos están equilibrados: entra y sale una cantidad parecida.`;
+      const persistente = persistencia >= 75;
+      return `${dir === 'acumulación' ? 'Se están retirando tokens de exchanges' : 'Se están depositando tokens en exchanges'} de forma ${persistente ? 'sostenida' : 'irregular'} en las últimas ${horas}h ` +
+             `($${(Math.abs(salidaUsd - entradaUsd)/1000).toFixed(0)}K netos en ${dentro.length} movimientos).` +
+             (persistencia != null ? ` El flujo se mantuvo hacia el mismo lado en el ${persistencia}% de los tramos.` : '');
+    })(),
+    aclaracion: 'La persistencia importa más que el monto: un flujo sostenido en el tiempo dice más que un solo movimiento grande.',
+  };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
 // 4. PUENTE CON EL MOTOR
 // Convierte el análisis en la estructura que espera TheHaton.
 // NO suma al score: devuelve evidencia para registrar y medir después.
@@ -307,8 +390,12 @@ export function construirEvidenciaOnChain(analisis, dirTesis, marketCapUsd, volu
     };
   }
 
+  const perfil = perfilTemporalWallets(analisis, 24);
+
   return {
     contexto,
+    // El perfil temporal: acumulación/distribución/persistencia, no una transferencia suelta
+    perfil,
     presion: analisis.presion,
     direccion: analisis.direccion === 'ALCISTA' ? 'LONG' : analisis.direccion === 'BAJISTA' ? 'SHORT' : 'NEUTRO',
     confianza: analisis.confianza,
