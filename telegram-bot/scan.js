@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, sintetizarTesis, detallesQueImportan, decidirQueHacer, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -1154,36 +1154,6 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
   for(const {symbol, tag} of candidates){
     if(acc.theses.find(t=>t.symbol===symbol)) continue; // ya hay una tesis abierta para esa moneda
 
-    // ═══ ESPERA DESPUÉS DE CERRAR ═══
-    // Antes solo se miraban las tesis ABIERTAS, así que una moneda que cerraba en TP2 a las 13:00
-    // podía volver a abrirse a las 13:30 en la misma dirección. Eso trae tres problemas:
-    //  · Son la misma apuesta: si el movimiento se da vuelta, se pierde dos veces por lo mismo.
-    //  · Se entra tarde: si ya alcanzó los objetivos, el movimiento ya ocurrió.
-    //  · El Research Center las cuenta como operaciones independientes cuando no lo son.
-    //
-    // La espera depende de cómo cerró, porque no todos los cierres significan lo mismo:
-    //  · Ganó y llegó a los objetivos → el movimiento ya se dio: 12h antes de volver
-    //  · Perdió por stop → la lectura estaba mal: 8h para no insistir con una tesis fallida
-    //  · Cerró en breakeven → menos concluyente: 4h
-    const cerradaReciente = (acc.closedTrades||[])
-      .filter(t => t.symbol === symbol && t.closedAt)
-      .sort((a,b) => b.closedAt - a.closedAt)[0];
-    if(cerradaReciente){
-      const horas = (Date.now() - cerradaReciente.closedAt) / 3600000;
-      const motivo = String(cerradaReciente.motivoCierre || '');
-      const espera = /TP2|TP1/i.test(motivo) ? 12
-                   : /stop/i.test(motivo) ? 8
-                   : 4;
-      if(horas < espera){
-        // Solo se frena si además va en la MISMA dirección: si el mercado se dio vuelta
-        // y ahora la señal es al revés, es una tesis distinta y tiene sentido tomarla.
-        const mismaDireccion = cerradaReciente.dir === dir;
-        if(mismaDireccion){
-          console.log(`  ⏸️ ${symbol}: cerró hace ${horas.toFixed(1)}h por "${motivo}" en la misma dirección (${dir}). Se espera a ${espera}h para no repetir la misma apuesta.`);
-          continue;
-        }
-      }
-    }
     try{
       const data = await fetchTokenData(symbol, '4h');
       if(!data.candles || data.candles.length<220) continue;
@@ -1196,6 +1166,32 @@ async function scanForTheses(state, candidates, capitalFlow, btcReference4h){
       const result = computeScore(data, macro, news, state.memory, marketContext, btcReference);
       const best = Math.max(result.longScore, result.shortScore);
       console.log(`${symbol}${tag}`, result.recommendation, best.toFixed(1));
+
+      // ═══ ESPERA DESPUÉS DE CERRAR ═══
+      // Va acá y no antes: necesita `result.recommendation` para saber si la señal nueva va
+      // en la misma dirección que la que cerró. Antes estaba arriba de computeScore y usaba
+      // una variable `dir` que no existía en ese punto — eso tiraba ReferenceError y mataba
+      // toda la fase de búsqueda de tesis.
+      //
+      // Por qué existe: si una moneda cerró en TP2 a las 13:00, sin esto podía reabrirse a las
+      // 13:30 en la misma dirección. Son la misma apuesta, y además se entra tarde.
+      // La espera depende de cómo cerró: 12h si llegó a los objetivos, 8h si fue por stop,
+      // 4h en breakeven (que es el caso menos concluyente).
+      if(result.recommendation !== 'NO OPERAR'){
+        const cerradaReciente = (acc.closedTrades||[])
+          .filter(t => t.symbol === symbol && t.closedAt)
+          .sort((a,b) => b.closedAt - a.closedAt)[0];
+        if(cerradaReciente){
+          const horas = (Date.now() - cerradaReciente.closedAt) / 3600000;
+          const motivo = String(cerradaReciente.motivoCierre || '');
+          const espera = /TP2|TP1/i.test(motivo) ? 12 : /stop/i.test(motivo) ? 8 : 4;
+          // Solo frena si va en la MISMA dirección: si el mercado se dio vuelta, es otra tesis.
+          if(horas < espera && cerradaReciente.dir === result.recommendation){
+            console.log(`  ⏸️ ${symbol}: cerró hace ${horas.toFixed(1)}h por "${motivo}" en la misma dirección (${result.recommendation}). Se espera a ${espera}h para no repetir la misma apuesta.`);
+            continue;
+          }
+        }
+      }
 
       updateSharedMemory(state, symbol, result.recommendation);
 
@@ -2459,6 +2455,53 @@ async function confirmTheses(state, capitalFlow){
 
           (matrizGrandes && matrizGrandes.cuadrante !== 'SIN DEFINIR'
             ? `${DIV}\n${matrizGrandes.alineado===true?'🟢':matrizGrandes.alineado===false?'🔴':'⚪'} <b>${matrizGrandes.cuadrante}</b>\n${matrizGrandes.texto}\n${matrizGrandes.aviso?`⚠️ ${matrizGrandes.aviso}\n`:''}\n` : '') +
+          // ═══ LA TESIS, CRUZADA ═══
+          // Va antes que el detalle: es la síntesis de todo lo que sigue. Cruza las capas en
+          // vez de listarlas — dice "la estructura favorece LONG pero hay una pared vendedora
+          // que puede frenarlo", no "estructura alcista" y por otro lado "pared vendedora".
+          (() => {
+            try{
+              const s = sintetizarTesis({
+                result: result15, setup,
+                liquidez: lecturaLiq, libro: libroOrdenes,
+                flujo: calcularPresionFlujo(data15.candles, 24),
+                wallets, onchain, apalancamiento: null,
+                compresion: (()=>{ try{ return detectTrianguloCompresion(data15.candles); }catch(e){ return null; } })(),
+                cinta: (()=>{ try{ return calidadTendenciaCinta(data15.candles); }catch(e){ return null; } })(),
+                matrizGrandes, fase: result15.marketPhase?.fase,
+                detalles: (()=>{ try{
+                  return detallesQueImportan({
+                    candles: data15.candles, price: entryPrice,
+                    marketCap: data15.marketCap, vol24hUsd: data15.vol24h,
+                    atrPct: result15.metrics?.atrPct, dirTesis: thesis.dir });
+                }catch(e){ return []; } })(),
+                calendario: (()=>{ try{ return calendarioMacro(); }catch(e){ return null; } })(),
+                dirTesis: thesis.dir,
+              });
+              if(!s) return '';
+              // ═══ LA DECISIÓN VA PRIMERO ═══
+              // Antes el mensaje decía "tesis condicionada con 6 obstáculos" y quien lo leía
+              // tenía que deducir qué hacer. Ahora lo dice: entrar, esperar (y a qué), entrar
+              // reducido (y cuánto), o descartar (y por qué).
+              const d = decidirQueHacer({
+                sintesis: s, result: result15, setup,
+                liquidez: lecturaLiq, libro: libroOrdenes,
+                compresion: (()=>{ try{ return detectTrianguloCompresion(data15.candles); }catch(e){ return null; } })(),
+                cinta: (()=>{ try{ return calidadTendenciaCinta(data15.candles); }catch(e){ return null; } })(),
+                apalancamiento: null,
+                calendario: (()=>{ try{ return calendarioMacro(); }catch(e){ return null; } })(),
+                flujo: calcularPresionFlujo(data15.candles, 24),
+                retrocesoCinta: (()=>{ try{ return entradaRetrocesoCinta(data15.candles, result15.structure, thesis.dir, data4h?.candles); }catch(e){ return null; } })(),
+              });
+              let out = `${DIV}\n${d.resumen}\n<i>${d.detalle}</i>\n`;
+              if(d.esperas?.length > 1){
+                out += `\nTambién habría que ver: ${d.esperas.slice(1).map(e=>e.queEsperar).join('; ')}.\n`;
+              }
+              out += `\n<b>LA TESIS</b> — ${s.veredicto}\n${s.texto}\n\n`;
+              return out;
+            }catch(e){ return ''; }
+          })() +
+
           (lecturaMercado ? `${DIV}\n${lecturaMercado.texto}\n\n` : '') +
           (liqMultiTF ? (()=>{
             const fmt = v => v>=1 ? v.toFixed(4) : v.toPrecision(5);
@@ -3058,7 +3101,21 @@ async function main(){
   for(const symbol of CUSTOM_COINS){
     if(!pairs.includes(symbol)) candidates.push({symbol, tag:' (custom)'});
   }
-  await scanForTheses(state, candidates, capitalFlow, btcReference4h);
+  // ═══ PROTECCIÓN DEL GUARDADO ═══
+  // Si la búsqueda de tesis falla, el proceso moría ANTES de saveState. Eso hacía que todo lo
+  // hecho en esta corrida —cierres, TP1, breakeven— se perdiera, y en la próxima se volviera a
+  // detectar y a avisar. Era la causa del mismo mensaje de cierre cada 30 minutos.
+  // Ahora un error acá se registra pero no impide guardar lo que ya se hizo.
+  try{
+    await scanForTheses(state, candidates, capitalFlow, btcReference4h);
+  }catch(e){
+    console.error('❌ Error en la búsqueda de tesis nuevas:', e.message);
+    console.error(e.stack?.split('\n').slice(0,4).join('\n'));
+    sendPromises.push(sendTelegram(
+      `⚠️ <b>Error en el escaneo</b>\n\nNo se pudieron buscar tesis nuevas en esta corrida: ${e.message}\n\n` +
+      `Las operaciones abiertas se siguen gestionando normalmente y el estado se guardó igual.`
+    ));
+  }
 
   console.log('--- Fase 4: monedas de cap chico ($1M-$100M) para la Market Context Matrix ---');
   const midCaps = await getMidCapCandidates(state);
