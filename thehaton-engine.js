@@ -4583,7 +4583,10 @@ export function fmtPrecio(v, opciones = {}){
   // cambia el nivel.
   // Se toman los decimales que el número REALMENTE tiene, con un techo por si viene con
   // basura de coma flotante (0.1+0.2 = 0.30000000000000004).
-  const texto = String(n);
+  // Se toman los decimales reales, pero acotados: un número que viene de un cálculo puede
+  // arrastrar basura de coma flotante (0.1254021271 cuando lo útil es 0.12540). Doce dígitos
+  // significativos alcanzan para cualquier precio real de cripto.
+  const texto = Number(n.toPrecision(12)).toString();
   const decimalesReales = texto.includes('e')
     ? 12                                        // notación científica: se expande abajo
     : (texto.split('.')[1] || '').length;
@@ -4591,6 +4594,7 @@ export function fmtPrecio(v, opciones = {}){
   let decimales;
   if(abs >= 1000) decimales = Math.min(2, decimalesReales);
   else if(abs >= 1) decimales = Math.min(6, decimalesReales);
+  else if(abs >= 0.01) decimales = Math.min(8, decimalesReales);
   else if(abs >= 0.0001) decimales = Math.min(10, decimalesReales);
   else {
     // Muy chico: se cuentan los ceros y se dejan los dígitos que haya de verdad
@@ -4727,6 +4731,478 @@ export function contextoTransferencia(usd, marketCapUsd, volumenDiarioUsd){
     pctVolumenDiario: pctVol != null ? +pctVol.toFixed(1) : null,
     relevante: nivel === 'ALTO' || nivel === 'MUY ALTO',
     lectura: lecturas.length ? lecturas.join(' ') : `Movimiento chico para el tamaño de esta moneda: probablemente no mueva el precio.`,
+  };
+}
+
+// ═══ DETALLES QUE PASAN DESAPERCIBIDOS ═══
+// Cosas chicas que cambian la lectura y que normalmente nadie mira, porque no son un indicador
+// con nombre propio — son relaciones entre números que ya tenemos.
+export function detallesQueImportan({ candles, price, marketCap, vol24hUsd, atrPct, dirTesis }){
+  const hallazgos = [];
+  if(!Array.isArray(candles) || candles.length < 30) return hallazgos;
+
+  // ── 1. VOLUMEN CONTRA EL TAMAÑO DE LA MONEDA ──
+  // Este es el que pedías: market cap $36M con volumen $76M significa que la moneda entera
+  // cambió de manos DOS VECES en un día. Eso no pasa por casualidad.
+  if(marketCap > 0 && vol24hUsd > 0){
+    const rotacion = vol24hUsd / marketCap;
+    if(rotacion >= 2){
+      hallazgos.push({
+        tipo: 'rotacion', peso: 'alto',
+        texto: `El volumen de 24h ($${(vol24hUsd/1e6).toFixed(1)}M) es ${rotacion.toFixed(1)} veces el market cap ($${(marketCap/1e6).toFixed(1)}M): la moneda entera cambió de manos ${rotacion.toFixed(1)} veces en un día. Eso es rotación extrema — hay algo pasando, y los movimientos van a ser violentos en las dos direcciones.`,
+      });
+    } else if(rotacion >= 0.8){
+      hallazgos.push({
+        tipo: 'rotacion', peso: 'medio',
+        texto: `El volumen de 24h ($${(vol24hUsd/1e6).toFixed(1)}M) casi iguala al market cap ($${(marketCap/1e6).toFixed(1)}M). Hay mucho interés para el tamaño de esta moneda: los movimientos pueden ser más rápidos de lo habitual.`,
+      });
+    } else if(rotacion < 0.02 && marketCap > 1e6){
+      hallazgos.push({
+        tipo: 'rotacion', peso: 'medio',
+        texto: `El volumen es apenas el ${(rotacion*100).toFixed(1)}% del market cap: la moneda está prácticamente dormida. Con tan poca actividad, entrar y salir puede costar más que el movimiento que se busca.`,
+      });
+    }
+  }
+
+  // ── 2. EL VOLUMEN NO ACOMPAÑA AL PRECIO ──
+  // Si el precio sube pero cada vez con menos volumen, el movimiento se está quedando sin nafta.
+  const ult = candles.slice(-10);
+  if(ult.length === 10){
+    const precioSubio = ult.at(-1).c > ult[0].c;
+    const volPrimera = ult.slice(0,5).reduce((s,v)=>s+v.v,0);
+    const volSegunda = ult.slice(5).reduce((s,v)=>s+v.v,0);
+    if(volPrimera > 0){
+      const cambioVol = (volSegunda - volPrimera) / volPrimera;
+      const cambioPrecio = (ult.at(-1).c - ult[0].c) / ult[0].c;
+      if(Math.abs(cambioPrecio) > 0.015 && cambioVol < -0.3){
+        hallazgos.push({
+          tipo: 'divergencia-volumen', peso: 'alto',
+          texto: `El precio ${precioSubio?'subió':'bajó'} un ${Math.abs(cambioPrecio*100).toFixed(1)}% pero el volumen cayó un ${Math.abs(cambioVol*100).toFixed(0)}% en las últimas velas: el movimiento se está quedando sin combustible. Suele preceder un freno o una vuelta.`,
+        });
+      }
+    }
+  }
+
+  // ── 3. NÚMEROS REDONDOS ──
+  // La gente pone órdenes en precios redondos. Estar justo debajo de uno cambia las chances.
+  if(price > 0){
+    const magnitud = Math.pow(10, Math.floor(Math.log10(price)));
+    const redondoArriba = Math.ceil(price / (magnitud/2)) * (magnitud/2);
+    const redondoAbajo = Math.floor(price / (magnitud/2)) * (magnitud/2);
+    const distArriba = (redondoArriba - price) / price * 100;
+    const distAbajo = (price - redondoAbajo) / price * 100;
+    if(distArriba < 1.5 && distArriba > 0){
+      hallazgos.push({
+        tipo: 'psicologico', peso: 'medio',
+        texto: `El precio está a ${distArriba.toFixed(2)}% de $${fmtPrecio(redondoArriba)}, que es un número redondo. Ahí suele haber órdenes de venta acumuladas: es normal que frene antes de pasarlo.`,
+      });
+    } else if(distAbajo < 1.5 && distAbajo > 0){
+      hallazgos.push({
+        tipo: 'psicologico', peso: 'medio',
+        texto: `El precio está a ${distAbajo.toFixed(2)}% de $${fmtPrecio(redondoAbajo)}, un número redondo. Suele funcionar como soporte porque ahí se acumulan órdenes de compra.`,
+      });
+    }
+  }
+
+  // ── 4. ¿YA SE MOVIÓ TODO LO QUE SUELE MOVERSE HOY? ──
+  // Si el rango del día ya superó el ATR, queda poco recorrido esperable.
+  if(atrPct > 0 && candles.length >= 24){
+    const dia = candles.slice(-24);
+    const max = Math.max(...dia.map(v=>v.h)), min = Math.min(...dia.map(v=>v.l));
+    const rangoHoy = (max - min) / min * 100;
+    const proporcion = rangoHoy / atrPct;
+    if(proporcion >= 1.8){
+      hallazgos.push({
+        tipo: 'rango-agotado', peso: 'alto',
+        texto: `El rango de las últimas horas (${rangoHoy.toFixed(1)}%) ya es ${proporcion.toFixed(1)} veces la volatilidad típica de esta moneda. Estadísticamente queda poco recorrido: entrar acá es apostar a que el movimiento siga siendo excepcional.`,
+      });
+    }
+  }
+
+  // ── 5. LA ÚLTIMA VELA CONTRA EL PROMEDIO ──
+  // Una vela con volumen enorme y cuerpo chico es absorción: alguien está aguantando.
+  const ultima = candles.at(-1);
+  const volProm = candles.slice(-21, -1).reduce((s,v)=>s+v.v, 0) / 20;
+  if(volProm > 0 && ultima.v > volProm * 2.5){
+    const cuerpo = Math.abs(ultima.c - ultima.o);
+    const rango = ultima.h - ultima.l;
+    if(rango > 0 && cuerpo / rango < 0.3){
+      hallazgos.push({
+        tipo: 'absorcion', peso: 'alto',
+        texto: `La última vela tuvo ${(ultima.v/volProm).toFixed(1)}x el volumen normal pero casi no movió el precio (cuerpo del ${(cuerpo/rango*100).toFixed(0)}% del rango). Eso es absorción: alguien está tomando todo lo que se ofrece sin dejar que el precio se mueva. Suele preceder un movimiento fuerte hacia el lado del que absorbe.`,
+      });
+    }
+  }
+
+  return hallazgos;
+}
+
+// ═══ SÍNTESIS: LA TESIS COMPLETA, CRUZADA ═══
+// EL PROBLEMA QUE RESUELVE: hasta ahora cada capa hablaba por su cuenta. La estructura decía
+// una cosa, el libro otra, las wallets otra — y quien leía tenía que hacer la síntesis en la
+// cabeza. Peor: `explicarAnalisis` ni siquiera VE el libro, el flujo, las wallets o el
+// apalancamiento, así que la explicación se armaba ignorando la mitad de la evidencia.
+//
+// Esto lo cruza: no lista capas, las relaciona. En vez de
+//     "estructura alcista" + "hay una pared vendedora a 0.5%"
+// dice
+//     "la estructura favorece LONG, pero hay una pared vendedora a +0.5% que puede frenar
+//      el avance antes de TP1"
+//
+// La diferencia es que la segunda te dice QUÉ HACER con las dos cosas juntas.
+export function sintetizarTesis({
+  result, setup, liquidez, libro, flujo, wallets, onchain,
+  apalancamiento, compresion, cinta, matrizGrandes, fase, calendario, dirTesis,
+  // Detalles chicos que cambian la lectura: rotación del volumen, números redondos,
+  // absorción, rango agotado. No son indicadores con nombre propio, son relaciones
+  // entre números que ya tenemos — y justamente por eso pasan desapercibidos.
+  detalles,
+}){
+  const dir = dirTesis || (result?.recommendation !== 'NO OPERAR' ? result?.recommendation : null);
+  const esLong = dir === 'LONG';
+  const fmtP = v => v == null ? '—' : fmtPrecio(v);
+
+  // ── LO QUE SOSTIENE LA TESIS ──
+  const aFavor = [], enContra = [], avisos = [];
+
+  const empuja = (nombre, condicion, texto, lado) => {
+    if(!condicion) return;
+    (lado === 'contra' ? enContra : lado === 'aviso' ? avisos : aFavor).push({ nombre, texto });
+  };
+
+  // Componentes del score
+  for(const comp of (result?.componentes || [])){
+    if(Math.abs(comp.aporte) < 0.2) continue;
+    const aFavorDeLaTesis = dir ? ((comp.aporte > 0) === esLong) : comp.aporte > 0;
+    empuja(comp.n, true, `${comp.n} ${aFavorDeLaTesis ? 'empuja' : 'va en contra'} (${comp.aporte >= 0 ? '+' : ''}${comp.aporte.toFixed(2)})`,
+      aFavorDeLaTesis ? 'favor' : 'contra');
+  }
+
+  // Cinta de medias
+  if(cinta?.limpia){
+    empuja('Tendencia', true,
+      `la cinta de medias está ${cinta.direccion === 'LONG' ? 'subiendo' : 'bajando'} con fuerza`,
+      (dir && cinta.direccion === dir) ? 'favor' : 'contra');
+  } else if(cinta){
+    empuja('Tendencia', true, 'la cinta está plana: no hay tendencia definida', 'aviso');
+  }
+
+  // ── EL CRUCE QUE IMPORTA: ESTRUCTURA vs OBSTÁCULOS ──
+  // Acá es donde las capas dejan de hablar solas
+  const cruces = [];
+
+  // Pared del libro contra el primer objetivo
+  if(libro?.niveles?.length && setup?.t1 && result?.metrics?.price){
+    const precio = result.metrics.price;
+    const enElCamino = libro.niveles.filter(n => {
+      if(n.lado === (esLong ? 'venta' : 'compra')) {
+        const entre = esLong ? (n.precio > precio && n.precio < setup.t1)
+                             : (n.precio < precio && n.precio > setup.t1);
+        return entre && n.usd >= 50000;
+      }
+      return false;
+    }).sort((a,b) => b.usd - a.usd);
+    if(enElCamino.length){
+      const p = enElCamino[0];
+      cruces.push({
+        tipo: 'obstaculo', modulo: 'libro',
+        texto: `Hay una pared ${p.lado === 'venta' ? 'vendedora' : 'compradora'} de $${(p.usd/1000).toFixed(0)}K en $${fmtP(p.precio)}, justo entre el precio actual y TP1. El movimiento tiene que consumirla antes de llegar al objetivo.`,
+        nivel: p.precio,
+      });
+    }
+  }
+
+  // Liquidez del lado contrario a la tesis
+  if(liquidez?.ladoFuerte && liquidez.ladoFuerte !== 'pareja' && dir){
+    const liqEnContra = (esLong && liquidez.ladoFuerte === 'abajo') || (!esLong && liquidez.ladoFuerte === 'arriba');
+    if(liqEnContra){
+      cruces.push({
+        tipo: 'barrido', modulo: 'liquidez',
+        texto: `El imán de liquidez más fuerte está ${liquidez.ladoFuerte}, o sea del lado contrario a esta operación. Lo habitual es que el precio vaya primero a buscarlo y recién después gire a favor: ese retroceso puede ser normal y no significa que la tesis falló.`,
+      });
+    }
+  }
+
+  // Apalancamiento excesivo cambia el riesgo de todo lo demás
+  if(apalancamiento?.oiSobreMcap >= 30){
+    cruces.push({
+      tipo: 'riesgo', modulo: 'apalancamiento',
+      texto: `El interés abierto es el ${apalancamiento.oiSobreMcap}% del market cap. Con tanto apalancamiento, cualquier movimiento fuerte puede desatar liquidaciones en cadena y llevarse los stops por delante — conviene entrar con menos tamaño del habitual.`,
+    });
+  }
+
+  // Los grandes contra la multitud
+  if(apalancamiento?.divergencia && dir){
+    const grandesConmigo = apalancamiento.divergencia === dir;
+    cruces.push({
+      tipo: grandesConmigo ? 'apoyo' : 'contradiccion', modulo: 'apalancamiento',
+      texto: grandesConmigo
+        ? `Las posiciones grandes están del mismo lado que esta operación mientras la mayoría está al revés. Cuando se separan así, suele tener razón el lado grande.`
+        : `Las posiciones grandes están en ${apalancamiento.divergencia}, o sea del lado contrario a esta operación. Vale la pena revisar la tesis antes de entrar.`,
+    });
+  }
+
+  // Compresión: cambia el significado de todo lo demás
+  if(compresion?.compresionPct >= 40){
+    cruces.push({
+      tipo: 'compresion', modulo: 'grafico',
+      texto: `El rango se comprimió un ${compresion.compresionPct.toFixed(0)}%. Mientras el precio siga adentro, las señales de dirección valen poco: lo que importa es por qué lado rompe. Operar adentro de la compresión es lo que más falsas señales genera.`,
+    });
+  }
+
+  // Wallets confirmando o contradiciendo
+  if(wallets?.direccion && wallets.direccion !== 'NEUTRO' && dir){
+    const acompanan = wallets.direccion === dir;
+    cruces.push({
+      tipo: acompanan ? 'apoyo' : 'contradiccion', modulo: 'wallets',
+      texto: acompanan
+        ? `Los flujos on-chain acompañan: ${wallets.direccion === 'LONG' ? 'salen más tokens de exchanges de los que entran' : 'entran más tokens a exchanges de los que salen'}.`
+        : `Los flujos on-chain van en contra: ${wallets.direccion === 'LONG' ? 'están retirando tokens de exchanges' : 'están depositando tokens en exchanges'}, lo opuesto a lo que esperaría esta operación.`,
+    });
+  }
+
+  // Los detalles chicos: se suman a los cruces según su peso, no como lista aparte
+  for(const d of (detalles || [])){
+    if(d.peso === 'alto'){
+      cruces.push({
+        tipo: d.tipo === 'absorcion' ? 'apoyo' : 'riesgo',
+        modulo: d.tipo === 'rotacion' ? 'detalle' : 'grafico',
+        texto: d.texto,
+      });
+    } else {
+      avisos.push({ nombre: d.tipo, texto: d.texto });
+    }
+  }
+
+  // Evento macro inminente
+  if(calendario?.inminente && calendario.inminente.horas < 24){
+    cruces.push({
+      tipo: 'evento', modulo: 'calendario',
+      texto: `${calendario.inminente.nombre} sale en ${calendario.inminente.horas < 1 ? 'menos de una hora' : `${calendario.inminente.horas.toFixed(0)} horas`}. Los datos macro mueven el precio más que cualquier señal técnica: conviene esperar o reducir el tamaño.`,
+    });
+  }
+
+  // ── QUÉ CONFIRMARÍA Y QUÉ INVALIDARÍA ──
+  const confirmarian = [];
+  if(compresion?.techo && compresion?.piso){
+    confirmarian.push(`que rompa $${fmtP(esLong ? compresion.techo : compresion.piso)} con volumen`);
+  }
+  if(libro?.niveles?.length){
+    const pared = cruces.find(x => x.tipo === 'obstaculo');
+    if(pared) confirmarian.push(`que consuma la pared de $${fmtP(pared.nivel)}`);
+  }
+  if(flujo && flujo.sesgo !== (esLong ? 'COMPRADOR' : 'VENDEDOR')){
+    confirmarian.push(`que el flujo agresivo se dé vuelta hacia ${esLong ? 'compras' : 'ventas'}`);
+  }
+  if(!confirmarian.length && setup?.t1) confirmarian.push(`que sostenga por ${esLong ? 'encima' : 'debajo'} de $${fmtP(result?.metrics?.price)} y avance hacia $${fmtP(setup.t1)}`);
+
+  const invalidan = [];
+  if(setup?.stop) invalidan.push(`que toque $${fmtP(setup.stop)}`);
+  if(cinta?.limpia && dir && cinta.direccion !== dir) invalidan.push(`la cinta ya apunta al lado contrario`);
+  if(liquidez?.confluencia) invalidan.push(`que pierda el nivel de $${fmtP(liquidez.confluencia.precio)}, que coincide en 15m y 4h`);
+
+  // ── LA NARRATIVA ──
+  const parrafos = [];
+
+  // 1) Qué está pasando
+  if(!dir){
+    parrafos.push(`No hay una ventaja clara: ${aFavor.length} señales apuntan a un lado y ${enContra.length} al otro. Cuando las señales están divididas, lo que más suele costar plata es forzar una entrada.`);
+  } else {
+    const cuantas = aFavor.length;
+    parrafos.push(`La lectura es ${dir}${result?.confidence ? ` con ${result.confidence}% de confianza` : ''}: ${cuantas} señal${cuantas===1?'':'es'} lo respalda${cuantas===1?'':'n'}${fase ? `, en una fase de mercado de ${fase}` : ''}.`);
+  }
+
+  // 2) Por qué — las que más pesan
+  if(aFavor.length){
+    parrafos.push(`Lo que más empuja: ${aFavor.slice(0,3).map(x=>x.texto).join('; ')}.`);
+  }
+
+  // 3) Lo que lo pone en riesgo — LOS CRUCES, que es lo nuevo
+  const obstaculos = cruces.filter(x => ['obstaculo','barrido','riesgo','contradiccion','compresion','evento'].includes(x.tipo));
+  if(obstaculos.length){
+    parrafos.push(`⚠️ ${obstaculos.map(x=>x.texto).join(' ')}`);
+  }
+  const apoyos = cruces.filter(x => x.tipo === 'apoyo');
+  if(apoyos.length) parrafos.push(`✅ ${apoyos.map(x=>x.texto).join(' ')}`);
+
+  // Los detalles de peso medio: se mencionan al final, sin ocupar el lugar de lo importante
+  if(avisos.length){
+    parrafos.push(`ℹ️ ${avisos.slice(0,2).map(x=>x.texto).join(' ')}`);
+  }
+
+  // 4) Qué confirmaría y qué invalidaría
+  if(confirmarian.length) parrafos.push(`📈 Confirmaría la tesis: ${confirmarian.join(', o ')}.`);
+  if(invalidan.length) parrafos.push(`❌ La invalidaría: ${invalidan.join('; ')}.`);
+
+  return {
+    direccion: dir,
+    aFavor, enContra, avisos, cruces,
+    confirmarian, invalidan,
+    // El número de obstáculos importa: con 3 o más, la tesis está muy condicionada
+    obstaculos: obstaculos.length,
+    veredicto: !dir ? 'ESPERAR'
+      : obstaculos.length >= 3 ? 'TESIS CONDICIONADA'
+      : obstaculos.length >= 1 ? 'CON RESERVAS'
+      : 'CAMINO DESPEJADO',
+    texto: parrafos.join('\n\n'),
+  };
+}
+
+// ═══ LA DECISIÓN — QUÉ HACER CON TODA ESA INFORMACIÓN ═══
+// El paso que faltaba. Hasta acá el sistema describía: "tesis condicionada, 6 obstáculos".
+// Eso no le sirve a nadie para operar. Un analista de verdad, con la misma información, diría:
+//     "Hay short pero todavía no. Esperá a que rompa X con volumen, o que el precio suba a Y
+//      para entrar con mejor precio. Si pasa Z, descartá la idea."
+//
+// Esto aplica un orden de prioridad, porque no todas las señales pesan igual:
+//   1. Lo que bloquea del todo (no se opera, punto)
+//   2. Lo que obliga a esperar (la idea sirve, el momento no)
+//   3. Lo que reduce el tamaño (se opera, pero con menos)
+//   4. Lo que confirma (se opera normal)
+export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, compresion,
+                                   cinta, apalancamiento, calendario, flujo, retrocesoCinta }){
+  const dir = sintesis?.direccion;
+  const precio = result?.metrics?.price;
+  const fmtP = v => v == null ? '—' : fmtPrecio(v);
+  const esLong = dir === 'LONG';
+
+  // ── NIVEL 1: LO QUE BLOQUEA ──
+  // Son cosas donde operar es directamente mala idea, sin importar lo demás.
+  const bloqueos = [];
+  if(!dir) bloqueos.push({
+    motivo: 'No hay dirección clara',
+    detalle: 'Las señales están divididas. Sin una ventaja definida, cualquier entrada es una moneda al aire.',
+  });
+  if(calendario?.enCurso) bloqueos.push({
+    motivo: `${calendario.enCurso.nombre} está saliendo ahora`,
+    detalle: 'El precio puede moverse de forma violenta e impredecible en los próximos minutos. Ni el mejor análisis técnico sirve contra un dato macro saliendo.',
+  });
+  if(cinta?.limpia && dir && cinta.direccion !== dir) bloqueos.push({
+    motivo: `La tendencia de fondo apunta a ${cinta.direccion}`,
+    detalle: `Operar ${dir} contra una tendencia limpia y sana es de las cosas que más caro salen. Si querés operar esta moneda, es del otro lado.`,
+  });
+  if(setup?.stop && precio){
+    const riesgo = Math.abs(precio - setup.stop) / precio * 100;
+    if(riesgo > 15) bloqueos.push({
+      motivo: `El stop queda a ${riesgo.toFixed(1)}%`,
+      detalle: 'Con un stop tan ancho, el tamaño de posición se vuelve tan chico que la operación no vale la pena, o el riesgo por operación se dispara.',
+    });
+  }
+
+  // ── NIVEL 2: LO QUE OBLIGA A ESPERAR ──
+  // La idea sirve, pero este no es el momento. Y acá está lo importante: A QUÉ ESPERAR.
+  const esperas = [];
+  if(compresion?.techo && compresion?.piso && precio){
+    const dentro = precio <= compresion.techo && precio >= compresion.piso;
+    if(dentro) esperas.push({
+      motivo: 'El precio está adentro de una compresión',
+      queEsperar: `que rompa $${fmtP(esLong ? compresion.techo : compresion.piso)} con volumen`,
+      nivel: esLong ? compresion.techo : compresion.piso,
+      porque: 'Adentro de la compresión las señales de dirección valen poco: es donde más falsas rupturas hay. La salida suele ser rápida y del tamaño del rango comprimido.',
+    });
+  }
+  // Liquidez del lado contrario: conviene esperar el barrido y entrar más barato
+  const imanContra = liquidez && dir &&
+    ((esLong && liquidez.ladoFuerte === 'abajo') || (!esLong && liquidez.ladoFuerte === 'arriba'));
+  if(imanContra){
+    const nivel = esLong ? (liquidez.cercanaAbajo?.precio ?? null) : (liquidez.cercanaArriba?.precio ?? null);
+    esperas.push({
+      motivo: `El imán de liquidez está ${liquidez.ladoFuerte}, del lado contrario`,
+      queEsperar: nivel
+        ? `que el precio vaya a buscar $${fmtP(nivel)} y rebote desde ahí`
+        : `que barra la liquidez contraria antes de entrar`,
+      nivel,
+      porque: 'Entrar antes del barrido es comerse el movimiento en contra. Esperarlo da mejor precio y un stop más ajustado.',
+    });
+  }
+  // Pared del libro entre el precio y el objetivo
+  const pared = sintesis?.cruces?.find(x => x.tipo === 'obstaculo' && x.nivel);
+  if(pared) esperas.push({
+    motivo: 'Hay una pared de órdenes antes del objetivo',
+    queEsperar: `que consuma la pared de $${fmtP(pared.nivel)}`,
+    nivel: pared.nivel,
+    porque: 'Si el objetivo está detrás de una pared, es probable que el precio frene ahí y no llegue. Entrar después de que la consuma cambia mucho las chances.',
+  });
+  // El flujo agresivo va en contra
+  if(flujo?.sesgo && dir && flujo.sesgo !== 'EQUILIBRADO'){
+    const flujoAFavor = (flujo.sesgo === 'COMPRADOR') === esLong;
+    if(!flujoAFavor) esperas.push({
+      motivo: `El flujo agresivo es ${flujo.sesgo.toLowerCase()}`,
+      queEsperar: `que el volumen se dé vuelta hacia ${esLong ? 'compras' : 'ventas'}`,
+      nivel: null,
+      porque: `Ahora mismo quien tiene urgencia está del otro lado: ${flujo.pctComprador}% del volumen es comprador. Entrar contra eso es remar.`,
+    });
+  }
+
+  // ── NIVEL 3: LO QUE REDUCE EL TAMAÑO ──
+  const reducen = [];
+  if(apalancamiento?.oiSobreMcap >= 30) reducen.push({
+    motivo: `Apalancamiento muy alto (OI ${apalancamiento.oiSobreMcap}% del market cap)`,
+    cuanto: 0.5,
+    porque: 'Con tanto apalancamiento, una liquidación en cadena puede llevarse el stop por delante y el cierre real ser peor que el previsto.',
+  });
+  if(apalancamiento?.divergencia && dir && apalancamiento.divergencia !== dir) reducen.push({
+    motivo: 'Las posiciones grandes están del lado contrario',
+    cuanto: 0.6,
+    porque: 'Cuando los grandes y la multitud se separan, suele tener razón el lado grande.',
+  });
+  if(libro?.alertaSpread) reducen.push({
+    motivo: 'El libro está fino',
+    cuanto: 0.7,
+    porque: 'La orden se puede ejecutar bastante peor que el precio que ves, y eso se come parte del objetivo.',
+  });
+  if(calendario?.inminente && calendario.inminente.horas < 12) reducen.push({
+    motivo: `${calendario.inminente.nombre} en ${calendario.inminente.horas.toFixed(0)}h`,
+    cuanto: 0.6,
+    porque: 'Los datos macro mueven el precio más que cualquier señal técnica.',
+  });
+
+  // ── LA DECISIÓN ──
+  let accion, titulo, detalle;
+  const tamano = reducen.reduce((t, r) => t * r.cuanto, 1);
+
+  if(bloqueos.length){
+    accion = 'DESCARTAR';
+    titulo = 'No operar esta moneda ahora';
+    detalle = bloqueos.map(b => `${b.motivo}: ${b.detalle}`).join(' ');
+  } else if(esperas.length){
+    accion = 'ESPERAR';
+    const principal = esperas[0];
+    titulo = `Hay ${dir}, pero todavía no`;
+    detalle = `${principal.porque} Lo que hay que esperar: ${esperas.map(e => e.queEsperar).join(', o ')}.`;
+  } else if(retrocesoCinta?.confirma){
+    accion = 'ENTRAR';
+    titulo = `Entrada ${dir} con las tres condiciones cumplidas`;
+    detalle = 'Tendencia limpia, el precio retrocedió a la zona de las medias, y hay ruptura de estructura confirmando. Es el escenario más selectivo del sistema.';
+  } else if(tamano < 0.8){
+    accion = 'ENTRAR REDUCIDO';
+    titulo = `${dir} viable, pero con menos tamaño`;
+    detalle = `No hay nada que bloquee ni que obligue a esperar, pero ${reducen.length === 1 ? 'hay un factor' : `hay ${reducen.length} factores`} que aumentan el riesgo: ${reducen.map(r=>r.motivo.toLowerCase()).join(', ')}.`;
+  } else {
+    accion = 'ENTRAR';
+    titulo = `Entrada ${dir} sin obstáculos`;
+    detalle = 'Las señales se alinean y no hay nada relevante en contra.';
+  }
+
+  // El nivel concreto a vigilar: es lo primero que hay que mirar mañana
+  const nivelClave = esperas.find(e => e.nivel)?.nivel
+    ?? (accion === 'ENTRAR' || accion === 'ENTRAR REDUCIDO' ? setup?.stop : null);
+
+  return {
+    accion, titulo, detalle,
+    bloqueos, esperas, reducen,
+    // Cuánto del tamaño normal, redondeado a algo usable
+    tamanoSugerido: accion.startsWith('ENTRAR') ? Math.round(tamano * 100) : 0,
+    nivelClave,
+    // El texto de una línea, que es lo que se lee primero
+    resumen: (() => {
+      const emoji = accion === 'DESCARTAR' ? '🚫' : accion === 'ESPERAR' ? '⏸️'
+                  : accion === 'ENTRAR REDUCIDO' ? '🟡' : '🟢';
+      let base = `${emoji} <b>${titulo}</b>`;
+      if(accion === 'ESPERAR' && nivelClave) base += ` — vigilar $${fmtP(nivelClave)}`;
+      if(accion === 'ENTRAR REDUCIDO') base += ` — ${Math.round(tamano*100)}% del tamaño habitual`;
+      return base;
+    })(),
   };
 }
 
