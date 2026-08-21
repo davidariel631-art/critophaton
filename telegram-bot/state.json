@@ -26,7 +26,7 @@
   },
   "account": {
     "id": 1,
-    "capital": 59.8217,
+    "capital": 60.3574,
     "initialCapital": 100,
     "openPositions": [
       {
@@ -50074,6 +50074,354 @@
         "pnlPct": -1.561,
         "motivoCierre": "stop antes de TP1",
         "closedAt": 1787268663093
+      },
+      {
+        "id": "1787214723989_B2",
+        "symbol": "B2",
+        "dir": "SHORT",
+        "tag": " (cap chico)",
+        "status": "ACTIVE",
+        "conviction": 79,
+        "detectedAt": 1787214723989,
+        "expiresAt": 1787279523989,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1787214723989,
+            "note": "Tesis detectada en 4h: SHORT (score 7.9/10, confianza 58%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Derivados. Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1787215862440,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 75% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787216491827,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 71% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787218284953,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1787219040343,
+            "note": "Entrada CONFIRMADA en 15m (Momentum Continuation: pullback a EMA20 dentro de una tendencia ya fuerte). Entrada: $0.456, Stop: $0.46968, TP1: $0.440268, TP2: $0.431376. riesgo reducido a 1.0% (drawdown 41% o 1 pérdidas seguidas)."
+          },
+          {
+            "ts": 1787240543799,
+            "note": "TP1 alcanzado ($0.440268). Se tomó el 60% de la ganancia (+0.41 USDT) y se movió el Stop al punto de entrada. El 40% restante sigue corriendo hacia TP2 ($0.431376), con el stop ya en el punto de entrada."
+          },
+          {
+            "ts": 1787279465359,
+            "note": "Volvió al punto de entrada después de TP1: se cierra el 40% final (+0.00 USDT). Resultado total: +0.41 USDT. Capital: 59.82."
+          }
+        ],
+        "theoEntry": 0.454,
+        "theoStop": 0.48124000000000006,
+        "theoTp1": 0.41313999999999995,
+        "timeline": [
+          {
+            "ts": 1787214723989,
+            "etapa": "🔭 Detectada",
+            "detalle": "score 7.9/10 en 4h"
+          },
+          {
+            "ts": 1787219040343,
+            "etapa": "🟢 Confirmada",
+            "detalle": "por Pullback + MACD temprano"
+          },
+          {
+            "ts": 1787219040343,
+            "etapa": "🚀 Entrada",
+            "detalle": "$0.456"
+          },
+          {
+            "ts": 1787240543801,
+            "etapa": "🎯 TP1 alcanzado",
+            "detalle": "se tomó el 60% y el stop pasó a breakeven"
+          },
+          {
+            "ts": 1787279465359,
+            "etapa": "⚖️ Cerrada en breakeven",
+            "detalle": "+0.41 USDT"
+          }
+        ],
+        "abiertaEnDrawdownAlto": true,
+        "drawdownAlDetectar": 41.17,
+        "score4h": 7.9,
+        "score15m": 6.5,
+        "score": 7.9,
+        "confianza": 31,
+        "dataQuality": 76,
+        "marketPhase": "MARKDOWN",
+        "registro": {
+          "componentes": [
+            {
+              "n": "Macro (4h)",
+              "aporte": -1.1,
+              "senal": -1
+            },
+            {
+              "n": "Tendencia",
+              "aporte": -1.05,
+              "senal": -1
+            },
+            {
+              "n": "Momentum",
+              "aporte": 0.48,
+              "senal": 0.6
+            },
+            {
+              "n": "Estructura",
+              "aporte": -0.36,
+              "senal": -0.4
+            },
+            {
+              "n": "Derivados",
+              "aporte": 0.2,
+              "senal": 0.3
+            },
+            {
+              "n": "Dominancias",
+              "aporte": 0,
+              "senal": 0
+            }
+          ],
+          "ajusteCalidad": 0.31,
+          "estocastico": 74.81481481481485,
+          "rsi": 48.57069032164616,
+          "adx": 34.535007422526235,
+          "divergencia": null,
+          "triangulo": null,
+          "liquidezAFavor": null,
+          "fuerzaVolumen": 64,
+          "caminos": "Pullback + MACD temprano",
+          "horasHastaConfirmar": 1.2,
+          "porValvulaEscape": false,
+          "gestion": {
+            "stopPct": 3,
+            "rTp1": 1.15,
+            "rTp2": 1.8,
+            "rTp3": 2.5,
+            "atrPct": 0.79,
+            "stopEstructural": null
+          },
+          "mfe": 1.21,
+          "mae": 0,
+          "ifvg": "resistencia",
+          "imbalance": null,
+          "rupturaTriangulo": null,
+          "onChain": null,
+          "apalancamiento": null,
+          "libro": null,
+          "flujoOrdenes": null,
+          "wallets": null,
+          "actividadAnomala": null,
+          "diosesAFavor": [
+            "Dios de Tendencia",
+            "Dios Smart Money",
+            "Dios Macro (4h)",
+            "Dios VWAP"
+          ],
+          "parecidasAlEntrar": {
+            "cantidad": 24,
+            "winRate": 50
+          }
+        },
+        "entry": 0.456,
+        "stop": 0.456,
+        "tp1": 0.440268,
+        "tp2": 0.431376,
+        "tp3": 0.42179999999999995,
+        "units": 17.20061403508769,
+        "originalUnits": 43.00153508771922,
+        "riskPct": 0.01,
+        "confirmedAt": 1787219040343,
+        "partialTaken": true,
+        "originalStop": 0.46968000000000004,
+        "originalRisk": 0.013680000000000025,
+        "entryAt": 1787219040343,
+        "stopHistory": [
+          {
+            "tipo": "ORIGINAL",
+            "precio": 0.46968000000000004,
+            "desde": 1787219040343,
+            "hasta": 1787240543799
+          },
+          {
+            "tipo": "BREAKEVEN",
+            "precio": 0.456,
+            "desde": 1787240543799,
+            "hasta": null
+          }
+        ],
+        "tipoSetup": "Pullback",
+        "horaConfirmacion": 9,
+        "committeeSnapshot": [
+          {
+            "name": "📈 Dios de Tendencia",
+            "vote": "SHORT"
+          },
+          {
+            "name": "⚡ Dios Momentum",
+            "vote": "LONG"
+          },
+          {
+            "name": "🧠 Dios Smart Money",
+            "vote": "SHORT"
+          },
+          {
+            "name": "💰 Dios Derivados",
+            "vote": "LONG"
+          },
+          {
+            "name": "🌐 Dios Macro (4h)",
+            "vote": "SHORT"
+          },
+          {
+            "name": "💧 Dios Capital Flow",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "⚠️ Dios Gestión de Riesgo",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📡 Dios Radar del Mercado",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "🧠 Dios Memoria",
+            "vote": "LONG"
+          },
+          {
+            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios VWAP",
+            "vote": "SHORT"
+          },
+          {
+            "name": "📉 Dios CVD",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios Market Context Matrix",
+            "vote": "NEUTRAL"
+          }
+        ],
+        "auditoria": {
+          "minDesdeEntrada": 0.4324,
+          "maxDesdeEntrada": 0.4594,
+          "eventos": [
+            {
+              "ts": 1787257860371,
+              "precio": 0.4344
+            },
+            {
+              "ts": 1787258322250,
+              "precio": 0.4342
+            },
+            {
+              "ts": 1787259668267,
+              "precio": 0.436
+            },
+            {
+              "ts": 1787261457672,
+              "precio": 0.4359
+            },
+            {
+              "ts": 1787261807385,
+              "precio": 0.4355
+            },
+            {
+              "ts": 1787263112036,
+              "precio": 0.4389
+            },
+            {
+              "ts": 1787263272480,
+              "precio": 0.4383
+            },
+            {
+              "ts": 1787265057755,
+              "precio": 0.4408
+            },
+            {
+              "ts": 1787265424727,
+              "precio": 0.4412
+            },
+            {
+              "ts": 1787266781419,
+              "precio": 0.4411
+            },
+            {
+              "ts": 1787268662111,
+              "precio": 0.4393
+            },
+            {
+              "ts": 1787268863698,
+              "precio": 0.4404
+            },
+            {
+              "ts": 1787270076473,
+              "precio": 0.4421
+            },
+            {
+              "ts": 1787270472430,
+              "precio": 0.4422
+            },
+            {
+              "ts": 1787272259775,
+              "precio": 0.4439
+            },
+            {
+              "ts": 1787274075810,
+              "precio": 0.4455
+            },
+            {
+              "ts": 1787275859577,
+              "precio": 0.4516
+            },
+            {
+              "ts": 1787277062975,
+              "precio": 0.4541
+            },
+            {
+              "ts": 1787277672612,
+              "precio": 0.4535
+            },
+            {
+              "ts": 1787279465002,
+              "precio": 0.4556
+            }
+          ],
+          "ultimaMedicion": {
+            "ts": 1787279465002,
+            "desde": 1787256665001,
+            "velas": 26,
+            "low": 0.4325,
+            "high": 0.4561,
+            "precio": 0.4556
+          },
+          "slTocadoDesdeEntrada": true,
+          "tp1TocadoDesdeEntrada": true,
+          "minDesdeBE": 0.4324,
+          "maxDesdeBE": 0.4561
+        },
+        "priceFailCount": 0,
+        "lastCheckedAt": 1787279465002,
+        "tp1HitAt": 1787240543799,
+        "breakEvenActivatedAt": 1787240543799,
+        "partialPnl": 0.4059000899999998,
+        "exit": 0.456,
+        "alcanzoTp1": true,
+        "pnlPctTramoFinal": 0,
+        "result": "win",
+        "pnl": 0.4059,
+        "pnlUsd": 0.4059,
+        "pnlPct": 2.07,
+        "motivoCierre": "breakeven tras TP1",
+        "closedAt": 1787279465360
       }
     ],
     "tradesToday": {
@@ -50224,16 +50572,12 @@
           }
         ],
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277669729,
+        "lastCheckedAt": 1787279462029,
         "lastNarrationAt": 1787277058722,
         "auditoria": {
           "minDesdeEntrada": 0.00827,
           "maxDesdeEntrada": 0.009139,
           "eventos": [
-            {
-              "ts": 1787256074637,
-              "precio": 0.008942
-            },
             {
               "ts": 1787257858619,
               "precio": 0.008987
@@ -50309,15 +50653,19 @@
             {
               "ts": 1787277669729,
               "precio": 0.009107
+            },
+            {
+              "ts": 1787279462029,
+              "precio": 0.009113
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277669729,
-            "desde": 1787254869729,
-            "velas": 25,
-            "low": 0.008942,
-            "high": 0.009139,
-            "precio": 0.009107
+            "ts": 1787279462029,
+            "desde": 1787256662029,
+            "velas": 26,
+            "low": 0.008941,
+            "high": 0.009134,
+            "precio": 0.009113
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
@@ -50762,21 +51110,25 @@
             {
               "ts": 1787277670107,
               "precio": 0.042732
+            },
+            {
+              "ts": 1787279462456,
+              "precio": 0.042764
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277670107,
+            "ts": 1787279462456,
             "desde": 1787266796739,
-            "velas": 13,
+            "velas": 15,
             "low": 0.042193,
             "high": 0.043444,
-            "precio": 0.042732
+            "precio": 0.042764
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277670107
+        "lastCheckedAt": 1787279462456
       },
       {
         "id": "1787209216938_DUSK",
@@ -51075,10 +51427,6 @@
           "maxDesdeEntrada": 0.07336,
           "eventos": [
             {
-              "ts": 1787256075011,
-              "precio": 0.07055
-            },
-            {
               "ts": 1787257858932,
               "precio": 0.07078
             },
@@ -51153,21 +51501,25 @@
             {
               "ts": 1787277670470,
               "precio": 0.07192
+            },
+            {
+              "ts": 1787279462802,
+              "precio": 0.07227
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277670470,
-            "desde": 1787254870469,
+            "ts": 1787279462802,
+            "desde": 1787256662802,
             "velas": 26,
-            "low": 0.07034,
+            "low": 0.07056,
             "high": 0.0729,
-            "precio": 0.07192
+            "precio": 0.07227
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277670470
+        "lastCheckedAt": 1787279462802
       },
       {
         "id": "1787209318337_ETHW",
@@ -51385,7 +51737,7 @@
             "atrPct": 0.78,
             "stopEstructural": null
           },
-          "mfe": 0.08,
+          "mfe": 0.19,
           "mae": -0.33,
           "ifvg": "soporte",
           "imbalance": null,
@@ -51490,12 +51842,8 @@
         ],
         "auditoria": {
           "minDesdeEntrada": 0.266,
-          "maxDesdeEntrada": 0.2736,
+          "maxDesdeEntrada": 0.2738,
           "eventos": [
-            {
-              "ts": 1787256075398,
-              "precio": 0.2682
-            },
             {
               "ts": 1787257859213,
               "precio": 0.2705
@@ -51571,21 +51919,25 @@
             {
               "ts": 1787277670830,
               "precio": 0.2716
+            },
+            {
+              "ts": 1787279463141,
+              "precio": 0.2736
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277670830,
-            "desde": 1787254870830,
+            "ts": 1787279463141,
+            "desde": 1787256663141,
             "velas": 26,
-            "low": 0.2676,
-            "high": 0.2736,
-            "precio": 0.2716
+            "low": 0.2679,
+            "high": 0.2738,
+            "precio": 0.2736
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277670830
+        "lastCheckedAt": 1787279463141
       },
       {
         "id": "1787209331346_EDEN",
@@ -51899,10 +52251,6 @@
           "maxDesdeEntrada": 0.05669,
           "eventos": [
             {
-              "ts": 1787256075778,
-              "precio": 0.05465
-            },
-            {
               "ts": 1787257859503,
               "precio": 0.05446
             },
@@ -51977,275 +52325,25 @@
             {
               "ts": 1787277671186,
               "precio": 0.05512
+            },
+            {
+              "ts": 1787279463518,
+              "precio": 0.0545
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277671186,
-            "desde": 1787254871186,
+            "ts": 1787279463518,
+            "desde": 1787256663518,
             "velas": 26,
             "low": 0.05376,
             "high": 0.05628,
-            "precio": 0.05512
+            "precio": 0.0545
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277671186
-      },
-      {
-        "id": "1787212905222_YB",
-        "symbol": "YB",
-        "dir": "LONG",
-        "tag": " (cap chico)",
-        "status": "WATCHING",
-        "conviction": 77,
-        "detectedAt": 1787212905222,
-        "expiresAt": 1787277705222,
-        "breakEvenMoved": false,
-        "journal": [
-          {
-            "ts": 1787212905222,
-            "note": "Tesis detectada en 4h: LONG (score 7.7/10, confianza 55%). A favor: Dios de Tendencia, Dios Smart Money, Dios Derivados, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
-          },
-          {
-            "ts": 1787214689720,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 84 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787215856455,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787216486604,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787218279298,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787219034565,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787220098488,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 80 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787221878779,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787222395944,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787223692350,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787225482543,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787225752355,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787227075798,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 84 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787227295181,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787229084201,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787230899191,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787231124924,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787232685611,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787234129368,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787234501476,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787236294302,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787237225929,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787238093565,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787239883733,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787240566200,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787241698456,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787243488316,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787244330973,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787245296903,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787247076321,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787247534942,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787248889896,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787250676594,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787252007213,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787252494893,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787254284655,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787254728295,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787256095769,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 97 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787257875191,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 97 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787258340945,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 98 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787259692341,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787261474993,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787261826461,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 97 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787263136799,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787263294206,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787265077304,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787265444400,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787266801693,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 98 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787268680335,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787268879950,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787270094793,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787270488823,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787272276729,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787274089543,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787275876413,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787277077507,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787277686713,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          }
-        ],
-        "theoEntry": 0.0781,
-        "theoStop": 0.07520410186101127,
-        "theoTp1": 0.0824438472084831,
-        "timeline": [
-          {
-            "ts": 1787212905222,
-            "etapa": "🔭 Detectada",
-            "detalle": "score 7.7/10 en 4h"
-          }
-        ],
-        "abiertaEnDrawdownAlto": true,
-        "drawdownAlDetectar": 41.73,
-        "score4h": 7.7
+        "lastCheckedAt": 1787279463518
       },
       {
         "id": "1787212911714_YGG",
@@ -52497,10 +52595,6 @@
           "maxDesdeEntrada": 0.02164,
           "eventos": [
             {
-              "ts": 1787256076510,
-              "precio": 0.02071
-            },
-            {
               "ts": 1787257860088,
               "precio": 0.02087
             },
@@ -52575,15 +52669,19 @@
             {
               "ts": 1787277671561,
               "precio": 0.02121
+            },
+            {
+              "ts": 1787279464111,
+              "precio": 0.02127
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277671561,
-            "desde": 1787254871561,
+            "ts": 1787279464111,
+            "desde": 1787256664111,
             "velas": 26,
-            "low": 0.02066,
+            "low": 0.02071,
             "high": 0.02164,
-            "precio": 0.02121
+            "precio": 0.02127
           },
           "slTocadoDesdeEntrada": true,
           "tp1TocadoDesdeEntrada": true,
@@ -52591,260 +52689,10 @@
           "maxDesdeBE": 0.02164
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277671561,
+        "lastCheckedAt": 1787279464111,
         "tp1HitAt": 1787268661380,
         "breakEvenActivatedAt": 1787268661380,
         "partialPnl": 0.487080108
-      },
-      {
-        "id": "1787212920162_USUAL",
-        "symbol": "USUAL",
-        "dir": "LONG",
-        "tag": " (cap chico)",
-        "status": "WATCHING",
-        "conviction": 81,
-        "detectedAt": 1787212920162,
-        "expiresAt": 1787277720162,
-        "breakEvenMoved": false,
-        "journal": [
-          {
-            "ts": 1787212920162,
-            "note": "Tesis detectada en 4h: LONG (score 8.1/10, confianza 62%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Derivados. Bajando a 15m a buscar confirmación de entrada."
-          },
-          {
-            "ts": 1787214693698,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 83% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787215859444,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 83% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787216489228,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 84% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787218281984,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 96% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787219037560,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787220102416,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787221881673,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787222400582,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787223693869,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787225484319,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 94% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787225753830,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 94% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787227077282,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 96% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787227297214,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787229085674,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787230900940,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787231126401,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787232687387,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 86 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787234130865,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787234503330,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787236296351,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 86 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787237227365,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787238095237,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787239884978,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787240567587,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787241700230,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 99 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787243489897,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787244332688,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787245298559,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787247077653,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787247536595,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787248891372,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787250678173,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 91 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787252008869,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787252496504,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787254286780,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787254732296,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787256097325,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 86 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787257876534,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787258342508,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787259693819,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787261476455,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787261828297,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787263138690,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787263295830,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787265078951,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787265445868,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787268682216,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 91 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787268881458,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787270096484,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 91 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787270490361,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787272278294,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787274090908,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787275878269,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787277079319,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          },
-          {
-            "ts": 1787277688382,
-            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
-          }
-        ],
-        "theoEntry": 0.009133,
-        "theoStop": 0.0086764,
-        "theoTp1": 0.009817900000000001,
-        "timeline": [
-          {
-            "ts": 1787212920162,
-            "etapa": "🔭 Detectada",
-            "detalle": "score 8.1/10 en 4h"
-          }
-        ],
-        "abiertaEnDrawdownAlto": true,
-        "drawdownAlDetectar": 41.73,
-        "score4h": 8.1
       },
       {
         "id": "1787212923669_INX",
@@ -53233,7 +53081,7 @@
           }
         ],
         "auditoria": {
-          "minDesdeEntrada": 0.00827,
+          "minDesdeEntrada": 0.00825,
           "maxDesdeEntrada": 0.00843,
           "eventos": [
             {
@@ -53275,351 +53123,25 @@
             {
               "ts": 1787277672249,
               "precio": 0.00828
+            },
+            {
+              "ts": 1787279464657,
+              "precio": 0.00835
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277672249,
+            "ts": 1787279464657,
             "desde": 1787265447526,
-            "velas": 14,
-            "low": 0.00827,
+            "velas": 16,
+            "low": 0.00825,
             "high": 0.00843,
-            "precio": 0.00828
+            "precio": 0.00835
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277672249
-      },
-      {
-        "id": "1787214723989_B2",
-        "symbol": "B2",
-        "dir": "SHORT",
-        "tag": " (cap chico)",
-        "status": "ACTIVE",
-        "conviction": 79,
-        "detectedAt": 1787214723989,
-        "expiresAt": 1787279523989,
-        "breakEvenMoved": false,
-        "journal": [
-          {
-            "ts": 1787214723989,
-            "note": "Tesis detectada en 4h: SHORT (score 7.9/10, confianza 58%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Derivados. Bajando a 15m a buscar confirmación de entrada."
-          },
-          {
-            "ts": 1787215862440,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 75% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787216491827,
-            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 71% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
-          },
-          {
-            "ts": 1787218284953,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1787219040343,
-            "note": "Entrada CONFIRMADA en 15m (Momentum Continuation: pullback a EMA20 dentro de una tendencia ya fuerte). Entrada: $0.456, Stop: $0.46968, TP1: $0.440268, TP2: $0.431376. riesgo reducido a 1.0% (drawdown 41% o 1 pérdidas seguidas)."
-          },
-          {
-            "ts": 1787240543799,
-            "note": "TP1 alcanzado ($0.440268). Se tomó el 60% de la ganancia (+0.41 USDT) y se movió el Stop al punto de entrada. El 40% restante sigue corriendo hacia TP2 ($0.431376), con el stop ya en el punto de entrada."
-          }
-        ],
-        "theoEntry": 0.454,
-        "theoStop": 0.48124000000000006,
-        "theoTp1": 0.41313999999999995,
-        "timeline": [
-          {
-            "ts": 1787214723989,
-            "etapa": "🔭 Detectada",
-            "detalle": "score 7.9/10 en 4h"
-          },
-          {
-            "ts": 1787219040343,
-            "etapa": "🟢 Confirmada",
-            "detalle": "por Pullback + MACD temprano"
-          },
-          {
-            "ts": 1787219040343,
-            "etapa": "🚀 Entrada",
-            "detalle": "$0.456"
-          },
-          {
-            "ts": 1787240543801,
-            "etapa": "🎯 TP1 alcanzado",
-            "detalle": "se tomó el 60% y el stop pasó a breakeven"
-          }
-        ],
-        "abiertaEnDrawdownAlto": true,
-        "drawdownAlDetectar": 41.17,
-        "score4h": 7.9,
-        "score15m": 6.5,
-        "score": 7.9,
-        "confianza": 31,
-        "dataQuality": 76,
-        "marketPhase": "MARKDOWN",
-        "registro": {
-          "componentes": [
-            {
-              "n": "Macro (4h)",
-              "aporte": -1.1,
-              "senal": -1
-            },
-            {
-              "n": "Tendencia",
-              "aporte": -1.05,
-              "senal": -1
-            },
-            {
-              "n": "Momentum",
-              "aporte": 0.48,
-              "senal": 0.6
-            },
-            {
-              "n": "Estructura",
-              "aporte": -0.36,
-              "senal": -0.4
-            },
-            {
-              "n": "Derivados",
-              "aporte": 0.2,
-              "senal": 0.3
-            },
-            {
-              "n": "Dominancias",
-              "aporte": 0,
-              "senal": 0
-            }
-          ],
-          "ajusteCalidad": 0.31,
-          "estocastico": 74.81481481481485,
-          "rsi": 48.57069032164616,
-          "adx": 34.535007422526235,
-          "divergencia": null,
-          "triangulo": null,
-          "liquidezAFavor": null,
-          "fuerzaVolumen": 64,
-          "caminos": "Pullback + MACD temprano",
-          "horasHastaConfirmar": 1.2,
-          "porValvulaEscape": false,
-          "gestion": {
-            "stopPct": 3,
-            "rTp1": 1.15,
-            "rTp2": 1.8,
-            "rTp3": 2.5,
-            "atrPct": 0.79,
-            "stopEstructural": null
-          },
-          "mfe": 1.21,
-          "mae": 0,
-          "ifvg": "resistencia",
-          "imbalance": null,
-          "rupturaTriangulo": null,
-          "onChain": null,
-          "apalancamiento": null,
-          "libro": null,
-          "flujoOrdenes": null,
-          "wallets": null,
-          "actividadAnomala": null,
-          "diosesAFavor": [
-            "Dios de Tendencia",
-            "Dios Smart Money",
-            "Dios Macro (4h)",
-            "Dios VWAP"
-          ],
-          "parecidasAlEntrar": {
-            "cantidad": 24,
-            "winRate": 50
-          }
-        },
-        "entry": 0.456,
-        "stop": 0.456,
-        "tp1": 0.440268,
-        "tp2": 0.431376,
-        "tp3": 0.42179999999999995,
-        "units": 17.20061403508769,
-        "originalUnits": 43.00153508771922,
-        "riskPct": 0.01,
-        "confirmedAt": 1787219040343,
-        "partialTaken": true,
-        "originalStop": 0.46968000000000004,
-        "originalRisk": 0.013680000000000025,
-        "entryAt": 1787219040343,
-        "stopHistory": [
-          {
-            "tipo": "ORIGINAL",
-            "precio": 0.46968000000000004,
-            "desde": 1787219040343,
-            "hasta": 1787240543799
-          },
-          {
-            "tipo": "BREAKEVEN",
-            "precio": 0.456,
-            "desde": 1787240543799,
-            "hasta": null
-          }
-        ],
-        "tipoSetup": "Pullback",
-        "horaConfirmacion": 9,
-        "committeeSnapshot": [
-          {
-            "name": "📈 Dios de Tendencia",
-            "vote": "SHORT"
-          },
-          {
-            "name": "⚡ Dios Momentum",
-            "vote": "LONG"
-          },
-          {
-            "name": "🧠 Dios Smart Money",
-            "vote": "SHORT"
-          },
-          {
-            "name": "💰 Dios Derivados",
-            "vote": "LONG"
-          },
-          {
-            "name": "🌐 Dios Macro (4h)",
-            "vote": "SHORT"
-          },
-          {
-            "name": "💧 Dios Capital Flow",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "⚠️ Dios Gestión de Riesgo",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📡 Dios Radar del Mercado",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "🧠 Dios Memoria",
-            "vote": "LONG"
-          },
-          {
-            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📊 Dios VWAP",
-            "vote": "SHORT"
-          },
-          {
-            "name": "📉 Dios CVD",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📊 Dios Market Context Matrix",
-            "vote": "NEUTRAL"
-          }
-        ],
-        "auditoria": {
-          "minDesdeEntrada": 0.4324,
-          "maxDesdeEntrada": 0.4594,
-          "eventos": [
-            {
-              "ts": 1787256076882,
-              "precio": 0.4334
-            },
-            {
-              "ts": 1787257860371,
-              "precio": 0.4344
-            },
-            {
-              "ts": 1787258322250,
-              "precio": 0.4342
-            },
-            {
-              "ts": 1787259668267,
-              "precio": 0.436
-            },
-            {
-              "ts": 1787261457672,
-              "precio": 0.4359
-            },
-            {
-              "ts": 1787261807385,
-              "precio": 0.4355
-            },
-            {
-              "ts": 1787263112036,
-              "precio": 0.4389
-            },
-            {
-              "ts": 1787263272480,
-              "precio": 0.4383
-            },
-            {
-              "ts": 1787265057755,
-              "precio": 0.4408
-            },
-            {
-              "ts": 1787265424727,
-              "precio": 0.4412
-            },
-            {
-              "ts": 1787266781419,
-              "precio": 0.4411
-            },
-            {
-              "ts": 1787268662111,
-              "precio": 0.4393
-            },
-            {
-              "ts": 1787268863698,
-              "precio": 0.4404
-            },
-            {
-              "ts": 1787270076473,
-              "precio": 0.4421
-            },
-            {
-              "ts": 1787270472430,
-              "precio": 0.4422
-            },
-            {
-              "ts": 1787272259775,
-              "precio": 0.4439
-            },
-            {
-              "ts": 1787274075810,
-              "precio": 0.4455
-            },
-            {
-              "ts": 1787275859577,
-              "precio": 0.4516
-            },
-            {
-              "ts": 1787277062975,
-              "precio": 0.4541
-            },
-            {
-              "ts": 1787277672612,
-              "precio": 0.4535
-            }
-          ],
-          "ultimaMedicion": {
-            "ts": 1787277672612,
-            "desde": 1787254872612,
-            "velas": 26,
-            "low": 0.4325,
-            "high": 0.4555,
-            "precio": 0.4535
-          },
-          "slTocadoDesdeEntrada": true,
-          "tp1TocadoDesdeEntrada": true,
-          "minDesdeBE": 0.4324,
-          "maxDesdeBE": 0.4555
-        },
-        "priceFailCount": 0,
-        "lastCheckedAt": 1787277672612,
-        "tp1HitAt": 1787240543799,
-        "breakEvenActivatedAt": 1787240543799,
-        "partialPnl": 0.4059000899999998
+        "lastCheckedAt": 1787279464657
       },
       {
         "id": "1787214725241_CGPT",
@@ -53850,6 +53372,10 @@
           },
           {
             "ts": 1787277690250,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1787279480006,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -54285,21 +53811,25 @@
             {
               "ts": 1787277673241,
               "precio": 0.007335
+            },
+            {
+              "ts": 1787279465754,
+              "precio": 0.007371
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277673241,
+            "ts": 1787279465754,
             "desde": 1787263301344,
-            "velas": 16,
+            "velas": 18,
             "low": 0.007312,
             "high": 0.007444,
-            "precio": 0.007335
+            "precio": 0.007371
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277673241
+        "lastCheckedAt": 1787279465754
       },
       {
         "id": "1787214740590_NAORIS",
@@ -54534,6 +54064,10 @@
           },
           {
             "ts": 1787277692360,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1787279482031,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -54780,6 +54314,10 @@
           },
           {
             "ts": 1787277694675,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1787279484043,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -55031,6 +54569,10 @@
           {
             "ts": 1787277696593,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1787279486457,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.07428,
@@ -55276,6 +54818,10 @@
           },
           {
             "ts": 1787277698523,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279488547,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -55523,6 +55069,10 @@
           {
             "ts": 1787277700756,
             "note": "Confirmación descartada: el TP1 quedaría detrás de una barrera de liquidez ($0.0199225, 4 toques) y ajustarlo antes de esa barrera daría un R:R de solo 0.25:1. No vale la pena la operación."
+          },
+          {
+            "ts": 1787279490461,
+            "note": "Confirmación descartada: el TP1 quedaría detrás de una barrera de liquidez ($0.0199225, 4 toques) y ajustarlo antes de esa barrera daría un R:R de solo 0.38:1. No vale la pena la operación."
           }
         ],
         "theoEntry": 0.01858,
@@ -55765,6 +55315,10 @@
           {
             "ts": 1787277702378,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 81 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279492258,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 81 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.1393,
@@ -55999,6 +55553,10 @@
           {
             "ts": 1787277704224,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279493935,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.007295,
@@ -56228,6 +55786,10 @@
           },
           {
             "ts": 1787277705413,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279495166,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -56657,6 +56219,10 @@
           {
             "ts": 1787277710669,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279498427,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 10.588,
@@ -56886,6 +56452,10 @@
           },
           {
             "ts": 1787277712272,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1787279500337,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -57117,6 +56687,10 @@
           {
             "ts": 1787277714362,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 91 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279502352,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.3621,
@@ -57309,6 +56883,10 @@
           {
             "ts": 1787258376733,
             "note": "Entrada CONFIRMADA en 15m (Momentum Continuation: pullback a EMA20 dentro de una tendencia ya fuerte). Entrada: $0.03375, Stop: $0.03304395, TP1: $0.03480908, TP2: $0.03586815. riesgo reducido a 1.0% (drawdown 40% o 1 pérdidas seguidas)."
+          },
+          {
+            "ts": 1787279466099,
+            "note": "TP1 alcanzado ($0.03480908). Se tomó el 60% de la ganancia (+0.54 USDT) y se movió el Stop al punto de entrada. El 40% restante sigue corriendo hacia TP2 ($0.03586815), con el stop ya en el punto de entrada."
           }
         ],
         "theoEntry": 0.03343,
@@ -57329,6 +56907,11 @@
             "ts": 1787258376733,
             "etapa": "🚀 Entrada",
             "detalle": "$0.03375"
+          },
+          {
+            "ts": 1787279466100,
+            "etapa": "🎯 TP1 alcanzado",
+            "detalle": "se tomó el 60% y el stop pasó a breakeven"
           }
         ],
         "abiertaEnDrawdownAlto": true,
@@ -57391,7 +56974,7 @@
             "atrPct": 0.41,
             "stopEstructural": null
           },
-          "mfe": 1.23,
+          "mfe": 1.47,
           "mae": 0,
           "ifvg": "soporte",
           "imbalance": null,
@@ -57418,15 +57001,15 @@
           }
         },
         "entry": 0.03375,
-        "stop": 0.03304395,
+        "stop": 0.03375,
         "tp1": 0.034809075,
         "tp2": 0.03586815,
         "tp3": 0.03728025,
-        "units": 842.9700446144044,
+        "units": 337.1880178457618,
         "originalUnits": 842.9700446144044,
         "riskPct": 0.01,
         "confirmedAt": 1787258376733,
-        "partialTaken": false,
+        "partialTaken": true,
         "originalStop": 0.03304395,
         "originalRisk": 0.0007060499999999997,
         "entryAt": 1787258376733,
@@ -57435,6 +57018,12 @@
             "tipo": "ORIGINAL",
             "precio": 0.03304395,
             "desde": 1787258376733,
+            "hasta": 1787279466099
+          },
+          {
+            "tipo": "BREAKEVEN",
+            "precio": 0.03375,
+            "desde": 1787279466099,
             "hasta": null
           }
         ],
@@ -57496,7 +57085,7 @@
         ],
         "auditoria": {
           "minDesdeEntrada": 0.03373,
-          "maxDesdeEntrada": 0.03475,
+          "maxDesdeEntrada": 0.03484,
           "eventos": [
             {
               "ts": 1787259669310,
@@ -57565,21 +57154,30 @@
             {
               "ts": 1787277673603,
               "precio": 0.03462
+            },
+            {
+              "ts": 1787279466099,
+              "precio": 0.03479
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277673603,
+            "ts": 1787279466099,
             "desde": 1787258376733,
-            "velas": 22,
+            "velas": 24,
             "low": 0.03373,
-            "high": 0.03475,
-            "precio": 0.03462
+            "high": 0.03484,
+            "precio": 0.03479
           },
           "slTocadoDesdeEntrada": false,
-          "tp1TocadoDesdeEntrada": false
+          "tp1TocadoDesdeEntrada": true,
+          "minDesdeBE": null,
+          "maxDesdeBE": null
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277673603
+        "lastCheckedAt": 1787279466099,
+        "tp1HitAt": 1787279466099,
+        "breakEvenActivatedAt": 1787279466099,
+        "partialPnl": 0.5356611
       },
       {
         "id": "1787220186917_FORM",
@@ -57919,7 +57517,7 @@
         ],
         "auditoria": {
           "minDesdeEntrada": 0.2407,
-          "maxDesdeEntrada": 0.2519,
+          "maxDesdeEntrada": 0.2533,
           "eventos": [
             {
               "ts": 1787257861079,
@@ -57996,23 +57594,27 @@
             {
               "ts": 1787277674018,
               "precio": 0.2475
+            },
+            {
+              "ts": 1787279466464,
+              "precio": 0.2512
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277674018,
-            "desde": 1787256133561,
-            "velas": 24,
+            "ts": 1787279466464,
+            "desde": 1787256666464,
+            "velas": 26,
             "low": 0.2407,
-            "high": 0.2519,
-            "precio": 0.2475
+            "high": 0.2533,
+            "precio": 0.2512
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": true,
           "minDesdeBE": 0.2462,
-          "maxDesdeBE": 0.2519
+          "maxDesdeBE": 0.2533
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277674018,
+        "lastCheckedAt": 1787279466464,
         "tp1HitAt": 1787272261100,
         "breakEvenActivatedAt": 1787272261100,
         "partialPnl": 0.4049630699999997
@@ -58231,6 +57833,10 @@
           {
             "ts": 1787277719650,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279509277,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.0914,
@@ -58439,7 +58045,7 @@
             "atrPct": 1.12,
             "stopEstructural": null
           },
-          "mfe": 0.01,
+          "mfe": 0.22,
           "mae": -0.37,
           "ifvg": "soporte",
           "imbalance": null,
@@ -58542,12 +58148,8 @@
         ],
         "auditoria": {
           "minDesdeEntrada": 0.01328,
-          "maxDesdeEntrada": 0.01371,
+          "maxDesdeEntrada": 0.01382,
           "eventos": [
-            {
-              "ts": 1787256078006,
-              "precio": 0.01338
-            },
             {
               "ts": 1787257861362,
               "precio": 0.01333
@@ -58623,21 +58225,25 @@
             {
               "ts": 1787277674771,
               "precio": 0.01347
+            },
+            {
+              "ts": 1787279467125,
+              "precio": 0.01379
             }
           ],
           "ultimaMedicion": {
-            "ts": 1787277674771,
-            "desde": 1787254874771,
+            "ts": 1787279467125,
+            "desde": 1787256667125,
             "velas": 26,
             "low": 0.01328,
-            "high": 0.01371,
-            "precio": 0.01347
+            "high": 0.01382,
+            "precio": 0.01379
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1787277674771
+        "lastCheckedAt": 1787279467125
       }
     ],
     "expiredTheses": [
@@ -121648,6 +121254,520 @@
         "drawdownAlDetectar": 41.73,
         "score4h": 7.7,
         "wouldHaveWon": true
+      },
+      {
+        "id": "1787212905222_YB",
+        "symbol": "YB",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 77,
+        "detectedAt": 1787212905222,
+        "expiresAt": 1787277705222,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1787212905222,
+            "note": "Tesis detectada en 4h: LONG (score 7.7/10, confianza 55%). A favor: Dios de Tendencia, Dios Smart Money, Dios Derivados, Dios Macro (4h). Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1787214689720,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 84 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787215856455,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787216486604,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787218279298,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787219034565,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787220098488,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 80 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787221878779,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787222395944,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787223692350,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787225482543,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787225752355,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787227075798,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 84 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787227295181,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787229084201,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787230899191,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787231124924,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787232685611,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787234129368,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787234501476,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236294302,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787237225929,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787238093565,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787239883733,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787240566200,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787241698456,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787243488316,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787244330973,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787245296903,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787247076321,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787247534942,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787248889896,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787250676594,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787252007213,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787252494893,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787254284655,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787254728295,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787256095769,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 97 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787257875191,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 97 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787258340945,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 98 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787259692341,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787261474993,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787261826461,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 97 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787263136799,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787263294206,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787265077304,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787265444400,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787266801693,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 98 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787268680335,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787268879950,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787270094793,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787270488823,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787272276729,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787274089543,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787275876413,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787277077507,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787277686713,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279477323,
+            "note": "Expiró sin confirmación después de 18h. Simulación pasiva (si hubiéramos entrado igual): ✅ HUBIERA GANADO. Se archiva (el historial nunca se borra)."
+          }
+        ],
+        "theoEntry": 0.0781,
+        "theoStop": 0.07520410186101127,
+        "theoTp1": 0.0824438472084831,
+        "timeline": [
+          {
+            "ts": 1787212905222,
+            "etapa": "🔭 Detectada",
+            "detalle": "score 7.7/10 en 4h"
+          }
+        ],
+        "abiertaEnDrawdownAlto": true,
+        "drawdownAlDetectar": 41.73,
+        "score4h": 7.7,
+        "wouldHaveWon": true
+      },
+      {
+        "id": "1787212920162_USUAL",
+        "symbol": "USUAL",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 81,
+        "detectedAt": 1787212920162,
+        "expiresAt": 1787277720162,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1787212920162,
+            "note": "Tesis detectada en 4h: LONG (score 8.1/10, confianza 62%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Derivados. Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1787214693698,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 83% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787215859444,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 83% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787216489228,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 84% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787218281984,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 96% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787219037560,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787220102416,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787221881673,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787222400582,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787223693869,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 95% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787225484319,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 94% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787225753830,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 94% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787227077282,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 96% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1787227297214,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787229085674,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787230900940,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787231126401,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787232687387,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 86 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787234130865,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787234503330,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787236296351,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 86 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787237227365,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787238095237,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787239884978,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787240567587,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787241700230,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 99 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787243489897,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787244332688,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787245298559,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787247077653,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 96 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787247536595,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 95 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787248891372,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 94 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787250678173,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 91 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787252008869,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 93 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787252496504,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787254286780,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787254732296,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 87 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787256097325,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 86 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787257876534,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787258342508,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787259693819,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787261476455,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787261828297,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787263138690,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787263295830,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787265078951,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787265445868,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 92 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787268682216,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 91 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787268881458,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787270096484,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 91 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787270490361,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787272278294,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 90 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787274090908,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787275878269,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787277079319,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 89 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787277688382,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 88 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1787279477718,
+            "note": "Expiró sin confirmación después de 18h. Simulación pasiva (si hubiéramos entrado igual): ✅ HUBIERA GANADO. Se archiva (el historial nunca se borra)."
+          }
+        ],
+        "theoEntry": 0.009133,
+        "theoStop": 0.0086764,
+        "theoTp1": 0.009817900000000001,
+        "timeline": [
+          {
+            "ts": 1787212920162,
+            "etapa": "🔭 Detectada",
+            "detalle": "score 8.1/10 en 4h"
+          }
+        ],
+        "abiertaEnDrawdownAlto": true,
+        "drawdownAlDetectar": 41.73,
+        "score4h": 8.1,
+        "wouldHaveWon": true
       }
     ]
   },
@@ -121659,15 +121779,15 @@
     },
     "SEI": {
       "lastRecommendation": "LONG",
-      "ts": 1787277720809
+      "ts": 1787279510580
     },
     "JUP": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277721386
+      "ts": 1787279511279
     },
     "STRK": {
-      "lastRecommendation": "LONG",
-      "ts": 1787277723892
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1787279514418
     },
     "ENA": {
       "lastRecommendation": "LONG",
@@ -121675,7 +121795,7 @@
     },
     "W": {
       "lastRecommendation": "LONG",
-      "ts": 1787277724462
+      "ts": 1787279514993
     },
     "TNSR": {
       "lastRecommendation": "LONG",
@@ -121743,7 +121863,7 @@
     },
     "BSB": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277748414
+      "ts": 1787279541322
     },
     "RING": {
       "lastRecommendation": "NO OPERAR",
@@ -121827,7 +121947,7 @@
     },
     "CORE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277745266
+      "ts": 1787279537708
     },
     "REAL": {
       "lastRecommendation": "NO OPERAR",
@@ -121847,7 +121967,7 @@
     },
     "TIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277720239
+      "ts": 1787279509954
     },
     "CATE": {
       "lastRecommendation": "NO OPERAR",
@@ -122023,11 +122143,11 @@
     },
     "ORDI": {
       "lastRecommendation": "LONG",
-      "ts": 1787277723265
+      "ts": 1787279513614
     },
     "PYTH": {
       "lastRecommendation": "LONG",
-      "ts": 1787277721972
+      "ts": 1787279511883
     },
     "BANK": {
       "lastRecommendation": "SHORT",
@@ -122035,7 +122155,7 @@
     },
     "ICNT": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277746414
+      "ts": 1787279539306
     },
     "pipe": {
       "lastRecommendation": "NO OPERAR",
@@ -122059,7 +122179,7 @@
     },
     "WIF": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277722513
+      "ts": 1787279512466
     },
     "LUNA": {
       "lastRecommendation": "NO OPERAR",
@@ -122071,11 +122191,11 @@
     },
     "0G": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277732331
+      "ts": 1787279523336
     },
     "AT": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277734200
+      "ts": 1787279525825
     },
     "GGBR": {
       "lastRecommendation": "NO OPERAR",
@@ -122087,7 +122207,7 @@
     },
     "UMA": {
       "lastRecommendation": "LONG",
-      "ts": 1787277742488
+      "ts": 1787279534867
     },
     "SPCXX": {
       "lastRecommendation": "SHORT",
@@ -122103,27 +122223,27 @@
     },
     "IRYS": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277755362
+      "ts": 1787279548323
     },
     "MANTRA": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277763463
+      "ts": 1787279556900
     },
     "IDOL": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277737407
+      "ts": 1787279529381
     },
     "HSK": {
       "lastRecommendation": "SHORT",
       "ts": 1785400986138
     },
     "BNT": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1787277743890
+      "lastRecommendation": "LONG",
+      "ts": 1787279536377
     },
     "MEW": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277730266
+      "ts": 1787279521273
     },
     "CSPR": {
       "lastRecommendation": "NO OPERAR",
@@ -122143,11 +122263,11 @@
     },
     "RLC": {
       "lastRecommendation": "LONG",
-      "ts": 1787277758394
+      "ts": 1787279551500
     },
     "MERL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277755924
+      "ts": 1787279549165
     },
     "AIO": {
       "lastRecommendation": "NO OPERAR",
@@ -122159,7 +122279,7 @@
     },
     "SIREN": {
       "lastRecommendation": "LONG",
-      "ts": 1787277743315
+      "ts": 1787279535534
     },
     "AUCTION": {
       "lastRecommendation": "NO OPERAR",
@@ -122167,11 +122287,11 @@
     },
     "EWT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277764287
+      "ts": 1787279557580
     },
     "HOME": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277759624
+      "ts": 1787279552818
     },
     "SKL": {
       "lastRecommendation": "LONG",
@@ -122179,11 +122299,11 @@
     },
     "REZ": {
       "lastRecommendation": "LONG",
-      "ts": 1787277760988
+      "ts": 1787279554165
     },
     "IOTX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277758962
+      "ts": 1787279552244
     },
     "IOST": {
       "lastRecommendation": "SHORT",
@@ -122207,7 +122327,7 @@
     },
     "CTSI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277762307
+      "ts": 1787279555538
     },
     "GMT": {
       "lastRecommendation": "NO OPERAR",
@@ -122219,7 +122339,7 @@
     },
     "LISTA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277741867
+      "ts": 1787279534217
     },
     "B2": {
       "lastRecommendation": "SHORT",
@@ -122511,23 +122631,23 @@
     },
     "FOLKS": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277736821
+      "ts": 1787279528548
     },
     "SPACE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277741219
+      "ts": 1787279533489
     },
     "PROVE": {
       "lastRecommendation": "LONG",
-      "ts": 1787277738196
+      "ts": 1787279530244
     },
     "VTHO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277725620
+      "ts": 1787279516249
     },
     "SSV": {
       "lastRecommendation": "LONG",
-      "ts": 1787277727526
+      "ts": 1787279518450
     },
     "ANKR": {
       "lastRecommendation": "NO OPERAR",
@@ -122538,28 +122658,28 @@
       "ts": 1787277148918
     },
     "SXT": {
-      "lastRecommendation": "LONG",
-      "ts": 1787277726963
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1787279517493
     },
     "MOVE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277750946
+      "ts": 1787279544348
     },
     "MEME": {
       "lastRecommendation": "LONG",
-      "ts": 1787277733463
+      "ts": 1787279525148
     },
     "MOCA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277732885
+      "ts": 1787279524432
     },
     "VANA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277749771
+      "ts": 1787279542940
     },
     "FOGO": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1787277728866
+      "lastRecommendation": "LONG",
+      "ts": 1787279519769
     },
     "DUSK": {
       "lastRecommendation": "LONG",
@@ -122571,7 +122691,7 @@
     },
     "XAN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277754606
+      "ts": 1787279547566
     },
     "BIGTIME": {
       "lastRecommendation": "NO OPERAR",
@@ -122579,47 +122699,47 @@
     },
     "GIGGLE": {
       "lastRecommendation": "LONG",
-      "ts": 1787277728295
+      "ts": 1787279519198
     },
     "COLLECT": {
       "lastRecommendation": "LONG",
-      "ts": 1787277729512
+      "ts": 1787279520417
     },
     "AVNT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277738828
+      "ts": 1787279530894
     },
     "USTC": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277747225
+      "ts": 1787279539943
     },
     "MANTA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277752918
+      "ts": 1787279546301
     },
     "ALCH": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277756513
+      "ts": 1787279549753
     },
     "API3": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277744529
+      "ts": 1787279536962
     },
     "SAHARA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277752290
+      "ts": 1787279545701
     },
     "BAND": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277745799
+      "ts": 1787279538490
     },
     "TRUTH": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1787277757821
+      "lastRecommendation": "LONG",
+      "ts": 1787279550920
     },
     "ROBO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277749207
+      "ts": 1787279542230
     },
     "SKYAI": {
       "lastRecommendation": "LONG",
@@ -122642,12 +122762,12 @@
       "ts": 1787265519793
     },
     "ZORA": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1787277762914
+      "lastRecommendation": "LONG",
+      "ts": 1787279556328
     },
     "EDU": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277740268
+      "ts": 1787279532297
     },
     "ACU": {
       "lastRecommendation": "LONG",
@@ -122655,11 +122775,11 @@
     },
     "ILV": {
       "lastRecommendation": "LONG",
-      "ts": 1787277757269
+      "ts": 1787279550332
     },
     "FRAX": {
       "lastRecommendation": "LONG",
-      "ts": 1787277753573
+      "ts": 1787279546921
     },
     "EPIC": {
       "lastRecommendation": "SHORT",
@@ -122703,7 +122823,7 @@
     },
     "MMT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277726351
+      "ts": 1787279516859
     },
     "AIOT": {
       "lastRecommendation": "LONG",
@@ -122735,7 +122855,7 @@
     },
     "COTI": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277747839
+      "ts": 1787279540540
     },
     "FLOW": {
       "lastRecommendation": "LONG",
@@ -122811,7 +122931,7 @@
     },
     "EUL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277750362
+      "ts": 1787279543585
     },
     "ALT": {
       "lastRecommendation": "NO OPERAR",
@@ -122827,7 +122947,7 @@
     },
     "OPEN": {
       "lastRecommendation": "SHORT",
-      "ts": 1787277731691
+      "ts": 1787279522688
     },
     "BARD": {
       "lastRecommendation": "NO OPERAR",
@@ -122867,11 +122987,11 @@
     },
     "APEX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277739513
+      "ts": 1787279531530
     },
     "KGEN": {
       "lastRecommendation": "LONG",
-      "ts": 1787277725001
+      "ts": 1787279515627
     },
     "ZEST": {
       "lastRecommendation": "SHORT",
@@ -122959,7 +123079,7 @@
     },
     "TUT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277751513
+      "ts": 1787279544966
     },
     "BLUAI": {
       "lastRecommendation": "SHORT",
@@ -123195,7 +123315,7 @@
     },
     "ZBT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1787277760375
+      "ts": 1787279553429
     },
     "WCT": {
       "lastRecommendation": "LONG",
@@ -123231,7 +123351,7 @@
     },
     "ACE": {
       "lastRecommendation": "LONG",
-      "ts": 1787277761560
+      "ts": 1787279554825
     },
     "MUBARAK": {
       "lastRecommendation": "LONG",
@@ -123367,7 +123487,7 @@
     },
     "NOW": {
       "lastRecommendation": "LONG",
-      "ts": 1787277736231
+      "ts": 1787279527939
     },
     "TAG": {
       "lastRecommendation": "SHORT",
@@ -152719,8 +152839,9 @@
       "tp2": 0.17472619999999997,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786992837191,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787279470645
     },
     {
       "symbol": "FIDA",
@@ -152735,8 +152856,9 @@
       "tp2": 0.016096959471551292,
       "marketPhase": "ACUMULACIÓN",
       "detectadaEn": 1786992837618,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787279471262
     },
     {
       "symbol": "WAXP",
@@ -152751,8 +152873,9 @@
       "tp2": 0.003380311800000001,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786992839647,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1787279471879
     },
     {
       "symbol": "JUP",
@@ -152767,8 +152890,9 @@
       "tp2": 0.15762541800722035,
       "marketPhase": "ACUMULACIÓN",
       "detectadaEn": 1786993370854,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787279472598
     },
     {
       "symbol": "ORDI",
@@ -152783,8 +152907,9 @@
       "tp2": 3.083815486079552,
       "marketPhase": "ACUMULACIÓN",
       "detectadaEn": 1786993371698,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787279473231
     },
     {
       "symbol": "ENA",
@@ -152799,8 +152924,9 @@
       "tp2": 0.07773220000000004,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786993372676,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787279473836
     },
     {
       "symbol": "BLESS",
@@ -152815,8 +152941,9 @@
       "tp2": 0.005856790000000001,
       "marketPhase": "CAPITULACIÓN",
       "detectadaEn": 1786993374199,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "sin definir",
+      "evaluadaEn": 1787279474494
     },
     {
       "symbol": "WET",
@@ -152831,8 +152958,9 @@
       "tp2": 0.07834016403429257,
       "marketPhase": "RANGO",
       "detectadaEn": 1786993375160,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "sin definir",
+      "evaluadaEn": 1787279475142
     },
     {
       "symbol": "BLUAI",
@@ -152847,8 +152975,9 @@
       "tp2": 0.010692196764751858,
       "marketPhase": "CAPITULACIÓN",
       "detectadaEn": 1786993377426,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "sin definir",
+      "evaluadaEn": 1787279475759
     },
     {
       "symbol": "SAPIEN",
@@ -152863,8 +152992,9 @@
       "tp2": 0.07120287999999998,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1786993378707,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1787279476688
     },
     {
       "symbol": "SOMI",
@@ -183361,6 +183491,278 @@
       "detectadaEn": 1787277763464,
       "evaluada": false,
       "resultado": null
+    },
+    {
+      "symbol": "SEI",
+      "tag": " (custom)",
+      "dir": "LONG",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 36,
+      "precio": 0.04396,
+      "stop": 0.041322399999999995,
+      "tp1": 0.04628592871341296,
+      "tp2": 0.05187280000000001,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1787279510581,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "PYTH",
+      "tag": " (custom)",
+      "dir": "LONG",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 38,
+      "precio": 0.04532,
+      "stop": 0.042600799999999994,
+      "tp1": 0.04814377054858826,
+      "tp2": 0.053477600000000014,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1787279511883,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ORDI",
+      "tag": " (custom)",
+      "dir": "LONG",
+      "score": 7.5,
+      "faltaba": 0.1,
+      "confianza": 50,
+      "precio": 4.234,
+      "stop": 3.9799599999999997,
+      "tp1": 4.615060000000001,
+      "tp2": 4.932991797502213,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787279513614,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "KGEN",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 47,
+      "precio": 0.1868,
+      "stop": 0.1756637979929956,
+      "tp1": 0.19960663230805503,
+      "tp2": 0.20684516361260788,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1787279515627,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SSV",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 36,
+      "precio": 2.559,
+      "stop": 2.17515,
+      "tp1": 3.0004275000000002,
+      "tp2": 3.249930000000001,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787279518451,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "COLLECT",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 37,
+      "precio": 0.06536,
+      "stop": 0.055957849999999996,
+      "tp1": 0.0761724725,
+      "tp2": 0.08228387000000001,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787279520417,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "OPEN",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.1,
+      "faltaba": 0.5,
+      "confianza": 41,
+      "precio": 0.1608,
+      "stop": 0.16833982726889185,
+      "tp1": 0.1495,
+      "tp2": 0.14648406909244324,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1787279522689,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "NOW",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 129.91,
+      "stop": 123.33184999999999,
+      "tp1": 140.0633356583267,
+      "tp2": 142.6945956583267,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787279527941,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "IDOL",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 46,
+      "precio": 0.0162,
+      "stop": 0.016960649999999997,
+      "tp1": 0.0153252525,
+      "tp2": 0.014830830000000003,
+      "marketPhase": "ACUMULACIÓN",
+      "detectadaEn": 1787279529381,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "PROVE",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 38,
+      "precio": 0.1663,
+      "stop": 0.15293980000000001,
+      "tp1": 0.18601807082032423,
+      "tp2": 0.19136215082032423,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1787279530245,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "UMA",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7.4,
+      "faltaba": 0.2,
+      "confianza": 48,
+      "precio": 0.3478,
+      "stop": 0.32866184573534163,
+      "tp1": 0.3721010349595175,
+      "tp2": 0.38224867767638504,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1787279534868,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SIREN",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 45,
+      "precio": 0.03134,
+      "stop": 0.02916018461841094,
+      "tp1": 0.03384678768882742,
+      "tp2": 0.03570793777232066,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787279535535,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "BNT",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 39,
+      "precio": 0.3106,
+      "stop": 0.2792597,
+      "tp1": 0.346641345,
+      "tp2": 0.36701253999999994,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787279536378,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ICNT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.1173,
+      "stop": 0.12587649999999997,
+      "tp1": 0.10743702500000003,
+      "tp2": 0.09968752833673275,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1787279539306,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "IRYS",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.5,
+      "faltaba": 0.1,
+      "confianza": 49,
+      "precio": 0.0139,
+      "stop": 0.015375989999999997,
+      "tp1": 0.012202611500000002,
+      "tp2": 0.011243218000000003,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1787279548323,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "REZ",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 36,
+      "precio": 0.002887,
+      "stop": 0.0026506349999999997,
+      "tp1": 0.003199447793764254,
+      "tp2": 0.0033936435520892094,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1787279554165,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "MANTRA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 36,
+      "precio": 0.004357,
+      "stop": 0.004849505,
+      "tp1": 0.00379061925,
+      "tp2": 0.003470491,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1787279556901,
+      "evaluada": false,
+      "resultado": null
     }
   ],
   "killSwitchNotifiedDate": "2026-08-21",
@@ -186982,6 +187384,24 @@
       "drawdownPct": 40.18,
       "operacionesCerradas": 144,
       "tesisAbiertas": 29
+    },
+    {
+      "ts": 1787279509293,
+      "cuenta": 1,
+      "capital": 60.3574,
+      "pico": 100,
+      "drawdownPct": 39.64,
+      "operacionesCerradas": 145,
+      "tesisAbiertas": 26
+    },
+    {
+      "ts": 1787279514994,
+      "cuenta": 1,
+      "capital": 60.3574,
+      "pico": 100,
+      "drawdownPct": 39.64,
+      "operacionesCerradas": 145,
+      "tesisAbiertas": 26
     }
   ],
   "mesesArchivados": [],
@@ -186990,16 +187410,16 @@
     "841409564": 1787258321210,
     "1127701064": 1787270520345,
     "1630278646": 1787272261101,
-    "1744165788": 1787257859795,
     "1854486391": 1787268663095,
     "2032855742": 1787268661381,
-    "-12286690": 1787256074236,
-    "-718294673": 1787256134763,
     "-798107239": 1787258321208,
     "-603063589": 1787258378021,
     "-1352561794": 1787263302711,
     "-514801369": 1787265451856,
     "-1044412099": 1787266798034,
-    "-1072070198": 1787268663095
+    "-1072070198": 1787268663095,
+    "-78206991": 1787279465362,
+    "-695212713": 1787279465364,
+    "-1049113011": 1787279466100
   }
 }
