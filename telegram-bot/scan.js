@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, sintetizarTesis, detallesQueImportan, decidirQueHacer, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2255,7 +2255,7 @@ async function confirmTheses(state, capitalFlow){
         // ═══ LECTURA UNIFICADA DE MERCADO ═══
         // Se calcula acá, donde ya existen anomalo/wallets/onchain, y se usa después en el mensaje.
         // Junta liquidez multi-temporalidad + libro + flujo + wallets + on-chain en un solo veredicto.
-        let lecturaMercado = null, liqMultiTF = null, libroOrdenes = null, matrizGrandes = null;
+        let lecturaMercado = null, liqMultiTF = null, libroOrdenes = null, matrizGrandes = null, decisionTomada = null;
         try{
           liqMultiTF = await liquidezMultiTF(thesis.symbol, data15.candles, entryPrice);
           libroOrdenes = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix'?'Bitunix':'Binance');
@@ -2467,7 +2467,7 @@ async function confirmTheses(state, capitalFlow){
                 flujo: calcularPresionFlujo(data15.candles, 24),
                 wallets, onchain, apalancamiento: null,
                 compresion: (()=>{ try{ return detectTrianguloCompresion(data15.candles); }catch(e){ return null; } })(),
-                cinta: (()=>{ try{ return calidadTendenciaCinta(data15.candles); }catch(e){ return null; } })(),
+          cinta: (()=>{ try{ return calidadTendenciaCinta(data15.candles); }catch(e){ return null; } })(),
                 matrizGrandes, fase: result15.marketPhase?.fase,
                 detalles: (()=>{ try{
                   return detallesQueImportan({
@@ -2483,7 +2483,20 @@ async function confirmTheses(state, capitalFlow){
               // Antes el mensaje decía "tesis condicionada con 6 obstáculos" y quien lo leía
               // tenía que deducir qué hacer. Ahora lo dice: entrar, esperar (y a qué), entrar
               // reducido (y cuánto), o descartar (y por qué).
+              // Los cuatro pasos, en orden: contexto → sesgo → fuerza → ubicación.
+              // Sin esto la decisión no sabe si el movimiento tiene combustible ni si el
+              // precio está en un lugar donde tenga sentido entrar.
+              const pasos = (()=>{ try{
+                return analizarPorPasos({
+                  result: result15, candles: data15.candles, macro, btcRef: btcReference,
+                  marketContext, liquidez: lecturaLiq, libro: libroOrdenes,
+                  flujo: calcularPresionFlujo(data15.candles, 24),
+                  derivados: data15.derivados, estructura: result15.structure,
+                  atrPct: result15.metrics?.atrPct });
+              }catch(e){ return null; } })();
+
               const d = decidirQueHacer({
+                pasos,
                 sintesis: s, result: result15, setup,
                 liquidez: lecturaLiq, libro: libroOrdenes,
                 compresion: (()=>{ try{ return detectTrianguloCompresion(data15.candles); }catch(e){ return null; } })(),
@@ -2493,9 +2506,35 @@ async function confirmTheses(state, capitalFlow){
                 flujo: calcularPresionFlujo(data15.candles, 24),
                 retrocesoCinta: (()=>{ try{ return entradaRetrocesoCinta(data15.candles, result15.structure, thesis.dir, data4h?.candles); }catch(e){ return null; } })(),
               });
+              // ═══ LA DECISIÓN QUEDA EN EL REGISTRO ═══
+              // El registro se arma más arriba, antes de calcular la decisión. Se agrega acá,
+              // que es cuando existe. Sirve para medir después algo clave: ¿respetar la
+              // decisión del motor rinde mejor que ignorarla? Una operación puede perder
+              // habiendo sido buena decisión, y ganar habiendo sido mala.
+              decisionTomada = d;
+              if(thesis.registro){
+                thesis.registro.decision = {
+                  accion: d.accion, fuerza: d.fuerza, contexto: d.contexto, sesgo: d.sesgo,
+                  tamanoSugerido: d.tamanoSugerido,
+                  bloqueos: d.bloqueos?.length || 0,
+                  esperas: d.esperas?.length || 0,
+                  checklistPendiente: d.checklist?.length || 0,
+                };
+              }
               let out = `${DIV}\n${d.resumen}\n<i>${d.detalle}</i>\n`;
-              if(d.esperas?.length > 1){
-                out += `\nTambién habría que ver: ${d.esperas.slice(1).map(e=>e.queEsperar).join('; ')}.\n`;
+              // El checklist numerado: qué tiene que pasar, en orden, para poder entrar
+              if(d.checklist?.length){
+                out += `\n<b>Para entrar tiene que pasar:</b>\n` +
+                  d.checklist.map(x => `${x.n}. ${x.texto}`).join('\n') + `\n`;
+              }
+              if(d.invalidacion?.length){
+                out += `\n<b>Invalidación:</b> ${d.invalidacion.join(' · ')}\n`;
+              }
+              // Los cuatro pasos, en una línea cada uno
+              if(pasos){
+                out += `\n<i>Contexto ${pasos.contexto.estado.toLowerCase()} · sesgo ${pasos.sesgo.direccion || 'sin definir'} · ` +
+                  `fuerza ${pasos.fuerza.tiene ? 'sí' : 'no'} (${pasos.fuerza.proporcion}) · ` +
+                  `ubicación ${pasos.ubicacion.buena ? 'buena' : 'mala'}</i>\n`;
               }
               out += `\n<b>LA TESIS</b> — ${s.veredicto}\n${s.texto}\n\n`;
               return out;
