@@ -3795,8 +3795,47 @@ function calidadDecision(trade, historial = []){
   const gano = trade.pnlPct > 0;
   const coincide = (calidad==='BUENA'||calidad==='ACEPTABLE') === gano;
 
+  // ═══ ¿LA DECISIÓN QUE TOMÓ EL MOTOR ERA LA CORRECTA? ═══
+  // Esto es distinto de si la operación ganó. Evalúa si, CON LA INFORMACIÓN QUE TENÍA EN ESE
+  // MOMENTO, entrar era razonable. Una operación puede perder y haber sido buena decisión,
+  // o ganar y haber sido mala.
+  //
+  // Lo que se revisa es si el motor entró ignorando sus propias señales de alerta.
+  const dec = r.decision;
+  if(dec){
+    // Entrar cuando el propio sistema decía esperar es lo que más caro sale
+    if(dec.accion === 'ESPERAR' && trade.entry){
+      score -= 2;
+      puntos.push('❌ Se entró aunque la decisión era ESPERAR: no se cumplieron las condiciones que el propio motor pedía.');
+    }
+    if(dec.accion === 'DESCARTAR' && trade.entry){
+      score -= 3;
+      puntos.push('❌ Se entró aunque la decisión era DESCARTAR: había un bloqueo activo.');
+    }
+    // Entrar sin fuerza es la causa más común de que la operación muera a mitad de camino
+    if(dec.fuerza === false){
+      score -= 1;
+      puntos.push('⚠️ Se entró sin que el movimiento tuviera fuerza confirmada.');
+    }
+    if(dec.contexto === 'ADVERSO'){
+      score -= 1;
+      puntos.push('⚠️ Se entró con el contexto general adverso.');
+    }
+    if(dec.accion === 'ENTRAR' && dec.fuerza === true){
+      score += 2;
+      puntos.push('✅ Se entró con la decisión a favor y el movimiento con fuerza: la entrada estaba justificada.');
+    }
+    if(dec.tamanoSugerido && dec.tamanoSugerido < 100 && r.gestion?.tamanoUsado === 100){
+      score -= 1;
+      puntos.push(`⚠️ El motor sugería entrar con el ${dec.tamanoSugerido}% del tamaño y se entró completo.`);
+    }
+  }
+
   return {
     score, calidad, puntos,
+    // Qué había decidido el motor cuando entró: sirve para medir si respetar la decisión rinde
+    decisionOriginal: dec?.accion || null,
+    teniaFuerza: dec?.fuerza ?? null,
     resultado: gano ? 'GANÓ' : 'PERDIÓ',
     // El caso interesante: cuando decisión y resultado NO coinciden
     lección: coincide
@@ -5048,6 +5087,115 @@ export function sintetizarTesis({
   };
 }
 
+// ═══ LOS CUATRO PASOS DE UN ANALISTA ═══
+// El orden importa: no se mira el RSI antes de saber en qué contexto está el mercado. Cada
+// paso condiciona al siguiente, y si uno falla los de abajo pierden valor.
+//   PASO 1 — ¿En qué contexto estamos?      → favorable / adverso / mixto
+//   PASO 2 — ¿Qué está haciendo la moneda?  → sesgo estructural (más peso que el RSI)
+//   PASO 3 — ¿Hay fuerza real?              → ¿el movimiento tiene combustible?
+//   PASO 4 — ¿El precio está en buen lugar?  → se puede tener SHORT 8/10 y estar sobre soporte
+//
+// La distinción clave: SESGO no es lo mismo que ENTRADA, y DIRECCIÓN no es lo mismo que FUERZA.
+// Un short con sesgo correcto pero sin fuerza y en mal lugar es una entrada perdedora.
+export function analizarPorPasos({ result, candles, macro, btcRef, marketContext,
+                                    liquidez, libro, flujo, derivados, estructura, atrPct }){
+  const pasos = {};
+
+  // ── PASO 1: CONTEXTO ──
+  const señalesContexto = [];
+  if(macro?.trend) señalesContexto.push({ n:'Macro 4h', v: macro.trend === 'BULLISH' ? 1 : macro.trend === 'BEARISH' ? -1 : 0 });
+  if(btcRef?.pctChange != null) señalesContexto.push({ n:'BTC', v: btcRef.pctChange > 2 ? 1 : btcRef.pctChange < -2 ? -1 : 0 });
+  if(marketContext?.fearGreed != null) señalesContexto.push({ n:'Fear & Greed', v: marketContext.fearGreed > 60 ? 1 : marketContext.fearGreed < 30 ? -1 : 0 });
+  if(marketContext?.capitalFlow?.tvlTrend) señalesContexto.push({ n:'Capital', v: marketContext.capitalFlow.tvlTrend === 'RISING' ? 1 : marketContext.capitalFlow.tvlTrend === 'FALLING' ? -1 : 0 });
+  const sumaCtx = señalesContexto.reduce((s,x)=>s+x.v, 0);
+  pasos.contexto = {
+    estado: sumaCtx >= 2 ? 'FAVORABLE AL RIESGO' : sumaCtx <= -2 ? 'ADVERSO' : 'MIXTO',
+    señales: señalesContexto,
+    texto: sumaCtx >= 2 ? 'El contexto general acompaña a los activos de riesgo.'
+         : sumaCtx <= -2 ? 'El contexto general es adverso: conviene ser más selectivo y usar menos tamaño.'
+         : 'El contexto está mixto: no ayuda ni estorba, la decisión se juega en la moneda.',
+  };
+
+  // ── PASO 2: SESGO ESTRUCTURAL ──
+  // Pesa más que cualquier oscilador: es lo que hace el precio, no lo que dice un indicador.
+  const ts = String(estructura?.events?.trendStructure || '').toLowerCase();
+  const sesgo = (ts === 'bull' || /hh|hl/.test(ts)) ? 'LONG'
+              : (ts === 'bear' || /lh|ll/.test(ts)) ? 'SHORT' : null;
+  pasos.sesgo = {
+    direccion: sesgo,
+    texto: sesgo === 'LONG' ? 'La estructura hace máximos y mínimos crecientes: el sesgo es alcista.'
+         : sesgo === 'SHORT' ? 'La estructura hace máximos y mínimos decrecientes: el sesgo es bajista.'
+         : 'La estructura está en rango: no hay un sesgo direccional claro, conviene operar los bordes.',
+    hayBOS: !!estructura?.events?.bos,
+    hayCHoCH: !!estructura?.events?.choch,
+  };
+
+  // ── PASO 3: ¿HAY FUERZA? ──
+  // Dirección y fuerza son cosas distintas. Un short con sesgo correcto pero sin fuerza
+  // se queda a mitad de camino y termina en breakeven.
+  const combustible = [];
+  const m = result?.metrics || {};
+  if(m.adx != null) combustible.push({ n:'ADX', ok: m.adx >= 25, detalle: `ADX ${m.adx.toFixed(0)}${m.adx>=25?' (tendencia real)':' (sin tendencia)'}` });
+  if(flujo?.pctComprador != null && sesgo){
+    const aFavor = (flujo.sesgo === 'COMPRADOR') === (sesgo === 'LONG');
+    combustible.push({ n:'Flujo agresivo', ok: aFavor, detalle: `${flujo.pctComprador}% comprador${aFavor?', acompaña':', va en contra'}` });
+  }
+  if(derivados?.oiTrend && sesgo){
+    const oiSube = /RISING|SUBIENDO/i.test(derivados.oiTrend);
+    combustible.push({ n:'Open Interest', ok: oiSube, detalle: oiSube ? 'entra dinero nuevo al movimiento' : 'no entra dinero nuevo' });
+  }
+  if(candles?.length >= 20){
+    const volProm = candles.slice(-21,-1).reduce((s,v)=>s+v.v,0)/20;
+    const volAhora = candles.at(-1).v;
+    combustible.push({ n:'Volumen', ok: volAhora > volProm, detalle: volAhora > volProm ? `${(volAhora/volProm).toFixed(1)}x el volumen normal` : 'volumen por debajo del promedio' });
+  }
+  const conFuerza = combustible.filter(x=>x.ok).length;
+  const total = combustible.length || 1;
+  pasos.fuerza = {
+    tiene: conFuerza / total >= 0.6,
+    proporcion: `${conFuerza}/${total}`,
+    componentes: combustible,
+    texto: conFuerza / total >= 0.6
+      ? `El movimiento tiene combustible: ${combustible.filter(x=>x.ok).map(x=>x.detalle).join(', ')}.`
+      : `El movimiento no tiene fuerza suficiente (${conFuerza} de ${total}): ${combustible.filter(x=>!x.ok).map(x=>x.detalle).join(', ')}. Un movimiento sin combustible se queda a mitad de camino.`,
+  };
+
+  // ── PASO 4: ¿EL PRECIO ESTÁ EN BUEN LUGAR? ──
+  // Se puede tener SHORT 8/10 y estar entrando justo encima de un soporte enorme.
+  const precio = m.price;
+  const problemas = [];
+  if(precio && liquidez && sesgo){
+    const contra = sesgo === 'SHORT' ? (liquidez.cercanaAbajo || liquidez.lejanaAbajo)
+                                     : (liquidez.cercanaArriba || liquidez.lejanaArriba);
+    if(contra?.precio){
+      const dist = Math.abs(contra.precio - precio) / precio * 100;
+      if(dist < 2) problemas.push(`hay un nivel fuerte a ${dist.toFixed(1)}% en el camino (${contra.toques||0} toques)`);
+    }
+  }
+  if(libro?.niveles?.length && precio && sesgo){
+    const barrera = libro.niveles.find(n => {
+      const enCamino = sesgo === 'SHORT' ? n.precio < precio : n.precio > precio;
+      const cerca = Math.abs(n.precio - precio) / precio * 100 < 2;
+      return enCamino && cerca && n.usd > 100000 && n.lado === (sesgo === 'SHORT' ? 'compra' : 'venta');
+    });
+    if(barrera) problemas.push(`hay $${(barrera.usd/1000).toFixed(0)}K de órdenes en contra a menos de 2%`);
+  }
+  if(atrPct > 0 && candles?.length >= 24){
+    const dia = candles.slice(-24);
+    const rango = (Math.max(...dia.map(v=>v.h)) - Math.min(...dia.map(v=>v.l))) / Math.min(...dia.map(v=>v.l)) * 100;
+    if(rango / atrPct >= 1.8) problemas.push(`el rango del día ya es ${(rango/atrPct).toFixed(1)}x lo habitual: queda poco recorrido`);
+  }
+  pasos.ubicacion = {
+    buena: problemas.length === 0,
+    problemas,
+    texto: problemas.length === 0
+      ? 'El precio está en una zona sin obstáculos cercanos: hay espacio para que el movimiento se desarrolle.'
+      : `El precio NO está en buen lugar para entrar: ${problemas.join('; ')}. Se puede tener razón en la dirección y perder igual por entrar en el lugar equivocado.`,
+  };
+
+  return pasos;
+}
+
 // ═══ LA DECISIÓN — QUÉ HACER CON TODA ESA INFORMACIÓN ═══
 // El paso que faltaba. Hasta acá el sistema describía: "tesis condicionada, 6 obstáculos".
 // Eso no le sirve a nadie para operar. Un analista de verdad, con la misma información, diría:
@@ -5060,7 +5208,11 @@ export function sintetizarTesis({
 //   3. Lo que reduce el tamaño (se opera, pero con menos)
 //   4. Lo que confirma (se opera normal)
 export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, compresion,
-                                   cinta, apalancamiento, calendario, flujo, retrocesoCinta }){
+                                   cinta, apalancamiento, calendario, flujo, retrocesoCinta,
+                                   // Los cuatro pasos: contexto, sesgo, fuerza y ubicación.
+                                   // Sin esto la decisión se toma sin saber si el movimiento
+                                   // tiene combustible ni si el precio está en buen lugar.
+                                   pasos }){
   const dir = sintesis?.direccion;
   const precio = result?.metrics?.price;
   const fmtP = v => v == null ? '—' : fmtPrecio(v);
@@ -5134,6 +5286,32 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
     });
   }
 
+  // Sin fuerza: la dirección puede ser correcta pero el movimiento no llega
+  if(pasos?.fuerza && !pasos.fuerza.tiene && dir){
+    esperas.push({
+      motivo: `El movimiento no tiene fuerza (${pasos.fuerza.proporcion})`,
+      queEsperar: 'que aparezca volumen y el ADX confirme tendencia real',
+      nivel: null,
+      porque: pasos.fuerza.texto,
+    });
+  }
+  // Mal lugar: se puede tener razón en la dirección y perder igual
+  if(pasos?.ubicacion && !pasos.ubicacion.buena && dir){
+    esperas.push({
+      motivo: 'El precio no está en buen lugar',
+      queEsperar: 'que el precio se aleje del obstáculo o lo supere',
+      nivel: null,
+      porque: pasos.ubicacion.texto,
+    });
+  }
+  // El sesgo estructural contradice la tesis: eso es más grave que un indicador en contra
+  if(pasos?.sesgo?.direccion && dir && pasos.sesgo.direccion !== dir){
+    bloqueos.push({
+      motivo: `La estructura tiene sesgo ${pasos.sesgo.direccion}`,
+      detalle: `${pasos.sesgo.texto} Operar contra la estructura es de lo que peor sale: el sesgo estructural pesa más que cualquier oscilador.`,
+    });
+  }
+
   // ── NIVEL 3: LO QUE REDUCE EL TAMAÑO ──
   const reducen = [];
   if(apalancamiento?.oiSobreMcap >= 30) reducen.push({
@@ -5188,9 +5366,42 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
   const nivelClave = esperas.find(e => e.nivel)?.nivel
     ?? (accion === 'ENTRAR' || accion === 'ENTRAR REDUCIDO' ? setup?.stop : null);
 
+  // ═══ ENTRADA CONDICIONADA: LOS PASOS CONCRETOS ═══
+  // No alcanza con "esperar": hay que decir QUÉ esperar, en orden, para poder seguirlo.
+  const checklist = [];
+  if(accion === 'ESPERAR'){
+    let paso = 1;
+    for(const e of esperas){
+      checklist.push({ n: paso++, texto: e.queEsperar.charAt(0).toUpperCase() + e.queEsperar.slice(1), nivel: e.nivel });
+    }
+    // La confirmación en 15m siempre va al final: es el último filtro
+    checklist.push({ n: paso++, texto: `Confirmación en 15m: vela ${esLong ? 'alcista' : 'bajista'} con volumen por encima del promedio`, nivel: null });
+    if(pasos?.fuerza && !pasos.fuerza.tiene){
+      checklist.push({ n: paso++, texto: `Que el flujo agresivo acompañe hacia ${esLong ? 'compras' : 'ventas'}`, nivel: null });
+    }
+  }
+
+  // ═══ INVALIDACIÓN: QUÉ ROMPE LA IDEA ═══
+  const invalidacion = [];
+  if(setup?.stop) invalidacion.push(`El precio toca $${fmtP(setup.stop)}`);
+  if(pasos?.sesgo?.direccion && dir && pasos.sesgo.direccion === dir){
+    invalidacion.push(`La estructura deja de hacer ${esLong ? 'mínimos crecientes' : 'máximos decrecientes'} (aparece un CHoCH en contra)`);
+  }
+  if(compresion?.techo && compresion?.piso){
+    invalidacion.push(`Rompe $${fmtP(esLong ? compresion.piso : compresion.techo)}, el lado contrario de la compresión`);
+  }
+  if(cinta?.limpia && dir && cinta.direccion === dir){
+    invalidacion.push(`El precio pierde la cinta de medias ($${fmtP(esLong ? cinta.piso : cinta.techo)}) con cierre confirmado`);
+  }
+
   return {
     accion, titulo, detalle,
     bloqueos, esperas, reducen,
+    checklist, invalidacion,
+    // El sesgo y la entrada son cosas distintas: se puede tener sesgo SHORT y no entrar
+    sesgo: pasos?.sesgo?.direccion || dir,
+    fuerza: pasos?.fuerza?.tiene ?? null,
+    contexto: pasos?.contexto?.estado || null,
     // Cuánto del tamaño normal, redondeado a algo usable
     tamanoSugerido: accion.startsWith('ENTRAR') ? Math.round(tamano * 100) : 0,
     nivelClave,
@@ -6581,6 +6792,11 @@ function generarReporteResearch(closedTrades, opciones = {}){
   // La afirmación central de la estrategia de la cinta: operar con cinta plana rinde peor.
   // Esto lo comprueba con datos reales en vez de darlo por cierto.
   // ¿El retroceso a la cinta rinde distinto que entrar sin retroceso?
+  // ¿Rinde mejor respetar la decisión del motor que ignorarla? Es la medición más
+  // importante: valida si toda la capa de decisión sirve para algo.
+  analizarPor(null, 'Decisión del motor', t => t.registro?.decision?.accion ?? null);
+  analizarPor(null, 'Entró con fuerza', t => t.registro?.decision?.fuerza == null ? null
+    : (t.registro.decision.fuerza ? 'con fuerza' : 'sin fuerza'));
   analizarPor(null, 'Retroceso a la cinta', t => t.registro?.cinta == null ? null
     : (t.registro.cinta.tocoLaCinta ? 'volvió a la cinta' : 'entró sin retroceso'));
   analizarPor(null, 'Cinta de medias', t => t.registro?.cinta == null ? null

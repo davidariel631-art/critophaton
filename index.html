@@ -1788,7 +1788,16 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
 
       // ═══ LA DECISIÓN, ARRIBA DE TODO ═══
       // Lo primero que se lee no es el análisis: es qué hacer con él.
+      // Los cuatro pasos del analista, en orden
+      const pasos = (()=>{ try{
+        return E.analizarPorPasos({
+          result, candles: data.candles, macro: null, btcRef: null, marketContext: null,
+          liquidez: null, libro, flujo: E.calcularPresionFlujo(data.candles, 24),
+          derivados: null, estructura: result.structure, atrPct: result.metrics?.atrPct });
+      }catch(e){ return null; } })();
+
       const d = E.decidirQueHacer({
+        pasos,
         sintesis: s, result, setup,
         liquidez: (()=>{ try{
           const lh = E.detectLiquidezPorHorizonte(data.candles);
@@ -1817,6 +1826,22 @@ ${result.structure.notes.map(n=>'- '+n).join('\n')}
         </div>` : ''}
         ${d.tamanoSugerido > 0 && d.tamanoSugerido < 100 ? `<div style="margin-top:7px;font-size:12px;color:var(--amber);">
           Tamaño sugerido: ${d.tamanoSugerido}% del habitual</div>` : ''}
+        ${d.checklist?.length ? `<div style="margin-top:11px;padding-top:10px;border-top:1px solid ${colD}33;">
+          <div style="font-size:10px;color:var(--sub);letter-spacing:.5px;margin-bottom:6px;">PARA ENTRAR TIENE QUE PASAR</div>
+          ${d.checklist.map(x => `<div style="font-size:12px;color:#c3ccd6;padding:3px 0;">
+            <span style="color:${colD};font-weight:700;">${x.n}.</span> ${x.texto}</div>`).join('')}
+        </div>` : ''}
+        ${d.invalidacion?.length ? `<div style="margin-top:9px;font-size:11.5px;color:var(--rose);">
+          <b>Invalidación:</b> ${d.invalidacion.join(' · ')}</div>` : ''}
+        ${pasos ? `<div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap;">
+          ${[['Contexto', pasos.contexto.estado, pasos.contexto.estado==='FAVORABLE AL RIESGO'],
+             ['Sesgo', pasos.sesgo.direccion || 'sin definir', !!pasos.sesgo.direccion],
+             ['Fuerza', pasos.fuerza.tiene ? `sí (${pasos.fuerza.proporcion})` : `no (${pasos.fuerza.proporcion})`, pasos.fuerza.tiene],
+             ['Ubicación', pasos.ubicacion.buena ? 'buena' : 'mala', pasos.ubicacion.buena]]
+            .map(([k,v,ok]) => `<span style="font-size:10px;padding:3px 8px;border-radius:99px;
+              background:${ok?'rgba(16,185,129,.14)':'rgba(255,255,255,.06)'};
+              color:${ok?'var(--teal)':'var(--sub)'};">${k}: ${v}</span>`).join('')}
+        </div>` : ''}
       </div>`;
 
       const col = s.veredicto === 'CAMINO DESPEJADO' ? 'var(--teal)'
