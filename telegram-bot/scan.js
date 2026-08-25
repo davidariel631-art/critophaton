@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, horizontesSegunTamano, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -263,7 +263,13 @@ let sendPromises = [];
 //   4h  → la temporalidad donde se detecta la tesis
 //   15m → dónde puede reaccionar el precio en las próximas horas
 // ═══════════════════════════════════════════════════════════════════════
-async function liquidezMultiTF(symbol, candles15, precio){
+async function liquidezMultiTF(symbol, candles15, precio, marketCap, vol24hUsd){
+  // ═══ QUÉ TIMEFRAMES MIRAR SEGÚN EL TAMAÑO ═══
+  // Antes eran tres fijos (15m, 4h, 1d) para toda moneda. Eso está mal en los dos extremos:
+  //  · A BTC le faltaba el marco mensual, donde están los niveles que más respeta.
+  //  · A una memecoin que rota 2x su market cap por día le sobra el marco diario: los que
+  //    estaban posicionados ahí ya salieron, el nivel no lo defiende nadie.
+  const horizontes = horizontesSegunTamano(marketCap, vol24hUsd);
   const capas = [];
   const agregar = (tf, velas, peso) => {
     if(!velas?.length || velas.length < 40) return;
@@ -275,10 +281,15 @@ async function liquidezMultiTF(symbol, candles15, precio){
     }catch(e){ /* si una temporalidad falla, seguimos con las otras */ }
   };
 
-  agregar('15m', candles15, 1);
-  // 4h y 1D se traen aparte: son las que tienen los niveles que de verdad pesan
-  try{ const d4 = await fetchTokenData(symbol, '4h'); agregar('4h', d4?.candles, 2); }catch(e){}
-  try{ const d1 = await fetchTokenData(symbol, '1d'); agregar('1D', d1?.candles, 3); }catch(e){}
+  const pesos = { '15m':1, '1h':1.6, '4h':2.4, '1d':3.2, '1mo':4 };
+  agregar('15m', candles15, pesos['15m']);
+  // Se traen solo los marcos que corresponden al tamaño de esta moneda, en paralelo
+  const extra = horizontes.tfs.filter(tf => tf !== '15m');
+  const traidos = await Promise.allSettled(extra.map(tf => fetchTokenData(symbol, tf)));
+  extra.forEach((tf, k) => {
+    const r = traidos[k];
+    if(r.status === 'fulfilled' && r.value?.candles) agregar(tf, r.value.candles, pesos[tf] || 1);
+  });
   if(!capas.length) return null;
 
   // Se juntan todos los niveles de todas las temporalidades. Un nivel que aparece en 1D pesa
@@ -565,6 +576,18 @@ async function enviarUno(text, sinHtml = false){
   }
   console.error('Error enviando a Telegram:', detalle.slice(0, 200));
   return false;
+}
+
+// El umbral mínimo para considerar una transferencia depende del tamaño de la moneda.
+// Antes era $5.000 fijos: en una moneda de $36M eso es el 0,014% del market cap, así que
+// casi todo el movimiento real quedaba filtrado como "ruido" y el panel salía vacío.
+// Ahora se usa el 0,05% del market cap, con un piso de $500 y un techo de $50.000.
+function umbralWallet(marketCap){
+  if(!marketCap || marketCap <= 0) return 1000;
+  // El 0,02% del market cap: en una moneda de $36M da $7.200, que es un movimiento
+  // que se nota de verdad; en una de $2.000M da $50.000 (el techo), que también.
+  // Piso de $1.000 para que en monedas muy chicas no entre cualquier cosa.
+  return Math.min(50000, Math.max(1000, marketCap * 0.0002));
 }
 
 // ═══ EVITAR MENSAJES REPETIDOS ═══
@@ -2106,7 +2129,10 @@ async function confirmTheses(state, capitalFlow){
           wallets: await (async()=>{ try{
             const tr = await fetchTransferenciasTokenCached(data15.contract, data15.network, 24);
             if(!tr?.length) return null;
-            const a = analizarTransferencias(tr.map(t=>({...t, valueUsd:t.cantidad*(data15.price||0)})), data15.network, { minUsd:5000 });
+            const a = analizarTransferencias(tr.map(t=>({...t, valueUsd:t.cantidad*(data15.price||0)})), redFinal,
+              // El umbral se escala al tamaño de la moneda: $5.000 fijos dejaban fuera casi
+              // todos los movimientos reales de las monedas chicas, que son las que operás.
+              { minUsd: umbralWallet(data15.marketCap) });
             const ev = construirEvidenciaOnChain(a, thesis.dir);
             return ev ? { direccion:ev.direccion, confianza:ev.confianza, acompana:ev.acompana,
                           entradaUsd:ev.entradaUsd, salidaUsd:ev.salidaUsd, walletsNuevas:ev.walletsNuevas } : null;
@@ -2240,10 +2266,37 @@ async function confirmTheses(state, capitalFlow){
               console.log(`  🐋 ${thesis.symbol}: Alchemy respondió pero no hubo transferencias en 24h.`);
               return null;
             }
-            console.log(`  🐋 ${thesis.symbol}: ${transfers.length} transferencias analizadas.`);
+            // Diagnóstico detallado: sin esto, "no ve nada" puede ser cualquiera de cinco cosas
+            // distintas y no hay forma de saber cuál.
+            const umbral = umbralWallet(data15.marketCap);
+            const conValor = transfers.map(t => ({ ...t, valueUsd: t.cantidad * (data15.price||0) }));
+            const superanUmbral = conValor.filter(t => t.valueUsd >= umbral).length;
+            console.log(`  🐋 ${thesis.symbol}: ${transfers.length} transferencias · umbral $${umbral.toFixed(0)} (mcap $${((data15.marketCap||0)/1e6).toFixed(1)}M) · ${superanUmbral} la superan`);
+            if(superanUmbral === 0){
+              const mayor = Math.max(0, ...conValor.map(t => t.valueUsd || 0));
+              console.log(`     La más grande fue de $${mayor.toFixed(0)}: todas quedaron por debajo del umbral.`);
+            }
+            // ═══ EL CASO QUE FALTABA ═══
+            // "12 superan el umbral" y aun así el panel sale vacío puede significar dos cosas
+            // muy distintas: que no haya nada relevante, o que el CLASIFICADOR esté fallando
+            // (por ejemplo si la red no coincide con la lista de exchanges conocidos).
+            // Sin este dato las dos se veían iguales y no había forma de detectar el segundo.
+            if(superanUmbral > 0){
+              try{
+                const prueba = analizarTransferencias(conValor, redFinal, { minUsd: umbral });
+                const clasificadas = prueba?.movimientos?.filter(m => m.cuenta).length || 0;
+                const conExchange = prueba?.movimientos?.filter(m => /EXCHANGE/i.test(m.tipoOrigen||'') || /EXCHANGE/i.test(m.tipoDestino||'')).length || 0;
+                console.log(`     ${clasificadas} clasificadas · ${conExchange} involucran un exchange conocido`);
+                if(clasificadas === 0){
+                  console.log(`     ⚠️ Ninguna se pudo clasificar: revisar que la red "${redFinal}" esté en la lista de direcciones conocidas.`);
+                } else if(conExchange === 0){
+                  console.log(`     ℹ️ Ninguna involucra un exchange conocido: son movimientos entre wallets, que no indican acumulación ni distribución.`);
+                }
+              }catch(e){ console.log(`     ⚠️ El clasificador falló: ${e.message}`); }
+            }
             // Las cantidades vienen en tokens: se pasan a dólares con el precio actual
             const conUsd = transfers.map(t => ({ ...t, valueUsd: t.cantidad * (data15.price||0) }));
-            const analisis = analizarTransferencias(conUsd, data15.network, { minUsd: 5000 });
+            const analisis = analizarTransferencias(conUsd, redFinal, { minUsd: umbralWallet(data15.marketCap) });
             return construirEvidenciaOnChain(analisis, thesis.dir);
           }catch(e){ return null; }
         })();
@@ -2257,7 +2310,8 @@ async function confirmTheses(state, capitalFlow){
         // Junta liquidez multi-temporalidad + libro + flujo + wallets + on-chain en un solo veredicto.
         let lecturaMercado = null, liqMultiTF = null, libroOrdenes = null, matrizGrandes = null, decisionTomada = null;
         try{
-          liqMultiTF = await liquidezMultiTF(thesis.symbol, data15.candles, entryPrice);
+          liqMultiTF = await liquidezMultiTF(thesis.symbol, data15.candles, entryPrice,
+            data15.marketCap, data15.vol24h);
           libroOrdenes = await fetchLibroOrdenes(thesis.symbol, data15.source==='Bitunix'?'Bitunix':'Binance');
         }catch(e){ /* si falla, el mensaje sale sin esta sección */ }
 
