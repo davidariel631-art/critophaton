@@ -865,7 +865,15 @@
         <div id="liqStochContainer" style="width:100%;height:150px;margin-top:8px;background:var(--panel2);border-radius:10px;border:1px solid var(--border);overflow:hidden;position:relative;">
           <canvas id="liqStochCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
         </div>
+        <div id="liqMultiPanel" style="display:none;margin-top:12px;"></div>
         <div id="liqLibroPanel" style="display:none;margin-top:12px;"></div>
+        <!-- El mapa de calor: se mira, no se lee -->
+        <div id="liqHeatWrap" style="display:none;margin-top:12px;">
+          <canvas id="liqHeatCanvas" style="width:100%;height:340px;display:block;border-radius:10px;"></canvas>
+          <div id="liqHeatLeyenda" style="display:flex;justify-content:space-between;align-items:center;
+            margin-top:7px;font-size:11px;color:var(--sub);"></div>
+        </div>
+
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
         <input type="checkbox" id="liqAutoRefresh" style="width:16px;height:16px;">
@@ -2929,6 +2937,153 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   status.textContent = 'Buscando...'; results.innerHTML = ''; domBox.style.display = 'none';
   try{
     const data = await fetchTokenData(q, liqCurrentTf);
+
+    // ═══ MAPA DE CALOR: SE MIRA, NO SE LEE ═══
+    // Cada franja horizontal es un rango de precio. Cuanto más brillante, más liquidez hay
+    // ahí. Con una mirada se ve si el imán está arriba o abajo, cerca o lejos — que es lo
+    // que hace falta para decidir entre un long y un short.
+    (async () => {
+      const wrap = document.getElementById('liqHeatWrap');
+      try{
+        const E = TheHatonEngine;
+        const libro = await E.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null);
+        const mapa = E.mapaCalorLiquidez(data.candles, data.price, { libro, rangoPct: 12, filas: 70 });
+        if(!mapa){ wrap.style.display='none'; return; }
+
+        const cv = document.getElementById('liqHeatCanvas');
+        const dpr = window.devicePixelRatio || 1;
+        const W = cv.clientWidth, H = 340;
+        cv.width = W * dpr; cv.height = H * dpr;
+        const ctx = cv.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, W, H);
+
+        const margenDer = 78;
+        const anchoMapa = W - margenDer;
+        const filas = mapa.franjas.length;
+        const altoFila = H / filas;
+
+        // El color va de azul apagado (poca liquidez) a naranja intenso (mucha).
+        // Se usa una escala de calor real para que el ojo capte la diferencia sin leer números.
+        const colorDe = (d) => {
+          const t = Math.min(1, Math.pow(d, 0.65));   // curva para que lo medio se note
+          if(t < 0.25) return `rgba(20,40,70,${0.25 + t})`;
+          if(t < 0.5)  return `rgba(0,140,190,${0.35 + t*0.5})`;
+          if(t < 0.72) return `rgba(0,210,180,${0.5 + t*0.4})`;
+          if(t < 0.88) return `rgba(240,190,40,${0.6 + t*0.35})`;
+          return `rgba(255,110,40,${0.7 + t*0.3})`;
+        };
+
+        // Las franjas, de arriba (precio más alto) hacia abajo
+        mapa.franjas.slice().reverse().forEach((f, i) => {
+          const y = i * altoFila;
+          ctx.fillStyle = colorDe(f.densidad);
+          ctx.fillRect(0, y, anchoMapa * (0.25 + 0.75 * Math.min(1, f.densidad * 1.6)), altoFila + 0.6);
+        });
+
+        // La línea del precio actual: la referencia de todo
+        const yPrecio = H * (1 - (data.price - mapa.min) / (mapa.max - mapa.min));
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(0, yPrecio); ctx.lineTo(anchoMapa, yPrecio); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#ffffff'; ctx.font = '700 11px Manrope, sans-serif';
+        ctx.fillText('AHORA  $' + fmt(data.price), 6, yPrecio - 5);
+
+        // Los picos: los imanes. Se marcan con su distancia para saber si vale la pena.
+        ctx.font = '700 10.5px Manrope, sans-serif';
+        for(const p of mapa.picos.slice(0, 5)){
+          const y = H * (1 - (p.centro - mapa.min) / (mapa.max - mapa.min));
+          const arriba = p.distPct > 0;
+          ctx.strokeStyle = arriba ? 'rgba(239,68,68,.75)' : 'rgba(16,185,129,.75)';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(anchoMapa, y); ctx.stroke();
+          ctx.fillStyle = arriba ? '#ef4444' : '#10b981';
+          ctx.fillText(`${arriba?'▲':'▼'} ${Math.abs(p.distPct).toFixed(1)}%`, anchoMapa - 52, y - 3);
+        }
+
+        // La escala de precios a la derecha
+        ctx.fillStyle = '#8b98a8'; ctx.font = '10px Manrope, sans-serif';
+        for(let k = 0; k <= 6; k++){
+          const y = H * k / 6;
+          const precioAqui = mapa.max - (mapa.max - mapa.min) * k / 6;
+          ctx.fillText('$' + fmt(precioAqui), anchoMapa + 6, y + (k===0 ? 10 : k===6 ? -2 : 3));
+        }
+
+        // La leyenda debajo: el veredicto en dos datos
+        const col = mapa.sesgo === 'arriba' ? 'var(--rose)' : mapa.sesgo === 'abajo' ? 'var(--teal)' : 'var(--sub)';
+        const flecha = mapa.sesgo === 'arriba' ? '▲' : mapa.sesgo === 'abajo' ? '▼' : '◆';
+        document.getElementById('liqHeatLeyenda').innerHTML = `
+          <span style="color:${col};font-weight:700;font-size:12.5px;">
+            ${flecha} La liquidez pesa ${mapa.sesgo === 'pareja' ? 'parejo' : mapa.sesgo} (${mapa.dominancia}%)
+          </span>
+          <span style="font-size:11px;">
+            ${mapa.distArriba != null ? `<span style="color:var(--rose);">▲ ${mapa.distArriba}%</span>` : ''}
+            ${mapa.distAbajo != null ? `<span style="color:var(--teal);margin-left:9px;">▼ ${Math.abs(mapa.distAbajo)}%</span>` : ''}
+          </span>`;
+        wrap.style.display = '';
+      }catch(e){ wrap.style.display='none'; }
+    })();
+
+    // ═══ LIQUIDEZ EN TODOS LOS HORIZONTES ═══
+    // El timeframe elegido arriba muestra UN marco. Esto muestra los cinco a la vez y marca
+    // cuáles coinciden: un nivel que aparece solo en 15m es ruido, uno que aparece en 15m,
+    // 1h y 4h a la vez es un muro que el precio respeta de verdad.
+    (async () => {
+      const p = document.getElementById('liqMultiPanel');
+      try{
+        const E = TheHatonEngine;
+        // Qué marcos mirar depende del tamaño: a BTC le sirve el mes, a una memecoin no
+        const h = E.horizontesSegunTamano(data.marketCap, data.vol24h);
+        const series = { '15m': null, '1h': null, '4h': null, '1d': null, '1mo': null };
+        const traidos = await Promise.allSettled(
+          h.tfs.map(tf => tf === liqCurrentTf ? Promise.resolve(data) : fetchTokenData(q, tf)));
+        h.tfs.forEach((tf, k) => {
+          const r = traidos[k];
+          if(r.status === 'fulfilled' && r.value?.candles) series[tf] = r.value.candles;
+        });
+        Object.keys(series).forEach(k => { if(!series[k]) delete series[k]; });
+
+        const multi = E.liquidezMultiHorizonte(series, data.price);
+        if(!multi){ p.style.display='none'; return; }
+
+        const filaNivel = (n, destacado) => {
+          const col = n.distPct >= 0 ? 'var(--rose)' : 'var(--teal)';
+          const marcos = n.tfs.map(t => `<span style="font-size:9px;background:rgba(255,255,255,.08);
+            border-radius:3px;padding:1px 4px;margin-left:3px;">${t}</span>`).join('');
+          // La calidad del nivel: no todos los que tienen 4 toques valen lo mismo
+          const colCal = n.calidad === 'MURO' ? 'var(--amber)' : n.calidad === 'sólido' ? 'var(--teal)'
+                       : n.calidad === 'débil' ? 'var(--sub)' : '#5a6672';
+          const chipCal = n.calidad ? `<span style="font-size:9px;color:${colCal};border:1px solid ${colCal}44;
+            border-radius:99px;padding:1px 6px;">${n.calidad}</span>` : '';
+          return `<div style="padding:6px 0;${destacado?'background:rgba(0,217,255,.05);border-radius:6px;padding-left:6px;':''}">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="width:100px;color:${col};font-family:var(--display);font-weight:700;font-size:12px;">$${fmt(n.precio)}</span>
+              <span style="width:52px;font-size:11px;color:var(--sub);">${n.distPct>=0?'+':''}${n.distPct}%</span>
+              <span style="flex:1;font-size:10px;">${marcos}</span>
+              ${chipCal}
+            </div>
+            ${n.porque ? `<div style="font-size:10.5px;color:var(--sub);line-height:1.45;margin-top:3px;padding-left:2px;">${n.porque}</div>` : ''}
+          </div>`;
+        };
+
+        p.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:13px;">
+          <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:4px;">
+            🌐 TODOS LOS HORIZONTES · ${multi.timeframes.join(' · ')}</div>
+          <div style="font-size:10.5px;color:var(--sub);margin-bottom:9px;line-height:1.5;">${h.nota}</div>
+          <div style="font-size:12.5px;line-height:1.55;margin-bottom:10px;">${multi.resumen}</div>
+          ${multi.confluentes.length ? `<div style="font-size:10px;color:var(--amber);letter-spacing:.5px;margin:8px 0 3px;">
+            🔥 COINCIDEN EN 3 O MÁS MARCOS — son los que más pesan</div>
+            ${multi.confluentes.slice(0,4).map(n=>filaNivel(n,true)).join('')}` : ''}
+          ${multi.enDos.length ? `<div style="font-size:10px;color:var(--sub);letter-spacing:.5px;margin:8px 0 3px;">
+            COINCIDEN EN 2 MARCOS</div>
+            ${multi.enDos.slice(0,4).map(n=>filaNivel(n,false)).join('')}` : ''}
+          <div style="font-size:10.5px;color:var(--sub);margin-top:9px;line-height:1.5;">
+            Un nivel que aparece en un solo marco suele ser ruido. Los que coinciden en varios son donde el precio reacciona.</div>
+        </div>`;
+        p.style.display = '';
+      }catch(e){ p.style.display='none'; }
+    })();
 
     // ═══ LIBRO DE ÓRDENES EN LA PESTAÑA LIQUIDEZ ═══
     // Esta pantalla mostraba solo liquidez INFERIDA de las velas (niveles con toques, POC,

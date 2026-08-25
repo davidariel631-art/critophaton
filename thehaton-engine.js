@@ -3717,6 +3717,9 @@ function expectancyPorEstrategia(closedTrades, minMuestra = 10){
     ...agrupar('Wallets', t => t.registro?.wallets?.acompana ?? null),
     ...agrupar('Libro de órdenes', t => t.registro?.libro?.sesgo ?? null),
     ...agrupar('Cinta de medias', t => t.registro?.cinta == null ? null : (t.registro.cinta.limpia ? 'limpia' : 'plana')),
+    ...agrupar('RSI', t => t.registro?.rsi == null ? null : (t.registro.rsi >= 55 ? 'alto' : t.registro.rsi >= 45 ? 'neutro' : 'bajo')),
+    ...agrupar('ADX', t => t.registro?.adx == null ? null : (t.registro.adx >= 25 ? 'con tendencia' : 'sin tendencia')),
+    ...agrupar('Volatilidad', t => t.registro?.atrPct == null ? null : (t.registro.atrPct >= 4 ? 'alta' : 'normal')),
     ...agrupar('Flujo de órdenes', t => t.registro?.flujoOrdenes?.sesgo ?? null),
   ].sort((a,b)=> b.expectancy - a.expectancy);
 
@@ -4770,6 +4773,402 @@ export function contextoTransferencia(usd, marketCapUsd, volumenDiarioUsd){
     pctVolumenDiario: pctVol != null ? +pctVol.toFixed(1) : null,
     relevante: nivel === 'ALTO' || nivel === 'MUY ALTO',
     lectura: lecturas.length ? lecturas.join(' ') : `Movimiento chico para el tamaño de esta moneda: probablemente no mueva el precio.`,
+  };
+}
+
+// ═══ MAPA DE CALOR DE LIQUIDEZ ═══
+// Devuelve una franja de precios con la densidad de liquidez en cada una, para DIBUJARLA.
+// La idea: mirar el mapa y ver de un vistazo dónde están los imanes, arriba o abajo, cerca
+// o lejos — sin leer un párrafo.
+//
+// La densidad de cada franja combina cinco cosas, todas de datos que ya tenemos:
+//   · Volumen negociado ahí (perfil de volumen clásico)
+//   · Tiempo que el precio pasó ahí (donde estuvo horas hay más órdenes)
+//   · Toques de swing con su calidad (rechazo, frescura, volumen)
+//   · Órdenes reales del libro, si están disponibles
+//   · Liquidaciones estimadas por apalancamiento
+export function mapaCalorLiquidez(candles, precio, opciones = {}){
+  if(!Array.isArray(candles) || candles.length < 30 || !precio) return null;
+
+  const rangoPct = opciones.rangoPct ?? 12;        // ±12% alrededor del precio
+  const filas = opciones.filas ?? 60;              // resolución del mapa
+  const min = precio * (1 - rangoPct/100);
+  const max = precio * (1 + rangoPct/100);
+  const alto = (max - min) / filas;
+
+  // Cada franja arranca en cero y se va cargando
+  const franjas = Array.from({length: filas}, (_, i) => ({
+    desde: min + i*alto, hasta: min + (i+1)*alto,
+    centro: min + (i+0.5)*alto,
+    volumen: 0, tiempo: 0, toques: 0, rechazo: 0, libro: 0, liquidaciones: 0,
+  }));
+  const indiceDe = (p) => {
+    if(p < min || p >= max) return -1;
+    return Math.min(filas-1, Math.floor((p - min) / alto));
+  };
+
+  // ── 1 y 2: VOLUMEN Y TIEMPO ──
+  // El volumen se reparte por el rango de cada vela; el tiempo cuenta cuántas velas
+  // tocaron cada franja. Donde el precio estuvo horas hay muchas más órdenes puestas.
+  for(const v of candles){
+    const iLo = indiceDe(v.l), iHi = indiceDe(v.h);
+    if(iLo < 0 && iHi < 0) continue;
+    const desde = Math.max(0, iLo < 0 ? 0 : iLo);
+    const hasta = Math.min(filas-1, iHi < 0 ? filas-1 : iHi);
+    const n = Math.max(1, hasta - desde + 1);
+    for(let i = desde; i <= hasta; i++){
+      franjas[i].volumen += (v.v || 0) / n;
+      franjas[i].tiempo += 1 / n;
+    }
+  }
+
+  // ── 3: TOQUES DE SWING CON SU CALIDAD ──
+  // Un swing con mecha larga rechazando pesa mucho más que uno que el precio cruzó de largo.
+  for(let i = 2; i < candles.length - 2; i++){
+    const v = candles[i];
+    const esMax = v.h > candles[i-1].h && v.h > candles[i-2].h && v.h > candles[i+1].h && v.h > candles[i+2].h;
+    const esMin = v.l < candles[i-1].l && v.l < candles[i-2].l && v.l < candles[i+1].l && v.l < candles[i+2].l;
+    if(!esMax && !esMin) continue;
+    const idx = indiceDe(esMax ? v.h : v.l);
+    if(idx < 0) continue;
+    const rango = v.h - v.l;
+    const mecha = rango > 0 ? (esMax ? (v.h - Math.max(v.o,v.c)) : (Math.min(v.o,v.c) - v.l)) / rango : 0;
+    // Los swings recientes pesan más: la liquidez vieja ya se consumió
+    const frescura = 0.4 + 0.6 * (i / candles.length);
+    franjas[idx].toques += frescura;
+    franjas[idx].rechazo += mecha * frescura;
+  }
+
+  // ── 4: ÓRDENES REALES DEL LIBRO ──
+  if(opciones.libro?.niveles?.length){
+    for(const n of opciones.libro.niveles){
+      const idx = indiceDe(n.precio);
+      if(idx >= 0) franjas[idx].libro += n.usd || 0;
+    }
+  }
+
+  // ── 5: LIQUIDACIONES ESTIMADAS ──
+  // Donde están los stops de la multitud. Se calcula desde los precios de entrada probables
+  // (los máximos y mínimos recientes) con los apalancamientos más usados.
+  if(opciones.estimarLiquidaciones !== false){
+    const recientes = candles.slice(-100);
+    for(const v of recientes){
+      for(const lev of [10, 20, 25, 50]){
+        // Un long entrado en el máximo se liquida un 1/lev por debajo
+        const liqLong = v.h * (1 - 1/lev);
+        const liqShort = v.l * (1 + 1/lev);
+        const peso = (v.v || 1) / lev;   // los apalancamientos altos son menos usados por volumen
+        const iL = indiceDe(liqLong), iS = indiceDe(liqShort);
+        if(iL >= 0) franjas[iL].liquidaciones += peso;
+        if(iS >= 0) franjas[iS].liquidaciones += peso;
+      }
+    }
+  }
+
+  // ── NORMALIZAR Y COMBINAR ──
+  const maxDe = (k) => Math.max(...franjas.map(f => f[k]), 0) || 1;
+  const mV = maxDe('volumen'), mT = maxDe('tiempo'), mTo = maxDe('toques'),
+        mR = maxDe('rechazo'), mL = maxDe('libro'), mLiq = maxDe('liquidaciones');
+
+  for(const f of franjas){
+    // Los pesos: el volumen y los toques son la base; el libro y las liquidaciones,
+    // cuando están, son evidencia más directa y pesan más.
+    f.densidad = +(
+      (f.volumen/mV) * 0.25 +
+      (f.tiempo/mT) * 0.15 +
+      (f.toques/mTo) * 0.25 +
+      (f.rechazo/mR) * 0.15 +
+      (f.libro/mL) * (mL > 1 ? 0.10 : 0) +
+      (f.liquidaciones/mLiq) * 0.10
+    ).toFixed(3);
+    f.distPct = +((f.centro - precio) / precio * 100).toFixed(2);
+  }
+
+  // Los picos: las franjas que sobresalen sobre sus vecinas son los imanes de verdad
+  const promedio = franjas.reduce((s,f)=>s+f.densidad, 0) / filas;
+  const picos = franjas
+    .filter((f,i) => f.densidad > promedio * 1.6 &&
+      (i === 0 || f.densidad >= franjas[i-1].densidad) &&
+      (i === filas-1 || f.densidad >= franjas[i+1].densidad))
+    .sort((a,b) => b.densidad - a.densidad);
+
+  const arriba = franjas.filter(f => f.distPct > 0.3);
+  const abajo = franjas.filter(f => f.distPct < -0.3);
+  const densArriba = arriba.reduce((s,f)=>s+f.densidad, 0);
+  const densAbajo = abajo.reduce((s,f)=>s+f.densidad, 0);
+  const totalDens = densArriba + densAbajo;
+
+  const picoArriba = picos.find(f => f.distPct > 0.3) || null;
+  const picoAbajo = picos.find(f => f.distPct < -0.3) || null;
+
+  return {
+    franjas, picos: picos.slice(0, 8), precio, min, max,
+    picoArriba, picoAbajo,
+    // Hacia dónde tira: el dato que se quiere ver de un vistazo
+    sesgo: totalDens > 0 ? (densArriba > densAbajo * 1.15 ? 'arriba'
+                          : densAbajo > densArriba * 1.15 ? 'abajo' : 'pareja') : 'pareja',
+    dominancia: totalDens > 0 ? Math.round(Math.max(densArriba, densAbajo) / totalDens * 100) : 50,
+    // La distancia al imán más cercano de cada lado, para saber si vale la pena operar
+    distArriba: picoArriba?.distPct ?? null,
+    distAbajo: picoAbajo?.distPct ?? null,
+  };
+}
+
+// ═══ CALIDAD DE UN NIVEL DE LIQUIDEZ ═══
+// Contar toques no alcanza. Un nivel tocado 4 veces puede ser un muro que se está cargando
+// de órdenes, o uno que se está agotando y va a ceder. La diferencia está en el detalle de
+// CADA toque, y todo eso sale de las velas que ya tenemos.
+//
+// Lo que se mide:
+//   · VOLUMEN por toque — ¿creciente (se carga) o decreciente (se agota)?
+//   · ANTIGÜEDAD — la liquidez de hace 6 horas sigue ahí; la de hace 2 semanas ya se consumió
+//   · RECHAZO — una mecha larga en el nivel ES el rechazo; un cierre justo encima no lo es
+//   · PERFORACIONES — un nivel que ya se rompió y se recuperó está debilitado
+export function calidadNivel(candles, nivelPrecio, opciones = {}){
+  if(!Array.isArray(candles) || candles.length < 20 || !nivelPrecio) return null;
+  const tol = opciones.tolerancia ?? 0.003;   // 0.3%: qué tan cerca cuenta como toque
+  const ahora = candles.at(-1).t || Date.now();
+
+  const toques = [];
+  let perforaciones = 0;
+  let ultimoToqueIdx = -99;
+  for(let i = 0; i < candles.length; i++){
+    const v = candles[i];
+    const dentroEnRango = v.l <= nivelPrecio * (1+tol) && v.h >= nivelPrecio * (1-tol);
+    if(!dentroEnRango) continue;
+
+    // ═══ UN TOQUE, NO UNA VELA ═══
+    // Si el precio se queda dando vueltas cerca del nivel, cada vela contaría como un toque
+    // distinto y el conteo se dispara (82 toques donde hay 5). Un toque es una VISITA: el
+    // precio llega, reacciona y se va. Hasta que no se aleje, sigue siendo el mismo toque.
+    if(i - ultimoToqueIdx < 3) continue;
+    ultimoToqueIdx = i;
+
+    // ¿El precio SE QUEDÓ del otro lado? Solo eso es una perforación real.
+    // Que una vela cierre apenas del otro lado y vuelva enseguida no rompe el nivel:
+    // hace falta que se sostenga unas velas para que cuente.
+    // Una perforación es un CRUCE: el precio venía de un lado y quedó del otro.
+    // Sin comparar el antes con el después, un nivel que actúa como resistencia (con el
+    // precio siempre debajo) contaba una perforación en cada toque, porque "quedó abajo"
+    // era trivialmente cierto.
+    const previas = candles.slice(Math.max(0, i-3), i);
+    const siguientes = candles.slice(i+1, i+4);
+    const veniaDeAbajo = previas.length >= 2 && previas.every(x => x.c < nivelPrecio * (1-tol));
+    const veniaDeArriba = previas.length >= 2 && previas.every(x => x.c > nivelPrecio * (1+tol));
+    const quedoArriba = siguientes.length >= 2 && siguientes.every(x => x.c > nivelPrecio * (1+tol));
+    const quedoAbajo = siguientes.length >= 2 && siguientes.every(x => x.c < nivelPrecio * (1-tol));
+    const cerroArriba = veniaDeAbajo && quedoArriba;   // cruzó hacia arriba
+    const cerroAbajo = veniaDeArriba && quedoAbajo;    // cruzó hacia abajo
+    const rango = v.h - v.l;
+
+    // El rechazo: cuánto de la vela fue mecha contra el nivel
+    let rechazo = 0;
+    if(rango > 0){
+      const mechaArriba = v.h - Math.max(v.o, v.c);
+      const mechaAbajo = Math.min(v.o, v.c) - v.l;
+      // Si el nivel está arriba del cierre, el rechazo relevante es la mecha superior
+      rechazo = nivelPrecio > v.c ? mechaArriba / rango : mechaAbajo / rango;
+    }
+
+    toques.push({
+      idx: i, ts: v.t, vol: v.v || 0, rechazo: +rechazo.toFixed(2),
+      perforo: cerroArriba || cerroAbajo,
+      horasAtras: v.t ? (ahora - v.t) / 3600e3 : null,
+    });
+    if(cerroArriba || cerroAbajo) perforaciones++;
+  }
+  if(!toques.length) return null;
+
+  // ── VOLUMEN: ¿se carga o se agota? ──
+  const volProm = candles.reduce((s,v)=>s+(v.v||0), 0) / candles.length;
+  const volEnToques = toques.reduce((s,t)=>s+t.vol, 0) / toques.length;
+  let tendenciaVol = null;
+  if(toques.length >= 3){
+    const mitad = Math.floor(toques.length/2);
+    const primeros = toques.slice(0, mitad).reduce((s,t)=>s+t.vol,0) / mitad;
+    const ultimos = toques.slice(mitad).reduce((s,t)=>s+t.vol,0) / (toques.length-mitad);
+    if(primeros > 0){
+      const cambio = (ultimos - primeros) / primeros;
+      tendenciaVol = cambio > 0.25 ? 'creciente' : cambio < -0.25 ? 'decreciente' : 'estable';
+    }
+  }
+
+  // ── ANTIGÜEDAD: la liquidez vieja ya fue consumida ──
+  const recientes = toques.filter(t => t.horasAtras != null && t.horasAtras <= 24).length;
+  const ultimoToque = toques.at(-1);
+  const frescura = ultimoToque?.horasAtras == null ? null
+    : ultimoToque.horasAtras <= 6 ? 'muy fresco'
+    : ultimoToque.horasAtras <= 24 ? 'reciente'
+    : ultimoToque.horasAtras <= 72 ? 'algo viejo' : 'viejo';
+
+  // ── RECHAZO: la mecha ES el rechazo ──
+  const rechazoProm = toques.reduce((s,t)=>s+t.rechazo, 0) / toques.length;
+
+  // ── LA PUNTUACIÓN ──
+  let puntos = Math.min(4, toques.length);                                  // base: cuántos toques
+  if(tendenciaVol === 'creciente') puntos += 2;                             // se está cargando
+  else if(tendenciaVol === 'decreciente') puntos -= 1;                      // se está agotando
+  if(volEnToques > volProm * 1.4) puntos += 1;                              // toques con volumen real
+  if(rechazoProm >= 0.5) puntos += 2;                                       // rechazos claros
+  else if(rechazoProm < 0.2) puntos -= 1;                                   // el precio pasa sin frenar
+  if(frescura === 'muy fresco') puntos += 2;
+  else if(frescura === 'reciente') puntos += 1;
+  else if(frescura === 'viejo') puntos -= 2;
+  puntos -= perforaciones * 1.5;                                            // cada perforación lo debilita
+
+  const calidad = puntos >= 7 ? 'MURO' : puntos >= 4 ? 'sólido' : puntos >= 2 ? 'débil' : 'irrelevante';
+
+  return {
+    precio: nivelPrecio, toques: toques.length, perforaciones,
+    volumenRelativo: +(volEnToques / (volProm || 1)).toFixed(2),
+    tendenciaVolumen: tendenciaVol,
+    rechazoPromedio: +rechazoProm.toFixed(2),
+    frescura, toquesRecientes: recientes,
+    puntos: +puntos.toFixed(1), calidad,
+    // La explicación de por qué es fuerte o débil, que es lo que hace falta para operar
+    porque: (() => {
+      const p = [];
+      if(tendenciaVol === 'creciente') p.push('el volumen en cada toque viene creciendo: se está acumulando interés en ese nivel');
+      if(tendenciaVol === 'decreciente') p.push('el volumen en cada toque viene bajando: el nivel se está agotando y puede ceder');
+      if(rechazoProm >= 0.5) p.push(`las velas rechazan con mechas largas (${(rechazoProm*100).toFixed(0)}% del rango): hay defensa real`);
+      if(rechazoProm < 0.2 && toques.length >= 2) p.push('el precio pasa por ahí sin frenar: no hay defensa');
+      if(perforaciones > 0) p.push(`ya fue perforado ${perforaciones} ${perforaciones===1?'vez':'veces'}, lo que lo debilita`);
+      if(frescura === 'viejo') p.push('el último toque fue hace más de 3 días: esa liquidez probablemente ya se consumió');
+      if(frescura === 'muy fresco') p.push('fue tocado en las últimas 6 horas: la liquidez sigue ahí');
+      return p.length ? p.join('; ') + '.' : `${toques.length} toques sin nada destacable.`;
+    })(),
+  };
+}
+
+// ═══ LIQUIDEZ EN TODOS LOS HORIZONTES ═══
+// Hasta ahora la liquidez se calculaba sobre UNA sola serie de velas. El problema: un nivel
+// que aparece solo en 15m es ruido, y uno que aparece en 15m, 1h y 4h a la vez es un muro.
+// Sin comparar entre timeframes no hay forma de distinguirlos.
+//
+// Y el horizonte útil NO es el mismo para todas las monedas:
+//   · BTC y monedas grandes tienen memoria larga: un nivel de hace un mes todavía importa
+//     porque hay mucho capital posicionado ahí y el precio lo respeta.
+//   · Las monedas chicas y memecoins rotan tan rápido que un nivel de hace un mes ya no
+//     existe: los que estaban ahí ya salieron. Mirar tan atrás mete ruido, no señal.
+//
+// Por eso el rango se elige según el tamaño, no de forma fija.
+export function horizontesSegunTamano(marketCapUsd, vol24hUsd){
+  const mc = marketCapUsd || 0;
+  // La rotación también cuenta: una moneda chica con volumen enorme rota aún más rápido
+  const rotacion = (mc > 0 && vol24hUsd > 0) ? vol24hUsd / mc : 0;
+
+  if(mc >= 10e9 || rotacion < 0.02){
+    return { categoria:'grande', tfs:['15m','1h','4h','1d','1mo'],
+      nota:'Moneda grande: los niveles viejos siguen valiendo porque hay mucho capital posicionado. Se mira hasta un mes atrás.' };
+  }
+  if(mc >= 500e6){
+    return { categoria:'mediana', tfs:['15m','1h','4h','1d'],
+      nota:'Moneda mediana: se mira hasta un día. Un mes atrás ya es demasiado lejos para que el nivel siga defendido.' };
+  }
+  if(rotacion >= 1){
+    return { categoria:'rotación alta', tfs:['15m','1h','4h'],
+      nota:`Esta moneda rota ${rotacion.toFixed(1)} veces su market cap por día: los niveles de hace más de unas horas ya no tienen a nadie defendiéndolos. Mirar más atrás es ruido.` };
+  }
+  return { categoria:'chica', tfs:['15m','1h','4h','1d'],
+    nota:'Moneda chica: se mira hasta un día. Los niveles de un mes atrás ya no aplican porque quienes estaban posicionados ahí ya salieron.' };
+}
+
+// Combina la liquidez de varios timeframes y detecta CONFLUENCIA: los niveles que aparecen
+// en más de uno son los que de verdad importan.
+export function liquidezMultiHorizonte(seriesPorTf, precio, opciones = {}){
+  const tfs = Object.keys(seriesPorTf || {}).filter(k => Array.isArray(seriesPorTf[k]) && seriesPorTf[k].length >= 30);
+  if(!tfs.length || !precio) return null;
+
+  // Cada timeframe pesa distinto: lo que aparece en 4h vale más que lo que aparece en 15m,
+  // porque hace falta más tiempo y volumen para formar un nivel en un marco mayor.
+  const peso = { '15m':1, '1h':1.6, '4h':2.4, '1d':3.2, '1mo':4 };
+  const tolerancia = opciones.tolerancia ?? 0.004;   // 0.4%: dos niveles más cerca que esto son el mismo
+
+  const todos = [];
+  for(const tf of tfs){
+    let liq;
+    try{ liq = detectLiquidezPorHorizonte(seriesPorTf[tf]); }catch(e){ continue; }
+    if(!liq) continue;
+    for(const [clave, lado] of [['cercanaArriba','arriba'],['lejanaArriba','arriba'],
+                                 ['cercanaAbajo','abajo'],['lejanaAbajo','abajo']]){
+      const n = liq[clave];
+      if(!n?.precio) continue;
+      todos.push({ tf, lado, precio:n.precio, toques:n.toques||1, peso: peso[tf] || 1 });
+    }
+  }
+  if(!todos.length) return null;
+
+  // Agrupar niveles cercanos entre sí: son el mismo nivel visto en distintos marcos
+  const grupos = [];
+  for(const n of todos.sort((a,b)=>a.precio-b.precio)){
+    const g = grupos.find(x => Math.abs(x.precio - n.precio) / n.precio < tolerancia && x.lado === n.lado);
+    if(g){
+      g.tfs.push(n.tf);
+      g.toques += n.toques;
+      g.pesoTotal += n.peso;
+      g.precio = (g.precio * (g.tfs.length-1) + n.precio) / g.tfs.length;   // promedio
+    } else {
+      grupos.push({ precio:n.precio, lado:n.lado, tfs:[n.tf], toques:n.toques, pesoTotal:n.peso });
+    }
+  }
+
+  // La calidad de cada nivel se evalúa contra las velas del marco más fino disponible:
+  // volumen por toque, rechazo, frescura y perforaciones. Sin esto, un nivel tocado 4 veces
+  // hace dos semanas pesaba igual que uno tocado 4 veces hoy con volumen creciente.
+  const serieFina = seriesPorTf['15m'] || seriesPorTf['1h'] || seriesPorTf[tfs[0]];
+  const conDist = grupos.map(g => {
+    const q = (()=>{ try{ return calidadNivel(serieFina, g.precio); }catch(e){ return null; } })();
+    // La calidad multiplica la fuerza: un muro vale el doble, uno irrelevante casi nada
+    const mult = !q ? 1 : q.calidad === 'MURO' ? 2 : q.calidad === 'sólido' ? 1.4
+               : q.calidad === 'débil' ? 0.7 : 0.3;
+    return {
+      ...g,
+      tfs: [...new Set(g.tfs)],
+      distPct: +((g.precio - precio) / precio * 100).toFixed(2),
+      calidad: q?.calidad || null,
+      porque: q?.porque || null,
+      tendenciaVolumen: q?.tendenciaVolumen || null,
+      frescura: q?.frescura || null,
+      perforaciones: q?.perforaciones ?? null,
+      fuerza: +(g.pesoTotal * Math.min(3, Math.sqrt(g.toques)) * mult).toFixed(1),
+    };
+  }).sort((a,b) => b.fuerza - a.fuerza);
+
+  const arriba = conDist.filter(x => x.distPct > 0);
+  const abajo = conDist.filter(x => x.distPct < 0);
+  const fuerzaArriba = arriba.reduce((s,x)=>s+x.fuerza, 0);
+  const fuerzaAbajo = abajo.reduce((s,x)=>s+x.fuerza, 0);
+  const total = fuerzaArriba + fuerzaAbajo;
+
+  // Confluencia: los que aparecen en 3 o más marcos son los niveles serios
+  const confluentes = conDist.filter(x => x.tfs.length >= 3);
+  const enDos = conDist.filter(x => x.tfs.length === 2);
+
+  return {
+    niveles: conDist.slice(0, 12),
+    confluentes, enDos,
+    masFuerteArriba: arriba[0] || null,
+    masFuerteAbajo: abajo[0] || null,
+    ladoFuerte: total > 0 ? (fuerzaArriba > fuerzaAbajo * 1.2 ? 'arriba'
+                            : fuerzaAbajo > fuerzaArriba * 1.2 ? 'abajo' : 'pareja') : 'pareja',
+    dominanciaPct: total > 0 ? Math.round(Math.max(fuerzaArriba, fuerzaAbajo) / total * 100) : 50,
+    timeframes: tfs,
+    resumen: (() => {
+      const partes = [];
+      if(confluentes.length){
+        const c0 = confluentes[0];
+        partes.push(`El nivel más importante está en $${fmtPrecio(c0.precio)} (${c0.distPct > 0 ? '+' : ''}${c0.distPct}%): aparece en ${c0.tfs.join(', ')}${c0.calidad ? ` y es un nivel ${c0.calidad}` : ''}.` +
+          (c0.porque ? ` ${c0.porque.charAt(0).toUpperCase()}${c0.porque.slice(1)}` : ''));
+      } else if(enDos.length){
+        const c0 = enDos[0];
+        partes.push(`El nivel más marcado está en $${fmtPrecio(c0.precio)} (${c0.distPct > 0 ? '+' : ''}${c0.distPct}%), visible en ${c0.tfs.join(' y ')}.`);
+      } else {
+        partes.push('Ningún nivel coincide entre timeframes: los que hay son de un solo marco y suelen ser menos confiables.');
+      }
+      const lado = fuerzaArriba > fuerzaAbajo * 1.2 ? 'arriba' : fuerzaAbajo > fuerzaArriba * 1.2 ? 'abajo' : null;
+      if(lado) partes.push(`En conjunto la liquidez pesa más ${lado}: es hacia donde tiende a moverse el precio.`);
+      return partes.join(' ');
+    })(),
   };
 }
 
@@ -6792,6 +7191,40 @@ function generarReporteResearch(closedTrades, opciones = {}){
   // La afirmación central de la estrategia de la cinta: operar con cinta plana rinde peor.
   // Esto lo comprueba con datos reales en vez de darlo por cierto.
   // ¿El retroceso a la cinta rinde distinto que entrar sin retroceso?
+  // ═══ LOS INDICADORES CLÁSICOS ═══
+  // Son los que MÁS votan en el score y hasta ahora no se medía ninguno. El dato ya se
+  // guardaba en cada operación (rsi, adx, estocastico); solo faltaba analizarlo.
+  // Se agrupan en rangos porque "RSI 58" no dice nada suelto: lo que importa es si entrar
+  // con RSI alto rinde distinto que entrar con RSI bajo.
+  analizarPor(null, 'RSI al entrar', t => {
+    const v = t.registro?.rsi;
+    if(v == null) return null;
+    return v >= 70 ? 'sobrecomprado (70+)' : v >= 55 ? 'alto (55-70)'
+         : v >= 45 ? 'neutro (45-55)' : v >= 30 ? 'bajo (30-45)' : 'sobrevendido (-30)';
+  });
+  analizarPor(null, 'ADX al entrar', t => {
+    const v = t.registro?.adx;
+    if(v == null) return null;
+    // Por debajo de 20 no hay tendencia; arriba de 40 puede estar agotándose
+    return v >= 40 ? 'tendencia muy fuerte (40+)' : v >= 25 ? 'tendencia real (25-40)'
+         : v >= 20 ? 'tendencia débil (20-25)' : 'sin tendencia (-20)';
+  });
+  // La volatilidad al entrar: puede ser el factor que explica por qué los stops se tocan
+  analizarPor(null, 'Volatilidad al entrar', t => {
+    const v = t.registro?.atrPct;
+    if(v == null) return null;
+    return v >= 8 ? 'muy alta (8%+)' : v >= 4 ? 'alta (4-8%)' : v >= 2 ? 'normal (2-4%)' : 'baja (-2%)';
+  });
+  // ¿El stop salió de una estructura real o fue un porcentaje fijo?
+  analizarPor(null, 'Tipo de stop', t => t.registro?.stopEstructural == null ? null
+    : (t.registro.stopEstructural ? 'estructural' : 'por porcentaje'));
+  // El ancho del stop: los muy anchos dan menos tamaño, los muy finos se tocan por ruido
+  analizarPor(null, 'Ancho del stop', t => {
+    const v = t.registro?.gestion?.stopPct ?? t.registro?.stopPct;
+    if(v == null) return null;
+    return v >= 8 ? 'muy ancho (8%+)' : v >= 5 ? 'ancho (5-8%)' : v >= 3 ? 'normal (3-5%)' : 'fino (-3%)';
+  });
+
   // ¿Rinde mejor respetar la decisión del motor que ignorarla? Es la medición más
   // importante: valida si toda la capa de decisión sirve para algo.
   analizarPor(null, 'Decisión del motor', t => t.registro?.decision?.accion ?? null);
