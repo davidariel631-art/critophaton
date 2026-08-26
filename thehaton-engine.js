@@ -7228,6 +7228,17 @@ function generarReporteResearch(closedTrades, opciones = {}){
   // ¿Rinde mejor respetar la decisión del motor que ignorarla? Es la medición más
   // importante: valida si toda la capa de decisión sirve para algo.
   analizarPor(null, 'Decisión del motor', t => t.registro?.decision?.accion ?? null);
+  // ═══ ¿CONVIENE ALEJAR EL OBJETIVO? ═══
+  // Ahora se cierra todo en TP1 (1.15R). La pregunta que sigue es si el precio habría
+  // seguido hasta 1.5R o 1.8R. El MFE lo responde: es cuánto avanzó como máximo cada
+  // operación antes de cerrarse. Si muchas ganadoras llegaron a 1.5R, vale la pena alejar
+  // el objetivo; si se quedaron justo en 1.15R, moverlo sería regalar los aciertos.
+  analizarPor(null, 'Hasta dónde llegó', t => {
+    const mfe = t.registro?.mfe;
+    if(mfe == null) return null;
+    return mfe >= 2 ? 'pasó 2R' : mfe >= 1.8 ? 'llegó a 1.8R' : mfe >= 1.5 ? 'llegó a 1.5R'
+         : mfe >= 1.15 ? 'llegó a TP1 (1.15R)' : mfe >= 0.5 ? 'se quedó a mitad' : 'no avanzó';
+  });
   analizarPor(null, 'Entró con fuerza', t => t.registro?.decision?.fuerza == null ? null
     : (t.registro.decision.fuerza ? 'con fuerza' : 'sin fuerza'));
   analizarPor(null, 'Retroceso a la cinta', t => t.registro?.cinta == null ? null
