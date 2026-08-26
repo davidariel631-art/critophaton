@@ -2484,7 +2484,7 @@ async function confirmTheses(state, capitalFlow){
           `TP2: <code>$${fmtPrecio(setup.t2)}</code> (${pct(setup.t2)>=0?'+':''}${pct(setup.t2).toFixed(2)}%) · R:R ${rrTp2}\n` +
 
           `Riesgo: ${(riskPct*100).toFixed(1)}% del capital · Apalancamiento ${setup.leverage}\n` +
-          `Gestión: 60% en TP1 (stop pasa al punto de entrada) + 40% hasta TP2\n\n` +
+          `Gestión: se cierra el 100% en TP1\n\n` +
 
           // Todo el contexto de mercado en una sola sección, ya calculado arriba
           // ═══ ESTADO DE LA CINTA ═══
@@ -2933,41 +2933,32 @@ async function manageActiveTheses(state){
       }
 
       if(hitTP1){
-        // 60% en TP1. Antes era 40%, pero los datos reales mostraron que el resto casi siempre
-        // muere en breakeven: de cuatro ganadoras seguidas, las cuatro cerraron el sobrante en
-        // cero y ninguna llegó a TP2. Tomando 60% se captura 0.6R en vez de 0.4R por acierto.
-        const exitUnits = thesis.originalUnits*0.6;
-        const pnl = exitUnits * (thesis.tp1-thesis.entry) * (thesis.dir==='LONG'?1:-1);
+        // ═══ UN SOLO OBJETIVO: SE CIERRA TODO EN TP1 ═══
+        // Por qué cambió: de las 10 operaciones que llegaron a TP1, las 10 murieron en
+        // breakeven y NINGUNA llegó a TP2. El resto de la posición no aportaba nada —
+        // siempre cerraba en cero— pero se llevaba el 40% de cada acierto.
+        //
+        // La cuenta con esos datos:
+        //   60% en TP1 + breakeven → la ganadora rinde 0.69R → hace falta 59% de aciertos
+        //   100% en TP1           → la ganadora rinde 1.15R → hace falta 47% de aciertos
+        // El win rate observado es 53%: la diferencia entre perder y ganar está justo ahí.
+        //
+        // Se cierra en TP1 y no más lejos porque los datos muestran que el precio SÍ llega
+        // a 1.15R pero NO a 1.8R. Alejar el objetivo sube lo que se gana por acierto, pero
+        // baja cuántas veces se acierta — y ese segundo número todavía no lo sabemos.
+        const pnl = thesis.units * (thesis.tp1-thesis.entry) * (thesis.dir==='LONG'?1:-1);
         acc.capital = +(acc.capital+pnl).toFixed(4);
-        thesis.units = thesis.units - exitUnits; // queda el 60% corriendo
-        thesis.partialTaken = true;
-        thesis.stop = thesis.entry; // mueve el stop al punto de entrada (breakeven)
-        // ═══ MOMENTO EXACTO EN QUE SE ACTIVÓ EL BREAKEVEN ═══
-        // Desde acá empieza a vigilarse el breakeven. Los precios ANTERIORES a este instante
-        // no cuentan: en ese momento el stop era el original, mucho más lejos.
-        // Este es el arreglo del caso PROM/GPS: un retroceso previo a TP1 se leía como
-        // "volvió a breakeven" y cerraba el 60% restante sin motivo.
-        thesis.tp1HitAt = Date.now();
-        thesis.breakEvenActivatedAt = Date.now();
-        if(thesis.stopHistory?.length) thesis.stopHistory.at(-1).hasta = Date.now();
-        else thesis.stopHistory = [];
-        thesis.stopHistory.push({ tipo:'BREAKEVEN', precio:thesis.entry, desde:Date.now(), hasta:null });
-        // La auditoría del tramo posterior arranca limpia: no hereda el mínimo de antes de TP1
-        thesis.auditoria = thesis.auditoria || {};
-        thesis.auditoria.minDesdeBE = null;
-        thesis.auditoria.maxDesdeBE = null;
-        journal(thesis, `TP1 alcanzado ($${fmtPrecio(thesis.tp1)}). Se tomó el 60% de la ganancia (+${pnl.toFixed(2)} USDT) y se movió el Stop al punto de entrada. El 40% restante sigue corriendo hacia TP2 ($${fmtPrecio(thesis.tp2)}), con el stop ya en el punto de entrada.`);
-        thesis.partialPnl = pnl;
+        thesis.alcanzoTp1 = true;
+        journal(thesis, `TP1 alcanzado ($${fmtPrecio(thesis.tp1)}): se cierra el 100% de la posición (+${pnl.toFixed(2)} USDT). Capital: ${acc.capital.toFixed(2)}.`);
+        hito(thesis, '🎯 TP1 alcanzado', `cerrada completa +${pnl.toFixed(2)} USDT`);
+        cerrarOperacion(acc, thesis, thesis.tp1, pnl, 'TP1', sendPromises);
         sendPromises.push(sendTelegram(
           (isReconciliation ? `🔎 <b>Auditoría/conciliación:</b> se detectó que esto ya había pasado y no estaba reflejado. Corrigiendo:\n\n` : '') +
-          `💰 <b>TheHaton tomó 60% de ganancia — ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
-          `TP1 alcanzado: $${fmtPrecio(thesis.tp1)} (+${pnl.toFixed(2)} USDT realizados)\n` +
-          `Stop movido a breakeven ($${fmtPrecio(thesis.entry)}): el resto ya no puede terminar en pérdida.\n` +
-          `El 40% restante sigue corriendo hacia TP2.\nCapital: ${acc.capital.toFixed(2)} USDT`
+          `✅ <b>TheHaton cerró ${thesis.symbol}${thesis.tag||''} ${thesis.dir}</b>\n` +
+          `GANÓ en TP1: $${fmtPrecio(thesis.tp1)} (+${pnl.toFixed(2)} USDT)\n` +
+          `Capital actual: ${acc.capital.toFixed(2)} USDT`
         ), { permitirRepetido: true });
-        hito(thesis, '🎯 TP1 alcanzado', 'se tomó el 60% y el stop pasó a breakeven');
-        sendPromises.push(sendPushToAll(`💰 TP1 alcanzado: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · Stop movido a breakeven`, null, 'gestion', thesis.symbol));
-        stillOpen.push(thesis);
+        sendPromises.push(sendPushToAll(`✅ TP1: ${thesis.symbol}`, `+${pnl.toFixed(2)} USDT · cerrada completa`, null, 'cierre', thesis.symbol));
       } else if(hitSL){
         const pnl = thesis.units * (thesis.stop-thesis.entry) * (thesis.dir==='LONG'?1:-1);
         acc.capital = +(acc.capital+pnl).toFixed(4);
@@ -2996,6 +2987,12 @@ async function manageActiveTheses(state){
     // Antes se comparaba el mínimo de toda la operación contra el stop actual (el breakeven),
     // así que un retroceso ANTERIOR a TP1 —cuando el stop todavía era el original, mucho más
     // abajo— se leía como "volvió a breakeven" y cerraba la posición sin motivo.
+    // ═══ ETAPA 2 — SOLO PARA LAS OPERACIONES VIEJAS ═══
+    // Desde el cambio a un solo objetivo, ninguna operación nueva llega acá: TP1 cierra el
+    // 100% y la tesis se saca de la lista. Este bloque se mantiene para que las que ya
+    // estaban abiertas con la lógica anterior (60% tomado, 40% corriendo hacia TP2) puedan
+    // terminar bien en vez de quedar huérfanas para siempre.
+    // Cuando no quede ninguna con partialTaken=true, este bloque se puede borrar entero.
     const beRange = thesis.breakEvenActivatedAt
       ? await fetchPriceRange(thesis.symbol, thesis.breakEvenActivatedAt, thesis.breakEvenActivatedAt)
       : null;
