@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, horizontesSegunTamano, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, consultarMemoria, generarReporteResearch, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, horizontesSegunTamano, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, consultarMemoria, generarReporteResearch, mapaObstaculos, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2584,6 +2584,11 @@ async function confirmTheses(state, capitalFlow){
                 apalancamiento: null,
                 calendario: (()=>{ try{ return calendarioMacro(); }catch(e){ return null; } })(),
                 flujo: calcularPresionFlujo(data15.candles, 24),
+                // El camino hasta el objetivo: si hay un muro en el medio, el TP no se alcanza
+                // Con el libro adentro, el mapa distingue niveles reales de niveles inferidos
+                obstaculos: (()=>{ try{
+                  return mapaObstaculos(data15.candles, entryPrice, { libro: libroOrdenes });
+                }catch(e){ return null; } })(),
                 retrocesoCinta: (()=>{ try{ return entradaRetrocesoCinta(data15.candles, result15.structure, thesis.dir, data4h?.candles); }catch(e){ return null; } })(),
               });
               // ═══ LA DECISIÓN QUEDA EN EL REGISTRO ═══
