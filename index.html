@@ -2951,8 +2951,16 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         if(!mapa){ wrap.style.display='none'; return; }
 
         const cv = document.getElementById('liqHeatCanvas');
+        // ═══ EL BUG QUE LO HACÍA INVISIBLE ═══
+        // El contenedor arranca con display:none. Un elemento oculto mide 0 de ancho, así que
+        // el canvas se dibujaba de 0 píxeles y no se veía nada — sin ningún error en consola.
+        // Hay que MOSTRARLO PRIMERO y recién después medir.
+        wrap.style.display = '';
         const dpr = window.devicePixelRatio || 1;
-        const W = cv.clientWidth, H = 340;
+        // Si aun así mide 0 (por ejemplo si la pestaña no está activa), se usa el ancho del
+        // contenedor padre como respaldo.
+        const W = cv.clientWidth || cv.parentElement?.clientWidth || 340;
+        const H = 340;
         cv.width = W * dpr; cv.height = H * dpr;
         const ctx = cv.getContext('2d');
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2990,16 +2998,51 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         ctx.fillStyle = '#ffffff'; ctx.font = '700 11px Manrope, sans-serif';
         ctx.fillText('AHORA  $' + fmt(data.price), 6, yPrecio - 5);
 
-        // Los picos: los imanes. Se marcan con su distancia para saber si vale la pena.
-        ctx.font = '700 10.5px Manrope, sans-serif';
+        // ═══ LOS MUROS: SE VEN, NO SE LEEN ═══
+        // Un muro del libro de órdenes no es una línea fina: es una BARRA cuyo largo
+        // representa cuánto dinero hay. Así se compara de un vistazo cuál es más grande,
+        // sin leer los montos.
+        if(libro?.niveles?.length){
+          const maxUsd = Math.max(...libro.niveles.map(n => n.usd));
+          for(const n of libro.niveles.slice(0, 10)){
+            if(n.precio < mapa.min || n.precio > mapa.max) continue;
+            const y = H * (1 - (n.precio - mapa.min) / (mapa.max - mapa.min));
+            const compra = n.lado === 'compra';
+            // El largo de la barra es proporcional al dinero: el muro más grande ocupa
+            // el 45% del ancho, el resto en proporción.
+            const largo = Math.max(6, (n.usd / maxUsd) * anchoMapa * 0.45);
+            const alto = Math.max(3, altoFila * 0.85);
+            ctx.fillStyle = compra ? 'rgba(16,185,129,.82)' : 'rgba(239,68,68,.82)';
+            // Las compras crecen desde la izquierda, las ventas desde la derecha:
+            // así se ve de qué lado está el peso sin mirar el color.
+            if(compra) ctx.fillRect(0, y - alto/2, largo, alto);
+            else ctx.fillRect(anchoMapa - largo, y - alto/2, largo, alto);
+          }
+        }
+
+        // Los picos de liquidez inferida: líneas más marcadas cuanto más fuertes
         for(const p of mapa.picos.slice(0, 5)){
           const y = H * (1 - (p.centro - mapa.min) / (mapa.max - mapa.min));
           const arriba = p.distPct > 0;
-          ctx.strokeStyle = arriba ? 'rgba(239,68,68,.75)' : 'rgba(16,185,129,.75)';
-          ctx.lineWidth = 1;
+          // El grosor de la línea muestra la fuerza: un imán fuerte se ve más grueso
+          const grosor = 1 + Math.min(3, p.densidad * 4);
+          ctx.strokeStyle = arriba ? 'rgba(239,68,68,.85)' : 'rgba(16,185,129,.85)';
+          ctx.lineWidth = grosor;
           ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(anchoMapa, y); ctx.stroke();
+        }
+
+        // Las distancias, solo de los dos imanes principales: el resto se ve sin números
+        ctx.font = '700 11px Manrope, sans-serif';
+        for(const p of [mapa.picoArriba, mapa.picoAbajo].filter(Boolean)){
+          const y = H * (1 - (p.centro - mapa.min) / (mapa.max - mapa.min));
+          const arriba = p.distPct > 0;
+          const texto = `${arriba?'▲':'▼'} ${Math.abs(p.distPct).toFixed(1)}%`;
+          const w = ctx.measureText(texto).width;
+          // Fondo oscuro detrás del texto para que se lea sobre cualquier color del mapa
+          ctx.fillStyle = 'rgba(0,0,0,.72)';
+          ctx.fillRect(anchoMapa - w - 12, y - 13, w + 8, 17);
           ctx.fillStyle = arriba ? '#ef4444' : '#10b981';
-          ctx.fillText(`${arriba?'▲':'▼'} ${Math.abs(p.distPct).toFixed(1)}%`, anchoMapa - 52, y - 3);
+          ctx.fillText(texto, anchoMapa - w - 8, y - 1);
         }
 
         // La escala de precios a la derecha
