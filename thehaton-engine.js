@@ -4776,6 +4776,206 @@ export function contextoTransferencia(usd, marketCapUsd, volumenDiarioUsd){
   };
 }
 
+// ═══ MAPA DE OBSTÁCULOS ═══
+// Otra idea, distinta al mapa de calor por franjas: en vez de pintar densidad, este mide
+// EL CAMINO. La pregunta que responde no es "dónde hay liquidez" sino:
+//
+//     "Si abro un long acá, ¿qué me voy a encontrar antes de llegar al objetivo?"
+//
+// Devuelve, para cada dirección, la lista de obstáculos en orden con su distancia y cuánto
+// cuesta cruzarlos. Eso permite ver de un vistazo si el camino está despejado hacia un lado
+// y trabado hacia el otro — que es la decisión real entre long y short.
+export function mapaObstaculos(candles, precio, opciones = {}){
+  if(!Array.isArray(candles) || candles.length < 40 || !precio) return null;
+  const alcance = opciones.alcancePct ?? 10;
+  // El ATR sirve para traducir distancia en TIEMPO: 6% de distancia no significa lo mismo
+  // en una moneda que se mueve 1% al día que en una que se mueve 15%.
+  const atrSerie = atr(candles, 14);
+  const atrPct = (() => {
+    const a = Array.isArray(atrSerie) ? atrSerie.at(-1) : atrSerie;
+    return Number.isFinite(a) && a > 0 ? a / precio * 100 : null;
+  })();
+
+  // Los niveles vienen de swings, igual que siempre, pero acá lo importante es ORDENARLOS
+  // por distancia y medir el esfuerzo acumulado de cruzarlos.
+  const niveles = [];
+  for(let i = 3; i < candles.length - 3; i++){
+    const v = candles[i];
+    const esMax = v.h >= Math.max(...candles.slice(i-3, i+4).map(x=>x.h));
+    const esMin = v.l <= Math.min(...candles.slice(i-3, i+4).map(x=>x.l));
+    if(!esMax && !esMin) continue;
+    const p = esMax ? v.h : v.l;
+    const dist = (p - precio) / precio * 100;
+    if(Math.abs(dist) > alcance || Math.abs(dist) < 0.15) continue;
+    // ¿Ya existe un nivel parecido? Se fusionan y suman fuerza
+    const existente = niveles.find(n => Math.abs(n.precio - p) / p < 0.005);
+    if(existente){
+      existente.toques++;
+      existente.volumen += v.v || 0;
+      existente.ultimoIdx = i;
+    } else {
+      niveles.push({ precio: p, dist, toques: 1, volumen: v.v || 0, ultimoIdx: i, tipo: esMax ? 'techo' : 'piso' });
+    }
+  }
+  if(!niveles.length) return null;
+
+  const volProm = candles.reduce((s,v)=>s+(v.v||0), 0) / candles.length;
+
+  // ═══ NIVELES DE OTRAS FUENTES ═══
+  // Un swing es un nivel INFERIDO de lo que pasó. El libro de órdenes son órdenes REALES
+  // puestas ahora. Y los precios de liquidación son liquidez GARANTIZADA: cuando el precio
+  // llega, esas posiciones se cierran sí o sí. No son lo mismo y el mapa debería distinguirlas.
+  for(const n of niveles) n.origen = 'swing';
+
+  if(opciones.libro?.niveles?.length){
+    for(const l of opciones.libro.niveles){
+      if(l.usd < 50000) continue;
+      const dist = (l.precio - precio) / precio * 100;
+      if(Math.abs(dist) > alcance || Math.abs(dist) < 0.15) continue;
+      const cerca = niveles.find(n => Math.abs(n.precio - l.precio) / l.precio < 0.005);
+      if(cerca){
+        // Coincide con un swing: eso lo hace mucho más fuerte
+        cerca.origen = 'swing+libro';
+        cerca.usdLibro = l.usd;
+      } else {
+        niveles.push({ precio: l.precio, dist, toques: 1, volumen: 0,
+          ultimoIdx: candles.length-1, tipo: l.lado === 'compra' ? 'piso' : 'techo',
+          origen: 'libro', usdLibro: l.usd });
+      }
+    }
+  }
+
+  // ═══ PRECIOS DE LIQUIDACIÓN ═══
+  // Donde revientan las posiciones apalancadas. Es el tipo de liquidez más confiable que
+  // existe: no es una orden que alguien puede cancelar, es un cierre forzado.
+  if(opciones.estimarLiquidaciones !== false){
+    const recientes = candles.slice(-60);
+    const cubos = new Map();
+    for(const v of recientes){
+      // Los apalancamientos que importan son los ALTOS: un 10x se liquida a 10% de
+      // distancia, casi siempre fuera del alcance del mapa. Los que revientan cerca —y por
+      // eso mueven el precio en cascada— son 25x, 50x y 100x.
+      for(const lev of [25, 50, 100]){
+        for(const [entrada, esLong] of [[v.h, true], [v.l, false]]){
+          const liq = esLong ? entrada * (1 - 1/lev) : entrada * (1 + 1/lev);
+          const dist = (liq - precio) / precio * 100;
+          if(Math.abs(dist) > alcance || Math.abs(dist) < 0.3) continue;
+          const clave = Math.round(dist * 4) / 4;   // agrupar en escalones de 0.25%
+          const prev = cubos.get(clave) || { precio: liq, peso: 0, n: 0 };
+          cubos.set(clave, { precio: (prev.precio*prev.n + liq)/(prev.n+1),
+                             peso: prev.peso + (v.v || 1)/lev, n: prev.n + 1 });
+        }
+      }
+    }
+    // Solo los cúmulos que destacan: si todo es zona de liquidación, ninguna lo es
+    const pesos = [...cubos.values()].map(x => x.peso);
+    const umbralLiq = pesos.length ? pesos.reduce((s,x)=>s+x,0)/pesos.length * 2.2 : Infinity;
+    for(const [clave, cubo] of cubos){
+      if(cubo.peso < umbralLiq) continue;
+      const cerca = niveles.find(n => Math.abs(n.precio - cubo.precio) / cubo.precio < 0.006);
+      if(cerca){
+        cerca.origen = cerca.origen.includes('libro') ? 'swing+libro+liq' : cerca.origen + '+liq';
+        cerca.zonaLiquidacion = true;
+      } else {
+        niveles.push({ precio: cubo.precio, dist: clave, toques: 1, volumen: 0,
+          ultimoIdx: candles.length-1, tipo: clave > 0 ? 'techo' : 'piso',
+          origen: 'liquidaciones', zonaLiquidacion: true });
+      }
+    }
+  }
+
+  // La calidad de cada nivel se calcula con lo que ya teníamos
+  for(const n of niveles){
+    const q = (()=>{ try{ return calidadNivel(candles, n.precio); }catch(e){ return null; } })();
+    n.calidad = q?.calidad || null;
+    n.porque = q?.porque || null;
+    n.frescura = q?.frescura || null;
+    // El "costo" de cruzarlo: cuánto volumen haría falta, medido en múltiplos del normal
+    const mult = q?.calidad === 'MURO' ? 3 : q?.calidad === 'sólido' ? 2 : q?.calidad === 'débil' ? 1.2 : 0.6;
+    // El origen ajusta el costo: coincidir con el libro o con una zona de liquidación
+    // hace al nivel más real, no solo inferido de las velas.
+    const porOrigen = n.origen === 'swing+libro+liq' ? 1.6
+                    : n.origen === 'swing+libro' ? 1.35
+                    : n.origen?.includes('liq') ? 1.25
+                    : n.origen === 'libro' ? 1.1
+                    : n.origen === 'liquidaciones' ? 0.9 : 1;
+    n.costo = +(mult * Math.min(2.5, Math.sqrt(n.toques)) * porOrigen).toFixed(1);
+    n.distPct = +n.dist.toFixed(2);
+    // Cuánto tarda el precio en llegar, en días de movimiento típico. Es lo que traduce
+    // "está a 6%" en algo útil: puede ser media hora o dos semanas.
+    n.diasEstimados = atrPct ? +(Math.abs(n.dist) / atrPct).toFixed(1) : null;
+  }
+
+  // ═══ FILTRAR EL RUIDO ═══
+  // Sin esto salían 15 niveles todos "sólidos" a menos de 2% del precio, lo que no sirve
+  // para nada: si todo es un obstáculo, ninguno lo es. Se quedan solo los que destacan
+  // sobre el resto y los que están suficientemente separados entre sí.
+  const costoMedio = niveles.reduce((s,n)=>s+n.costo, 0) / niveles.length;
+  const relevantes = niveles
+    // Las zonas de liquidación y los niveles del libro pasan siempre: no son inferidos de
+    // las velas, son órdenes que existen. Descartarlos por tener "un solo toque" era perder
+    // justo la información más confiable del mapa.
+    .filter(n => n.costo >= costoMedio * 0.9 || n.calidad === 'MURO'
+                 || n.zonaLiquidacion || n.origen?.includes('libro'))
+    .sort((a,b) => b.costo - a.costo);
+
+  // Y no se muestran dos niveles a menos de 0,8% uno del otro: es el mismo obstáculo
+  const separados = [];
+  for(const n of relevantes){
+    if(separados.some(x => Math.abs(x.precio - n.precio) / n.precio < 0.008)) continue;
+    separados.push(n);
+  }
+
+  const arriba = separados.filter(n => n.dist > 0).sort((a,b) => a.dist - b.dist);
+  const abajo  = separados.filter(n => n.dist < 0).sort((a,b) => b.dist - a.dist);
+
+  // El esfuerzo acumulado: cuánto cuesta llegar a cada distancia
+  const acumular = (lista) => {
+    let acum = 0;
+    return lista.map(n => { acum += n.costo; return { ...n, costoAcumulado: +acum.toFixed(1) }; });
+  };
+  const caminoArriba = acumular(arriba);
+  const caminoAbajo = acumular(abajo);
+
+  // ¿Hasta dónde se puede llegar "barato"? Es el objetivo realista de cada lado.
+  // ═══ QUÉ ES UN OBSTÁCULO SERIO ═══
+  // El umbral sale de la escala del propio costo, no de un promedio de los que ya pasaron
+  // el filtro (eso daba un umbral más alto que cualquier nivel real, y nada calificaba).
+  // La escala del costo es conocida: un nivel débil da ~1.2, uno sólido ~2-5, un MURO 3-7.5.
+  // Por encima de 3 hay que tenerlo en cuenta de verdad.
+  const umbralSerio = 3;
+  const alcanceLibre = (camino) => {
+    const primero = camino.find(n => n.costo >= umbralSerio);
+    return primero ? Math.abs(primero.distPct) : alcance;
+  };
+  const libreArriba = alcanceLibre(caminoArriba);
+  const libreAbajo = alcanceLibre(caminoAbajo);
+
+  const costoTotalArriba = caminoArriba.reduce((s,n)=>s+n.costo, 0);
+  const costoTotalAbajo = caminoAbajo.reduce((s,n)=>s+n.costo, 0);
+
+  return {
+    precio, atrPct,
+    arriba: caminoArriba.slice(0, 6), abajo: caminoAbajo.slice(0, 6),
+    libreArriba, libreAbajo,
+    costoArriba: +costoTotalArriba.toFixed(1), costoAbajo: +costoTotalAbajo.toFixed(1),
+    // El lado con menos resistencia: por ahí es más probable que el precio se mueva
+    ladoLibre: libreArriba > libreAbajo * 1.3 ? 'arriba'
+             : libreAbajo > libreArriba * 1.3 ? 'abajo' : 'parejo',
+    // El primer obstáculo serio de cada lado: el nivel a vigilar
+    primeroArriba: caminoArriba.find(n => n.costo >= umbralSerio) || caminoArriba[0] || null,
+    primeroAbajo: caminoAbajo.find(n => n.costo >= umbralSerio) || caminoAbajo[0] || null,
+    resumen: (() => {
+      const pa = caminoArriba.find(n => n.costo >= umbralSerio), pb = caminoAbajo.find(n => n.costo >= umbralSerio);
+      if(!pa && !pb) return `No hay obstáculos importantes en ±${alcance}%: el precio tiene espacio para moverse en las dos direcciones.`;
+      if(!pa) return `Hacia arriba el camino está despejado hasta ${alcance}%. Hacia abajo hay un ${pb.calidad || 'nivel'} en $${fmtPrecio(pb.precio)} a ${Math.abs(pb.distPct)}%.`;
+      if(!pb) return `Hacia abajo el camino está despejado hasta ${alcance}%. Hacia arriba hay un ${pa.calidad || 'nivel'} en $${fmtPrecio(pa.precio)} a ${pa.distPct}%.`;
+      const masLibre = Math.abs(pa.distPct) > Math.abs(pb.distPct) ? 'arriba' : 'abajo';
+      return `El primer obstáculo serio está a ${pa.distPct}% arriba ($${fmtPrecio(pa.precio)}, ${pa.calidad}) y a ${Math.abs(pb.distPct)}% abajo ($${fmtPrecio(pb.precio)}, ${pb.calidad}). Hay más espacio hacia ${masLibre}.`;
+    })(),
+  };
+}
+
 // ═══ MAPA DE CALOR DE LIQUIDEZ ═══
 // Devuelve una franja de precios con la densidad de liquidez en cada una, para DIBUJARLA.
 // La idea: mirar el mapa y ver de un vistazo dónde están los imanes, arriba o abajo, cerca
@@ -5668,6 +5868,9 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
                                    // Sin esto la decisión se toma sin saber si el movimiento
                                    // tiene combustible ni si el precio está en buen lugar.
                                    pasos,
+                                   // El camino hasta el objetivo: un muro entre el precio y
+                                   // el TP significa que el objetivo probablemente no se alcanza
+                                   obstaculos,
                                    // La memoria: qué patrones ya demostraron rendir peor
                                    memoria,
                                    // Cuántas posiciones abiertas hay: la 25ª no es como la 1ª
@@ -5771,6 +5974,74 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
       motivo: `La estructura tiene sesgo ${pasos.sesgo.direccion}`,
       detalle: `${pasos.sesgo.texto} Operar contra la estructura es de lo que peor sale: el sesgo estructural pesa más que cualquier oscilador.`,
     });
+  }
+
+  // ¿El objetivo está detrás de un muro? Entonces no es un objetivo realista.
+  if(obstaculos && setup?.t1 && precio && dir){
+    const camino = esLong ? obstaculos.arriba : obstaculos.abajo;
+    const enElMedio = (camino || []).filter(n => {
+      const entre = esLong ? (n.precio > precio && n.precio < setup.t1)
+                           : (n.precio < precio && n.precio > setup.t1);
+      return entre && n.costo >= 3;
+    });
+    if(enElMedio.length){
+      const peor = enElMedio.sort((a,b)=>b.costo-a.costo)[0];
+      // El origen del obstáculo cambia lo que significa. Un swing es un nivel deducido;
+      // órdenes del libro son reales pero se pueden retirar; una zona de liquidación son
+      // cierres forzados que van a ocurrir. Decirlo cambia la decisión.
+      const queEs = peor.zonaLiquidacion
+        ? 'una zona de liquidaciones (cierres forzados que van a ejecutarse sí o sí)'
+        : peor.origen?.includes('libro')
+        ? `un nivel con órdenes reales puestas${peor.usdLibro ? ` ($${(peor.usdLibro/1000).toFixed(0)}K)` : ''}`
+        : `un nivel ${peor.calidad || 'técnico'}`;
+      const cuando = peor.diasEstimados != null
+        ? (peor.diasEstimados < 1 ? ` A la volatilidad actual, el precio llega ahí en unas ${Math.round(peor.diasEstimados*24)} horas.`
+           : ` A la volatilidad actual, tardaría unos ${peor.diasEstimados} días en llegar.`)
+        : '';
+      esperas.push({
+        motivo: `Hay ${queEs} entre el precio y el objetivo`,
+        queEsperar: `que supere $${fmtP(peor.precio)} (${peor.distPct > 0 ? '+' : ''}${peor.distPct}%) con volumen`,
+        nivel: peor.precio,
+        porque: `El objetivo está detrás de ${enElMedio.length === 1 ? 'un nivel' : `${enElMedio.length} niveles`} que el precio tiene que consumir primero.${cuando} ${peor.porque || ''} Mientras no lo cruce, el TP no es alcanzable.`,
+      });
+    }
+
+    // ═══ ¿EL OBJETIVO ESTÁ DEMASIADO LEJOS EN TIEMPO? ═══
+    // Un TP a 5% suena razonable, pero si la moneda se mueve 0.8% al día son seis días de
+    // exposición. Eso cambia el riesgo: más tiempo abierto es más chance de que aparezca
+    // algo que dé vuelta la tesis.
+    if(obstaculos.atrPct > 0){
+      const diasHastaTp = Math.abs(setup.t1 - precio) / precio * 100 / obstaculos.atrPct;
+      if(diasHastaTp > 6){
+        reducen.push({
+          motivo: `El objetivo está a ${diasHastaTp.toFixed(0)} días de movimiento típico`,
+          cuanto: 0.7,
+          porque: `Con una volatilidad de ${obstaculos.atrPct.toFixed(1)}% diario, llegar a TP1 llevaría unos ${diasHastaTp.toFixed(0)} días. Cuanto más tiempo abierta, más chances de que aparezca algo que invalide la tesis.`,
+        });
+      }
+    }
+
+    // ═══ ZONA DE LIQUIDACIONES EN CONTRA ═══
+    // Si hay un cúmulo de liquidaciones del lado contrario y cerca, el precio tiende a ir
+    // a buscarlo: son cierres forzados que generan un movimiento en cascada.
+    const caminoContra = esLong ? obstaculos.abajo : obstaculos.arriba;
+    const liqCerca = (caminoContra || []).find(n => n.zonaLiquidacion && Math.abs(n.distPct) < 3);
+    if(liqCerca){
+      sintesis?.cruces?.push({
+        tipo: 'riesgo', modulo: 'liquidez',
+        texto: `Hay un cúmulo de liquidaciones a ${Math.abs(liqCerca.distPct)}% en contra ($${fmtP(liqCerca.precio)}). Cuando el precio llega ahí, los cierres forzados se encadenan y aceleran el movimiento: el stop puede ejecutarse peor de lo previsto.`,
+      });
+    }
+    // Y si el camino está despejado, se anota como apoyo. `cruces` vive en sintetizarTesis,
+    // no acá: se agrega a la síntesis que ya viene armada.
+    const libre = esLong ? obstaculos.libreArriba : obstaculos.libreAbajo;
+    const distObjetivo = Math.abs(setup.t1 - precio) / precio * 100;
+    if(libre >= distObjetivo && Array.isArray(sintesis?.cruces)){
+      sintesis.cruces.push({
+        tipo: 'apoyo', modulo: 'liquidez',
+        texto: `El camino hasta el objetivo está despejado: no hay niveles importantes en los próximos ${libre.toFixed(1)}% hacia ${esLong ? 'arriba' : 'abajo'}.`,
+      });
+    }
   }
 
   // La memoria frena cuando hay evidencia acumulada de que esta situación rinde peor

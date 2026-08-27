@@ -869,7 +869,8 @@
         <div id="liqLibroPanel" style="display:none;margin-top:12px;"></div>
         <!-- El mapa de calor: se mira, no se lee -->
         <div id="liqHeatWrap" style="display:none;margin-top:12px;">
-          <canvas id="liqHeatCanvas" style="width:100%;height:340px;display:block;border-radius:10px;"></canvas>
+          <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:7px;">🧱 CAMINO</div>
+          <canvas id="liqHeatCanvas" style="width:100%;height:260px;display:block;border-radius:10px;"></canvas>
           <div id="liqHeatLeyenda" style="display:flex;justify-content:space-between;align-items:center;
             margin-top:7px;font-size:11px;color:var(--sub);"></div>
         </div>
@@ -1388,6 +1389,11 @@ function drawCandles(candles, series, support, resistance, structure, setup){
 }
 
 function renderResults(data, result, setup){
+  // Se guarda para que la pestaña Liquidez pueda dibujar el stop y el objetivo en su mapa.
+  // Sin esto, el mapa muestra obstáculos sin referencia: no se sabe si están antes o después
+  // del TP, que es lo único que decide si importan.
+  window._setupActual = setup ? { stop: setup.stop, t1: setup.t1, t2: setup.t2,
+                                   symbol: data.displayName } : null;
   document.getElementById('emptyState').style.display='none';
   document.getElementById('results').style.display='block';
   document.querySelectorAll('.asub-btn').forEach(b=>b.classList.toggle('active', b.dataset.subgroup==='resumen'));
@@ -2938,133 +2944,170 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   try{
     const data = await fetchTokenData(q, liqCurrentTf);
 
-    // ═══ MAPA DE CALOR: SE MIRA, NO SE LEE ═══
-    // Cada franja horizontal es un rango de precio. Cuanto más brillante, más liquidez hay
-    // ahí. Con una mirada se ve si el imán está arriba o abajo, cerca o lejos — que es lo
-    // que hace falta para decidir entre un long y un short.
+    // ═══ MAPA DE OBSTÁCULOS ═══
+    // Muestra el camino: qué hay entre el precio y el objetivo. Con el stop y el TP dibujados,
+    // porque un muro solo importa según de qué lado del objetivo esté.
     (async () => {
       const wrap = document.getElementById('liqHeatWrap');
       try{
         const E = TheHatonEngine;
-        const libro = await E.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null);
-        const mapa = E.mapaCalorLiquidez(data.candles, data.price, { libro, rangoPct: 12, filas: 70 });
-        if(!mapa){ wrap.style.display='none'; return; }
+        // El libro se pasa al mapa: los niveles con órdenes reales se marcan distinto
+        const libroMapa = await E.fetchLibroOrdenes(data.displayName,
+          data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null);
+        const m = E.mapaObstaculos(data.candles, data.price, { alcancePct: 8, libro: libroMapa });
+        if(!m){ wrap.style.display='none'; return; }
+        wrap.style.display = '';
+
+        // El perfil de volumen: el POC es donde más se negoció, y el precio suele volver ahí
+        const perfil = (()=>{ try{ return E.computeLiquidityProfile(data.candles, data.price, 200); }catch(e){ return null; } })();
 
         const cv = document.getElementById('liqHeatCanvas');
-        // ═══ EL BUG QUE LO HACÍA INVISIBLE ═══
-        // El contenedor arranca con display:none. Un elemento oculto mide 0 de ancho, así que
-        // el canvas se dibujaba de 0 píxeles y no se veía nada — sin ningún error en consola.
-        // Hay que MOSTRARLO PRIMERO y recién después medir.
-        wrap.style.display = '';
         const dpr = window.devicePixelRatio || 1;
-        // Si aun así mide 0 (por ejemplo si la pestaña no está activa), se usa el ancho del
-        // contenedor padre como respaldo.
-        const W = cv.clientWidth || cv.parentElement?.clientWidth || 340;
-        const H = 340;
-        cv.width = W * dpr; cv.height = H * dpr;
+        const W = cv.clientWidth || cv.parentElement?.clientWidth || 320;
+        const H = 280;
+        cv.width = W*dpr; cv.height = H*dpr;
         const ctx = cv.getContext('2d');
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.clearRect(0, 0, W, H);
-        ctx.fillStyle = '#080808'; ctx.fillRect(0, 0, W, H);
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.clearRect(0,0,W,H);
 
-        const margenDer = 78;
-        const anchoMapa = W - margenDer;
-        const filas = mapa.franjas.length;
-        const altoFila = H / filas;
+        const alcance = 8, padY = 18;
+        const yDe = (pct) => H/2 - (Math.max(-alcance, Math.min(alcance, pct))/alcance) * (H/2 - padY);
+        const cx = W * 0.38;
+        const anchoMax = W - cx - 58;
+        const pctDe = (precio) => (precio - data.price) / data.price * 100;
 
-        // El color va de azul apagado (poca liquidez) a naranja intenso (mucha).
-        // Se usa una escala de calor real para que el ojo capte la diferencia sin leer números.
-        const colorDe = (d) => {
-          const t = Math.min(1, Math.pow(d, 0.65));   // curva para que lo medio se note
-          if(t < 0.25) return `rgba(20,40,70,${0.25 + t})`;
-          if(t < 0.5)  return `rgba(0,140,190,${0.35 + t*0.5})`;
-          if(t < 0.72) return `rgba(0,210,180,${0.5 + t*0.4})`;
-          if(t < 0.88) return `rgba(240,190,40,${0.6 + t*0.35})`;
-          return `rgba(255,110,40,${0.7 + t*0.3})`;
+        // ── EL ÁREA DE VALOR, DE FONDO ──
+        // Donde se negoció la mayor parte del volumen. El precio se mueve lento adentro
+        // y rápido afuera, así que saber si estás dentro o fuera cambia la expectativa.
+        if(perfil?.vah && perfil?.val){
+          const y1 = yDe(pctDe(perfil.vah)), y2 = yDe(pctDe(perfil.val));
+          ctx.fillStyle = 'rgba(255,255,255,.028)';
+          ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
+          ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
+          ctx.fillText('ÁREA DE VALOR', 4, Math.min(y1,y2) + 11);
+        }
+
+        // ── ZONAS LIBRES ──
+        const zona = (desde, hasta, col) => {
+          const y1 = yDe(hasta), y2 = yDe(desde);
+          const g = ctx.createLinearGradient(0, Math.min(y1,y2), 0, Math.max(y1,y2));
+          g.addColorStop(0, col.replace('X','.14')); g.addColorStop(1, col.replace('X','.02'));
+          ctx.fillStyle = g;
+          ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
         };
+        zona(0, Math.min(alcance, m.libreArriba), 'rgba(16,185,129,X)');
+        zona(-Math.min(alcance, m.libreAbajo), 0, 'rgba(16,185,129,X)');
 
-        // Las franjas, de arriba (precio más alto) hacia abajo
-        mapa.franjas.slice().reverse().forEach((f, i) => {
-          const y = i * altoFila;
-          ctx.fillStyle = colorDe(f.densidad);
-          ctx.fillRect(0, y, anchoMapa * (0.25 + 0.75 * Math.min(1, f.densidad * 1.6)), altoFila + 0.6);
-        });
-
-        // La línea del precio actual: la referencia de todo
-        const yPrecio = H * (1 - (data.price - mapa.min) / (mapa.max - mapa.min));
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
-        ctx.beginPath(); ctx.moveTo(0, yPrecio); ctx.lineTo(anchoMapa, yPrecio); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#ffffff'; ctx.font = '700 11px Manrope, sans-serif';
-        ctx.fillText('AHORA  $' + fmt(data.price), 6, yPrecio - 5);
-
-        // ═══ LOS MUROS: SE VEN, NO SE LEEN ═══
-        // Un muro del libro de órdenes no es una línea fina: es una BARRA cuyo largo
-        // representa cuánto dinero hay. Así se compara de un vistazo cuál es más grande,
-        // sin leer los montos.
-        if(libro?.niveles?.length){
-          const maxUsd = Math.max(...libro.niveles.map(n => n.usd));
-          for(const n of libro.niveles.slice(0, 10)){
-            if(n.precio < mapa.min || n.precio > mapa.max) continue;
-            const y = H * (1 - (n.precio - mapa.min) / (mapa.max - mapa.min));
-            const compra = n.lado === 'compra';
-            // El largo de la barra es proporcional al dinero: el muro más grande ocupa
-            // el 45% del ancho, el resto en proporción.
-            const largo = Math.max(6, (n.usd / maxUsd) * anchoMapa * 0.45);
-            const alto = Math.max(3, altoFila * 0.85);
-            ctx.fillStyle = compra ? 'rgba(16,185,129,.82)' : 'rgba(239,68,68,.82)';
-            // Las compras crecen desde la izquierda, las ventas desde la derecha:
-            // así se ve de qué lado está el peso sin mirar el color.
-            if(compra) ctx.fillRect(0, y - alto/2, largo, alto);
-            else ctx.fillRect(anchoMapa - largo, y - alto/2, largo, alto);
+        // ── STOP Y OBJETIVO ──
+        // Sin esto el mapa muestra obstáculos sin referencia: no se sabe si están
+        // antes o después del TP, que es lo único que decide si importan.
+        const marcarNivel = (precio, etiqueta, col, punteado) => {
+          if(precio == null) return null;
+          const pct = pctDe(precio);
+          if(Math.abs(pct) > alcance) return null;
+          const y = yDe(pct);
+          ctx.strokeStyle = col; ctx.lineWidth = 1;
+          if(punteado) ctx.setLineDash([3,3]);
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = '700 9px Manrope, sans-serif'; ctx.fillStyle = col;
+          ctx.fillText(etiqueta, 4, y - 4);
+          return y;
+        };
+        // Se toman del setup si existe; si no, del análisis de la moneda
+        // Solo vale si es de ESTA moneda: si analizaste BTC y ahora mirás la liquidez de
+        // otra, el stop de BTC no tiene nada que ver.
+        const sa = window._setupActual;
+        const setupLiq = (sa && sa.symbol === data.displayName) ? sa : null;
+        marcarNivel(setupLiq?.stop, 'STOP', 'rgba(239,68,68,.75)', true);
+        marcarNivel(setupLiq?.t1, 'OBJETIVO', 'rgba(16,185,129,.75)', true);
+        if(perfil?.poc){
+          const yPoc = yDe(pctDe(perfil.poc));
+          if(yPoc > padY && yPoc < H-padY){
+            ctx.strokeStyle = 'rgba(0,217,255,.35)'; ctx.lineWidth = 1;
+            ctx.setLineDash([1,4]);
+            ctx.beginPath(); ctx.moveTo(0, yPoc); ctx.lineTo(W, yPoc); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(0,217,255,.55)';
+            ctx.fillText('POC', 4, yPoc + 10);
           }
         }
 
-        // Los picos de liquidez inferida: líneas más marcadas cuanto más fuertes
-        for(const p of mapa.picos.slice(0, 5)){
-          const y = H * (1 - (p.centro - mapa.min) / (mapa.max - mapa.min));
-          const arriba = p.distPct > 0;
-          // El grosor de la línea muestra la fuerza: un imán fuerte se ve más grueso
-          const grosor = 1 + Math.min(3, p.densidad * 4);
-          ctx.strokeStyle = arriba ? 'rgba(239,68,68,.85)' : 'rgba(16,185,129,.85)';
-          ctx.lineWidth = grosor;
-          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(anchoMapa, y); ctx.stroke();
+        // ── LAS BARRAS ──
+        const todos = [...m.arriba, ...m.abajo];
+        const maxCosto = Math.max(...todos.map(n=>n.costo), 1);
+        for(const n of todos){
+          const y = yDe(n.distPct);
+          if(y < padY-4 || y > H-padY+4) continue;
+          const arriba = n.distPct > 0;
+          const col = arriba ? '#ef4444' : '#10b981';
+          // Un nivel ya perforado se dibuja más tenue: está debilitado
+          const alpha = n.perforaciones > 0 ? '77' : 'ee';
+          const w = anchoMax * (0.18 + 0.82 * (n.costo / maxCosto));
+          const h = n.calidad === 'MURO' ? 11 : n.calidad === 'sólido' ? 7 : 4;
+          const g = ctx.createLinearGradient(cx, 0, cx + w, 0);
+          g.addColorStop(0, col + alpha); g.addColorStop(1, col + '22');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          if(ctx.roundRect) ctx.roundRect(cx, y - h/2, w, h, h/2);
+          else ctx.rect(cx, y - h/2, w, h);
+          ctx.fill();
+
+          // ═══ EL ORIGEN SE VE ═══
+          // Un swing es un nivel deducido de lo que pasó. El libro son órdenes puestas ahora.
+          // Una zona de liquidación son cierres forzados que van a ocurrir sí o sí.
+          // No son lo mismo y el mapa lo marca sin escribirlo.
+          if(n.zonaLiquidacion){
+            // Línea punteada que atraviesa: liquidez garantizada
+            ctx.strokeStyle = col + '55'; ctx.lineWidth = 1; ctx.setLineDash([2,3]);
+            ctx.beginPath(); ctx.moveTo(cx + w, y); ctx.lineTo(W - 34, y); ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          if(n.origen?.includes('libro')){
+            // Un punto lleno al final: hay órdenes reales acá
+            ctx.fillStyle = col;
+            ctx.beginPath(); ctx.arc(cx + w + 5, y, 2.5, 0, Math.PI*2); ctx.fill();
+          }
+
+          ctx.font = '600 10px Manrope, sans-serif';
+          ctx.fillStyle = col + (n.perforaciones > 0 ? '88' : 'dd');
+          ctx.textAlign = 'right';
+          ctx.fillText('$' + fmt(n.precio), cx - 8, y + 3.5);
+          // El tiempo estimado: traduce la distancia en algo útil
+          if(n.diasEstimados != null && n.costo >= 2){
+            const t = n.diasEstimados < 1 ? `${Math.round(n.diasEstimados*24)}h` : `${n.diasEstimados}d`;
+            ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.55)';
+            ctx.fillText(t, cx - 8 - ctx.measureText('$' + fmt(n.precio)).width - 46, y + 3.5);
+          }
+          ctx.textAlign = 'left';
         }
 
-        // Las distancias, solo de los dos imanes principales: el resto se ve sin números
-        ctx.font = '700 11px Manrope, sans-serif';
-        for(const p of [mapa.picoArriba, mapa.picoAbajo].filter(Boolean)){
-          const y = H * (1 - (p.centro - mapa.min) / (mapa.max - mapa.min));
-          const arriba = p.distPct > 0;
-          const texto = `${arriba?'▲':'▼'} ${Math.abs(p.distPct).toFixed(1)}%`;
-          const w = ctx.measureText(texto).width;
-          // Fondo oscuro detrás del texto para que se lea sobre cualquier color del mapa
-          ctx.fillStyle = 'rgba(0,0,0,.72)';
-          ctx.fillRect(anchoMapa - w - 12, y - 13, w + 8, 17);
-          ctx.fillStyle = arriba ? '#ef4444' : '#10b981';
-          ctx.fillText(texto, anchoMapa - w - 8, y - 1);
+        // ── EL PRECIO ──
+        const yP = yDe(0);
+        ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(W, yP); ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(cx, yP, 3.5, 0, Math.PI*2); ctx.fill();
+        ctx.font = '800 11px Manrope, sans-serif'; ctx.textAlign = 'right';
+        ctx.fillText('$' + fmt(data.price), cx - 8, yP + 3.5);
+        ctx.textAlign = 'left';
+
+        // ── ESCALA ──
+        ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
+        for(const pct of [alcance, alcance/2, -alcance/2, -alcance]){
+          ctx.fillText(`${pct>0?'+':''}${pct}%`, W - 28, yDe(pct) + 3);
         }
 
-        // La escala de precios a la derecha
-        ctx.fillStyle = '#8b98a8'; ctx.font = '10px Manrope, sans-serif';
-        for(let k = 0; k <= 6; k++){
-          const y = H * k / 6;
-          const precioAqui = mapa.max - (mapa.max - mapa.min) * k / 6;
-          ctx.fillText('$' + fmt(precioAqui), anchoMapa + 6, y + (k===0 ? 10 : k===6 ? -2 : 3));
-        }
-
-        // La leyenda debajo: el veredicto en dos datos
-        const col = mapa.sesgo === 'arriba' ? 'var(--rose)' : mapa.sesgo === 'abajo' ? 'var(--teal)' : 'var(--sub)';
-        const flecha = mapa.sesgo === 'arriba' ? '▲' : mapa.sesgo === 'abajo' ? '▼' : '◆';
+        // ── LEYENDA: dos números ──
+        const col2 = m.ladoLibre === 'parejo' ? 'var(--sub)' : 'var(--teal)';
         document.getElementById('liqHeatLeyenda').innerHTML = `
-          <span style="color:${col};font-weight:700;font-size:12.5px;">
-            ${flecha} La liquidez pesa ${mapa.sesgo === 'pareja' ? 'parejo' : mapa.sesgo} (${mapa.dominancia}%)
+          <span style="display:flex;gap:14px;align-items:center;">
+            <span style="color:var(--rose);font-size:12.5px;font-weight:700;">▲ ${m.libreArriba}%</span>
+            <span style="color:var(--teal);font-size:12.5px;font-weight:700;">▼ ${m.libreAbajo}%</span>
           </span>
-          <span style="font-size:11px;">
-            ${mapa.distArriba != null ? `<span style="color:var(--rose);">▲ ${mapa.distArriba}%</span>` : ''}
-            ${mapa.distAbajo != null ? `<span style="color:var(--teal);margin-left:9px;">▼ ${Math.abs(mapa.distAbajo)}%</span>` : ''}
+          <span style="color:${col2};font-size:11px;">
+            ${m.ladoLibre === 'parejo' ? 'espacio parejo' : `más espacio ${m.ladoLibre}`}
           </span>`;
-        wrap.style.display = '';
       }catch(e){ wrap.style.display='none'; }
     })();
 
@@ -3110,19 +3153,44 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           </div>`;
         };
 
-        p.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:13px;">
-          <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:4px;">
-            🌐 TODOS LOS HORIZONTES · ${multi.timeframes.join(' · ')}</div>
-          <div style="font-size:10.5px;color:var(--sub);margin-bottom:9px;line-height:1.5;">${h.nota}</div>
-          <div style="font-size:12.5px;line-height:1.55;margin-bottom:10px;">${multi.resumen}</div>
-          ${multi.confluentes.length ? `<div style="font-size:10px;color:var(--amber);letter-spacing:.5px;margin:8px 0 3px;">
-            🔥 COINCIDEN EN 3 O MÁS MARCOS — son los que más pesan</div>
-            ${multi.confluentes.slice(0,4).map(n=>filaNivel(n,true)).join('')}` : ''}
-          ${multi.enDos.length ? `<div style="font-size:10px;color:var(--sub);letter-spacing:.5px;margin:8px 0 3px;">
-            COINCIDEN EN 2 MARCOS</div>
-            ${multi.enDos.slice(0,4).map(n=>filaNivel(n,false)).join('')}` : ''}
-          <div style="font-size:10.5px;color:var(--sub);margin-top:9px;line-height:1.5;">
-            Un nivel que aparece en un solo marco suele ser ruido. Los que coinciden en varios son donde el precio reacciona.</div>
+        // ═══ LOS NIVELES, EN UNA GRILLA ═══
+        // Antes era un párrafo largo explicando cada nivel. Ahora es una fila por nivel:
+        // precio, distancia, en qué marcos aparece, y qué tan fuerte es. Se escanea.
+        const colDe = (cal) => cal === 'MURO' ? 'var(--amber)' : cal === 'sólido' ? 'var(--teal)'
+                             : cal === 'débil' ? 'var(--sub)' : '#4a5560';
+        const puntos = (cal) => {
+          const n = cal === 'MURO' ? 3 : cal === 'sólido' ? 2 : cal === 'débil' ? 1 : 0;
+          return '●'.repeat(n) + '○'.repeat(3-n);
+        };
+        const fila = (n) => {
+          const arriba = n.distPct > 0;
+          const col = arriba ? 'var(--rose)' : 'var(--teal)';
+          const marcos = ['15m','1h','4h','1d','1mo'].map(t =>
+            `<span style="display:inline-block;width:5px;height:5px;border-radius:99px;margin-right:2px;
+              background:${n.tfs.includes(t) ? col : 'rgba(255,255,255,.12)'};"></span>`).join('');
+          return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);">
+            <span style="width:82px;color:${col};font-family:var(--display);font-weight:700;font-size:11.5px;">$${fmt(n.precio)}</span>
+            <span style="width:44px;font-size:10px;color:var(--sub);">${arriba?'+':''}${n.distPct}%</span>
+            <span style="width:42px;">${marcos}</span>
+            <span style="flex:1;font-size:10px;color:${colDe(n.calidad)};letter-spacing:1px;">${puntos(n.calidad)}</span>
+            <span style="font-size:9.5px;color:var(--sub);">${n.toques}×</span>
+          </div>`;
+        };
+        const listos = [...(multi.confluentes||[]), ...(multi.enDos||[])]
+          .sort((a,b) => Math.abs(a.distPct) - Math.abs(b.distPct)).slice(0, 7);
+
+        p.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:11px;padding:13px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
+            <span style="font-size:11px;color:var(--sub);letter-spacing:.5px;">🌐 NIVELES</span>
+            <span style="font-size:9.5px;color:var(--sub);">${multi.timeframes.join(' · ')}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:9px;color:var(--sub);
+            padding-bottom:5px;border-bottom:1px solid var(--border);margin-bottom:3px;">
+            <span style="width:82px;">PRECIO</span><span style="width:44px;">DIST</span>
+            <span style="width:42px;">MARCOS</span><span style="flex:1;">FUERZA</span><span>TOQUES</span>
+          </div>
+          ${listos.length ? listos.map(fila).join('')
+            : `<div style="font-size:11px;color:var(--sub);padding:8px 0;">Ningún nivel coincide entre marcos.</div>`}
         </div>`;
         p.style.display = '';
       }catch(e){ p.style.display='none'; }
@@ -3139,48 +3207,66 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           TheHatonEngine.fetchLibroOrdenes(data.displayName, data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null),
           Promise.resolve(TheHatonEngine.calcularPresionFlujo(data.candles, 24)),
         ]);
-        if(!libro && !flujo){ p.style.display='none'; return; }
-        const col = libro?.sesgo==='COMPRADOR' ? 'var(--teal)' : libro?.sesgo==='VENDEDOR' ? 'var(--rose)' : 'var(--sub)';
-        let cuerpo = '';
-        if(libro){
-          cuerpo += `<div style="font-size:12.5px;line-height:1.55;">${libro.resumen}</div>`;
-          cuerpo += `<div style="display:flex;gap:14px;margin-top:9px;flex-wrap:wrap;">
-            <div><div style="font-size:10px;color:var(--sub);">COMPRA ±2%</div><div style="font-size:15px;font-weight:800;color:var(--teal);">$${(libro.usdCompra/1000).toFixed(0)}K</div></div>
-            <div><div style="font-size:10px;color:var(--sub);">VENTA ±2%</div><div style="font-size:15px;font-weight:800;color:var(--rose);">$${(libro.usdVenta/1000).toFixed(0)}K</div></div>
-            <div><div style="font-size:10px;color:var(--sub);">SPREAD</div><div style="font-size:15px;font-weight:800;">${libro.spreadPct}%</div></div>
+        if(!libro){ p.style.display='none'; return; }
+
+        // ═══ EL LIBRO, VISUAL ═══
+        // Antes eran tres párrafos explicando dónde estaban las órdenes. Ahora es un gráfico
+        // de profundidad: se mira y se ve de qué lado pesa y en qué precios está la pared.
+        const total = libro.usdCompra + libro.usdVenta;
+        const pctC = total > 0 ? Math.round(libro.usdCompra / total * 100) : 50;
+        const kFmt = (u) => u >= 1e6 ? `$${(u/1e6).toFixed(1)}M` : `$${(u/1000).toFixed(0)}K`;
+
+        // Las barras de niveles, ordenadas por precio (ventas arriba, compras abajo)
+        const nivs = (libro.niveles || []).slice(0, 10).sort((a,b) => b.precio - a.precio);
+        const maxUsd = Math.max(...nivs.map(n=>n.usd), 1);
+        const barras = nivs.map(n => {
+          const esC = n.lado === 'compra';
+          const col = esC ? '#10b981' : '#ef4444';
+          const w = Math.max(6, Math.round(n.usd / maxUsd * 100));
+          return `<div style="display:flex;align-items:center;gap:7px;padding:2.5px 0;">
+            <span style="width:76px;font-size:10.5px;color:${col};font-family:var(--display);font-weight:700;text-align:right;">$${fmt(n.precio)}</span>
+            <span style="width:38px;font-size:9.5px;color:var(--sub);">${n.distPct>=0?'+':''}${n.distPct}%</span>
+            <span style="flex:1;height:13px;background:rgba(255,255,255,.04);border-radius:3px;position:relative;">
+              <span style="position:absolute;left:0;top:0;bottom:0;width:${w}%;
+                background:linear-gradient(90deg,${col}cc,${col}33);border-radius:3px;"></span>
+            </span>
+            <span style="width:44px;font-size:9.5px;color:var(--sub);text-align:right;">${kFmt(n.usd)}</span>
           </div>`;
-          // ═══ MAPA DE NIVELES ═══
-          // Saber que "pesa del lado comprador" no sirve para operar: hace falta ver EN QUÉ
-          // PRECIOS está la concentración. Cada barra muestra cuánto dinero hay en ese nivel.
-          if(libro.niveles?.length){
-            const maxUsd = Math.max(...libro.niveles.map(n => n.usd));
-            cuerpo += `<div style="margin-top:11px;">
-              <div style="font-size:10px;color:var(--sub);letter-spacing:.5px;margin-bottom:6px;">DÓNDE ESTÁN LAS ÓRDENES</div>`;
-            for(const n of libro.niveles.slice(0, 8)){
-              const ancho = Math.max(4, Math.round(n.usd / maxUsd * 100));
-              const col = n.lado === 'compra' ? 'var(--teal)' : 'var(--rose)';
-              const signo = n.distPct >= 0 ? '↑' : '↓';
-              cuerpo += `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:11px;">
-                <span style="width:92px;color:${col};font-family:var(--display);font-weight:700;">$${fmt(n.precio)}</span>
-                <span style="width:46px;color:var(--sub);">${signo}${Math.abs(n.distPct)}%</span>
-                <span style="flex:1;background:rgba(255,255,255,.05);border-radius:3px;height:11px;position:relative;">
-                  <span style="position:absolute;left:0;top:0;bottom:0;width:${ancho}%;background:${col};opacity:.55;border-radius:3px;"></span>
-                </span>
-                <span style="width:56px;text-align:right;color:var(--sub);">$${(n.usd/1000).toFixed(0)}K</span>
-              </div>`;
-            }
-            cuerpo += `</div>`;
-          }
-          if(libro.muros?.length){
-            cuerpo += `<div style="margin-top:9px;font-size:11.5px;">` + libro.muros.map(m =>
-              `🧱 Muro de ${m.lado} en <b>$${fmt(m.precio)}</b> a ${m.distPct.toFixed(2)}% — $${(m.usd/1000).toFixed(0)}K`).join('<br>') + `</div>`;
-          }
-          if(libro.alertaSpread) cuerpo += `<div style="margin-top:7px;font-size:11px;color:var(--amber);">⚠️ ${libro.alertaSpread}</div>`;
-        }
-        if(flujo) cuerpo += `<div style="margin-top:9px;font-size:12px;">⚡ ${flujo.resumen}</div>`;
-        cuerpo += `<div style="margin-top:7px;font-size:10.5px;color:var(--sub);">A diferencia de los niveles de arriba —que se deducen de las velas— esto son órdenes reales puestas ahora. Se pueden retirar en cualquier momento.</div>`;
-        p.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-left:3px solid ${col};border-radius:10px;padding:12px 14px;">
-          <div style="font-size:11px;color:var(--sub);letter-spacing:0.5px;margin-bottom:6px;">📖 LIBRO DE ÓRDENES${libro?` · ${libro.fuente}`:''}</div>${cuerpo}</div>`;
+        }).join('');
+
+        // El muro más grande se marca aparte: es el nivel que importa
+        const muro = libro.muros?.[0];
+
+        p.innerHTML = `<div style="background:var(--panel2);border:1px solid var(--border);border-radius:11px;padding:13px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <span style="font-size:11px;color:var(--sub);letter-spacing:.5px;">📖 LIBRO DE ÓRDENES</span>
+            <span style="font-size:10px;color:var(--sub);">${libro.fuente} · ±2%</span>
+          </div>
+
+          <!-- La barra de balance: lo primero que se ve -->
+          <div style="display:flex;height:26px;border-radius:7px;overflow:hidden;margin-bottom:5px;">
+            <div style="width:${pctC}%;background:linear-gradient(90deg,#10b98188,#10b981cc);
+              display:flex;align-items:center;padding-left:9px;">
+              <span style="font-size:11.5px;font-weight:800;color:#04170f;">${kFmt(libro.usdCompra)}</span>
+            </div>
+            <div style="width:${100-pctC}%;background:linear-gradient(90deg,#ef444488,#ef4444cc);
+              display:flex;align-items:center;justify-content:flex-end;padding-right:9px;">
+              <span style="font-size:11.5px;font-weight:800;color:#1a0505;">${kFmt(libro.usdVenta)}</span>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:9.5px;color:var(--sub);margin-bottom:11px;">
+            <span>COMPRA ${pctC}%</span><span>${100-pctC}% VENTA</span>
+          </div>
+
+          ${barras}
+
+          ${muro ? `<div style="margin-top:9px;padding-top:9px;border-top:1px solid var(--border);
+            display:flex;align-items:center;gap:8px;font-size:11px;">
+            <span style="color:${muro.lado==='compra'?'var(--teal)':'var(--rose)'};font-weight:700;">🧱 $${fmt(muro.precio)}</span>
+            <span style="color:var(--sub);">${muro.distPct.toFixed(2)}% · ${kFmt(muro.usd)}</span>
+          </div>` : ''}
+          ${libro.alertaSpread ? `<div style="margin-top:7px;font-size:10.5px;color:var(--amber);">⚠️ spread ${libro.spreadPct}%</div>` : ''}
+        </div>`;
         p.style.display = '';
       }catch(e){ p.style.display='none'; }
     })();
