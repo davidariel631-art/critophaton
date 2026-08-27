@@ -30,7 +30,7 @@ import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, horizontesSegunTamano, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, horizontesSegunTamano, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, consultarMemoria, generarReporteResearch, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2549,8 +2549,34 @@ async function confirmTheses(state, capitalFlow){
                   atrPct: result15.metrics?.atrPct });
               }catch(e){ return null; } })();
 
+              // ═══ LA MEMORIA DEL SISTEMA ═══
+              // El Research Center descubre patrones que rinden peor. Hasta ahora eso quedaba
+              // en un panel; ahora la decisión lo consulta antes de entrar.
+              const memoria = (()=>{ try{
+                const rep = generarReporteResearch(acc.closedTrades || []);
+                const k = calidadTendenciaCinta(data15.candles);
+                return consultarMemoria(rep, {
+                  'ADX al entrar': (() => { const v = result15.metrics?.adx;
+                    return v == null ? null : v >= 40 ? 'tendencia muy fuerte (40+)' : v >= 25 ? 'tendencia real (25-40)'
+                         : v >= 20 ? 'tendencia débil (20-25)' : 'sin tendencia (-20)'; })(),
+                  'RSI al entrar': (() => { const v = result15.metrics?.rsi;
+                    return v == null ? null : v >= 70 ? 'sobrecomprado (70+)' : v >= 55 ? 'alto (55-70)'
+                         : v >= 45 ? 'neutro (45-55)' : v >= 30 ? 'bajo (30-45)' : 'sobrevendido (-30)'; })(),
+                  'Volatilidad al entrar': (() => { const v = result15.metrics?.atrPct;
+                    return v == null ? null : v >= 8 ? 'muy alta (8%+)' : v >= 4 ? 'alta (4-8%)'
+                         : v >= 2 ? 'normal (2-4%)' : 'baja (-2%)'; })(),
+                  'Cinta de medias': k == null ? null : (k.limpia ? (k.direccion === thesis.dir ? 'limpia y alineada' : 'limpia pero contraria') : 'plana o comprimida'),
+                  'Horario (UTC)': `${new Date().getUTCHours()}h`,
+                });
+              }catch(e){ return null; } })();
+
               const d = decidirQueHacer({
-                pasos,
+                pasos, memoria,
+                calidadDatos: result15.dataQuality?.score ?? null,
+                posicionesAbiertas: (acc.theses || []).filter(t => t.entry).length,
+                // No hay una constante de límite en el código: se usa 30 como referencia,
+                // que es el orden de magnitud de posiciones que el bot llega a tener abiertas.
+                maxPosiciones: 30,
                 sintesis: s, result: result15, setup,
                 liquidez: lecturaLiq, libro: libroOrdenes,
                 compresion: (()=>{ try{ return detectTrianguloCompresion(data15.candles); }catch(e){ return null; } })(),
