@@ -5595,6 +5595,62 @@ export function analizarPorPasos({ result, candles, macro, btcRef, marketContext
   return pasos;
 }
 
+// ═══ LA MEMORIA APLICADA A LA DECISIÓN ═══
+// EL HUECO QUE CIERRA: el Research Center descubre cosas como "cuando el ADX está por debajo
+// de 20, el win rate cae 23 puntos". Ese hallazgo se muestra en un panel... y ahí queda.
+// La decisión nunca lo consulta. El sistema aprende y no usa lo aprendido.
+//
+// Esto lo conecta: antes de decidir, se revisa si la situación actual coincide con algún
+// patrón que YA demostró rendir peor. Con la muestra suficiente, eso baja el tamaño o
+// directamente frena la entrada.
+//
+// El requisito es estricto a propósito: solo se aplica un hallazgo con al menos 15
+// operaciones y una diferencia de 12 puntos o más. Con menos que eso es ruido, y actuar
+// sobre ruido es peor que no actuar.
+export function consultarMemoria(reporte, situacionActual){
+  if(!reporte?.hallazgos?.length || !situacionActual) return null;
+
+  const coincidencias = [];
+  for(const h of reporte.hallazgos){
+    if(h.operaciones < 15) continue;              // muestra insuficiente
+    if(Math.abs(h.diferencia) < 12) continue;     // diferencia dentro del ruido
+    if(h.confianza !== 'alta') continue;
+
+    // ¿La situación de ahora coincide con la del hallazgo?
+    const valorAhora = situacionActual[h.tipo];
+    if(valorAhora == null) continue;
+    if(String(valorAhora) !== String(h.valor)) continue;
+
+    coincidencias.push({
+      patron: h.tipo, valor: h.valor,
+      winRate: h.winRate, diferencia: h.diferencia,
+      operaciones: h.operaciones,
+      esMalo: h.diferencia < 0,
+      texto: h.diferencia < 0
+        ? `Con ${h.tipo.toLowerCase()} en "${h.valor}" el win rate histórico es ${h.winRate}% (${h.diferencia} puntos bajo el promedio, sobre ${h.operaciones} operaciones).`
+        : `Con ${h.tipo.toLowerCase()} en "${h.valor}" el win rate histórico es ${h.winRate}% (+${h.diferencia} puntos, sobre ${h.operaciones} operaciones).`,
+    });
+  }
+  if(!coincidencias.length) return null;
+
+  const malos = coincidencias.filter(x => x.esMalo);
+  const buenos = coincidencias.filter(x => !x.esMalo);
+  // El ajuste de tamaño sale de la suma de diferencias, acotado para que un solo
+  // hallazgo no pueda anular la operación entera
+  const impacto = coincidencias.reduce((s,x) => s + x.diferencia, 0);
+  const factor = Math.max(0.4, Math.min(1.3, 1 + impacto / 100));
+
+  return {
+    coincidencias, malos, buenos, impacto: +impacto.toFixed(1),
+    factorTamano: +factor.toFixed(2),
+    // Si hay dos o más patrones malos con muestra grande, la entrada es cuestionable
+    frena: malos.length >= 2 || malos.some(x => x.diferencia <= -20 && x.operaciones >= 25),
+    resumen: malos.length
+      ? `⚠️ Esta situación coincide con ${malos.length === 1 ? 'un patrón que históricamente rinde' : `${malos.length} patrones que históricamente rinden`} peor: ${malos.map(x=>x.texto).join(' ')}`
+      : `✅ Esta situación coincide con ${buenos.length === 1 ? 'un patrón que históricamente rinde' : `${buenos.length} patrones que históricamente rinden`} mejor: ${buenos.map(x=>x.texto).join(' ')}`,
+  };
+}
+
 // ═══ LA DECISIÓN — QUÉ HACER CON TODA ESA INFORMACIÓN ═══
 // El paso que faltaba. Hasta acá el sistema describía: "tesis condicionada, 6 obstáculos".
 // Eso no le sirve a nadie para operar. Un analista de verdad, con la misma información, diría:
@@ -5611,7 +5667,13 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
                                    // Los cuatro pasos: contexto, sesgo, fuerza y ubicación.
                                    // Sin esto la decisión se toma sin saber si el movimiento
                                    // tiene combustible ni si el precio está en buen lugar.
-                                   pasos }){
+                                   pasos,
+                                   // La memoria: qué patrones ya demostraron rendir peor
+                                   memoria,
+                                   // Cuántas posiciones abiertas hay: la 25ª no es como la 1ª
+                                   posicionesAbiertas, maxPosiciones,
+                                   // Calidad de los datos con los que se está decidiendo
+                                   calidadDatos }){
   const dir = sintesis?.direccion;
   const precio = result?.metrics?.price;
   const fmtP = v => v == null ? '—' : fmtPrecio(v);
@@ -5711,6 +5773,24 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
     });
   }
 
+  // La memoria frena cuando hay evidencia acumulada de que esta situación rinde peor
+  if(memoria?.frena){
+    esperas.push({
+      motivo: 'La memoria del sistema desaconseja esta entrada',
+      queEsperar: 'que cambie alguna de las condiciones que históricamente rinden peor',
+      nivel: null,
+      porque: memoria.resumen,
+    });
+  }
+
+  // Calidad de datos baja: se decide con información incompleta
+  if(calidadDatos != null && calidadDatos < 45){
+    bloqueos.push({
+      motivo: `Calidad de datos ${calidadDatos}/100`,
+      detalle: 'Falta demasiada información para tomar esta decisión con fundamento. Operar con datos incompletos es adivinar con más pasos.',
+    });
+  }
+
   // ── NIVEL 3: LO QUE REDUCE EL TAMAÑO ──
   const reducen = [];
   if(apalancamiento?.oiSobreMcap >= 30) reducen.push({
@@ -5733,6 +5813,37 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
     cuanto: 0.6,
     porque: 'Los datos macro mueven el precio más que cualquier señal técnica.',
   });
+
+  // La memoria ajusta el tamaño aunque no frene del todo
+  if(memoria && !memoria.frena && memoria.factorTamano < 0.9){
+    reducen.push({
+      motivo: `Patrones históricos desfavorables (${memoria.impacto} puntos)`,
+      cuanto: memoria.factorTamano,
+      porque: memoria.resumen,
+    });
+  }
+  // Muchas posiciones abiertas: cada una nueva agrega correlación al conjunto
+  if(posicionesAbiertas != null && maxPosiciones > 0){
+    const ocupacion = posicionesAbiertas / maxPosiciones;
+    if(ocupacion >= 0.8) reducen.push({
+      motivo: `${posicionesAbiertas} de ${maxPosiciones} posiciones ya abiertas`,
+      cuanto: 0.6,
+      porque: 'Con la cartera casi llena, una operación más agrega correlación: si el mercado se da vuelta, se pierden todas juntas.',
+    });
+    else if(ocupacion >= 0.6) reducen.push({
+      motivo: `Cartera al ${Math.round(ocupacion*100)}%`,
+      cuanto: 0.8,
+      porque: 'Cuantas más posiciones abiertas, más se parece el resultado a una sola apuesta grande al mercado.',
+    });
+  }
+  // Calidad de datos mediocre: no bloquea pero justifica menos tamaño
+  if(calidadDatos != null && calidadDatos >= 45 && calidadDatos < 65){
+    reducen.push({
+      motivo: `Calidad de datos ${calidadDatos}/100`,
+      cuanto: 0.75,
+      porque: 'Parte de la información no está disponible: la decisión se apoya en menos evidencia de la habitual.',
+    });
+  }
 
   // ── LA DECISIÓN ──
   let accion, titulo, detalle;
@@ -5801,6 +5912,8 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
     sesgo: pasos?.sesgo?.direccion || dir,
     fuerza: pasos?.fuerza?.tiene ?? null,
     contexto: pasos?.contexto?.estado || null,
+    memoriaAplicada: memoria ? { impacto: memoria.impacto, frena: memoria.frena,
+                                  patrones: memoria.coincidencias.length } : null,
     // Cuánto del tamaño normal, redondeado a algo usable
     tamanoSugerido: accion.startsWith('ENTRAR') ? Math.round(tamano * 100) : 0,
     nivelClave,
