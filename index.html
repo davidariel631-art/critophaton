@@ -870,7 +870,7 @@
         <!-- El mapa de calor: se mira, no se lee -->
         <div id="liqHeatWrap" style="display:none;margin-top:12px;">
           <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:7px;">🔥 MAPA DE CALOR · EVOLUCIÓN</div>
-          <canvas id="liqCalorCanvas" style="width:100%;height:240px;display:block;border-radius:8px;"></canvas>
+          <canvas id="liqCalorCanvas" style="width:100%;height:290px;display:block;border-radius:8px;"></canvas>
           <div id="liqCalorNota" style="display:flex;align-items:center;gap:10px;margin:8px 0 16px;
             font-size:10.5px;color:var(--sub);min-height:22px;"></div>
           <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:7px;">🧱 CAMINO</div>
@@ -2961,7 +2961,11 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
       const nota = document.getElementById('liqCalorNota');
       try{
         const mc = TheHatonEngine.mapaCalorTemporal(data.candles, {
-          columnas: 64, filas: 70, rangoPct: 9,
+          // ═══ MENOS CELDAS, MÁS GRANDES ═══
+          // Con 64×70 cada celda medía 5×3 píxeles: imposible de distinguir, todo se veía
+          // como una mancha. Con 30×32 cada celda mide 11×8, que ya se lee.
+          // Y el rango baja a 6%: concentra el detalle donde el precio realmente se mueve.
+          columnas: 30, filas: 32, rangoPct: 6,
           // Las liquidaciones reales del stream, si el feed está activo. Con ellas el mapa
           // deja de estimar dónde hay stops y muestra dónde reventaron de verdad.
           liquidacionesReales: (window._liqReales || []).filter(x =>
@@ -2972,13 +2976,13 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
         const dpr = window.devicePixelRatio || 1;
         const W = cvC.clientWidth || cvC.parentElement?.clientWidth || 320;
-        const H = 240;
+        const H = 290;
         cvC.width = W*dpr; cvC.height = H*dpr;
         const ctx = cvC.getContext('2d');
         ctx.setTransform(dpr,0,0,dpr,0,0);
         ctx.fillStyle = '#060809'; ctx.fillRect(0,0,W,H);
 
-        const margenDer = 54;
+        const margenDer = 74;   // 20 para el canal de marcadores + 54 para los precios
         const anchoMapa = W - margenDer;
         const wCol = anchoMapa / mc.columnas;
         const hFila = H / mc.filas;
@@ -2998,20 +3002,30 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         };
 
         // Las celdas
+        // Cada celda con una separación de 1px y esquinas redondeadas: eso es lo que
+        // convierte una mancha continua en un mapa donde se distinguen las zonas.
+        const sep = 1;
         for(let col = 0; col < mc.columnas; col++){
           for(let fil = 0; fil < mc.filas; fil++){
             const d = mc.rejilla[col][fil];
             const c2 = calor(d);
             if(!c2) continue;
             ctx.fillStyle = c2;
-            ctx.fillRect(col*wCol, H - (fil+1)*hFila, wCol + 0.6, hFila + 0.6);
+            const x = col*wCol, y = H - (fil+1)*hFila;
+            const w2 = Math.max(1, wCol - sep), h2 = Math.max(1, hFila - sep);
+            ctx.beginPath();
+            if(ctx.roundRect) ctx.roundRect(x, y, w2, h2, Math.min(2, h2/3));
+            else ctx.rect(x, y, w2, h2);
+            ctx.fill();
           }
         }
 
         // Un velo que oscurece el pasado: el ojo va primero a lo reciente, que es lo que importa
+        // Un velo suave: antes con .45 el pasado quedaba casi negro y el mapa perdía
+        // la mitad de la información. Con .22 se nota la profundidad sin borrar nada.
         const velo = ctx.createLinearGradient(0, 0, anchoMapa, 0);
-        velo.addColorStop(0, 'rgba(6,8,9,.45)');
-        velo.addColorStop(0.55, 'rgba(6,8,9,.1)');
+        velo.addColorStop(0, 'rgba(6,8,9,.22)');
+        velo.addColorStop(0.6, 'rgba(6,8,9,.04)');
         velo.addColorStop(1, 'rgba(6,8,9,0)');
         ctx.fillStyle = velo; ctx.fillRect(0, 0, anchoMapa, H);
 
@@ -3031,7 +3045,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             ctx.lineTo((r.col + 0.5) * wCol, yP2(r.bajo));
           }
           ctx.closePath();
-          ctx.fillStyle = 'rgba(255,255,255,.055)';
+          ctx.fillStyle = 'rgba(255,255,255,.035)';
           ctx.fill();
           // La línea del cierre
           ctx.beginPath();
@@ -3039,7 +3053,8 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             const x = (r.col + 0.5) * wCol;
             k === 0 ? ctx.moveTo(x, yP2(r.precio)) : ctx.lineTo(x, yP2(r.precio));
           });
-          ctx.strokeStyle = 'rgba(255,255,255,.42)'; ctx.lineWidth = 1.1;
+          // Más fina y tenue: es una referencia, no el protagonista
+          ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 0.9;
           ctx.stroke();
         }
 
@@ -3055,27 +3070,28 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         // ═══ LOS CAMBIOS, COMO GRÁFICO ═══
         // En vez de símbolos: una cuña que crece hacia la derecha si el nivel se está
         // armando, y que se achica si se disuelve. La forma dice la dirección sin leer.
+        // ═══ LOS MARCADORES VAN EN UN CANAL PROPIO ═══
+        // Antes se dibujaban ENCIMA del mapa y competían con los colores. Ahora tienen su
+        // franja a la derecha, separada por una línea. El mapa queda limpio.
+        const xCanal = anchoMapa + 3;
+        const anchoCanal = 16;
+        ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(anchoMapa + 1, 0); ctx.lineTo(anchoMapa + 1, H); ctx.stroke();
+
         const marcarCambio = (arr, creciendo) => {
           for(const e of arr.slice(0,3)){
             const y = H - ((e.precio - mc.min) / (mc.max - mc.min)) * H;
-            if(y < 10 || y > H-10) continue;
-            const col = creciendo ? 'rgba(255,196,60,' : 'rgba(120,135,150,';
-            const largo = 30 + Math.min(26, Math.abs(e.cambio) * 130);
-            const x0 = anchoMapa - largo - 4;
-            // La cuña: gruesa donde hay más densidad
+            if(y < 8 || y > H-8) continue;
+            const col = creciendo ? 'rgba(255,196,60,.9)' : 'rgba(120,135,150,.75)';
+            // Un triángulo sólido: la punta indica la dirección del cambio
+            ctx.fillStyle = col;
             ctx.beginPath();
             if(creciendo){
-              ctx.moveTo(x0, y - 1); ctx.lineTo(anchoMapa - 4, y - 4.5);
-              ctx.lineTo(anchoMapa - 4, y + 4.5); ctx.lineTo(x0, y + 1);
+              ctx.moveTo(xCanal + 2, y + 4); ctx.lineTo(xCanal + 7, y - 4); ctx.lineTo(xCanal + 12, y + 4);
             } else {
-              ctx.moveTo(x0, y - 4.5); ctx.lineTo(anchoMapa - 4, y - 1);
-              ctx.lineTo(anchoMapa - 4, y + 1); ctx.lineTo(x0, y + 4.5);
+              ctx.moveTo(xCanal + 2, y - 4); ctx.lineTo(xCanal + 7, y + 4); ctx.lineTo(xCanal + 12, y - 4);
             }
-            ctx.closePath();
-            const g2 = ctx.createLinearGradient(x0, 0, anchoMapa - 4, 0);
-            g2.addColorStop(0, col + (creciendo ? '.15)' : '.55)'));
-            g2.addColorStop(1, col + (creciendo ? '.85)' : '.12)'));
-            ctx.fillStyle = g2; ctx.fill();
+            ctx.closePath(); ctx.fill();
           }
         };
         marcarCambio(mc.armandose, true);
@@ -3086,15 +3102,12 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         // Es la señal más anticipada que da el mapa.
         for(const dv of (mc.divergencias || []).slice(0,2)){
           const y = H - ((dv.precio - mc.min) / (mc.max - mc.min)) * H;
-          if(y < 10 || y > H-10) continue;
-          const x = anchoMapa - 62;
-          ctx.strokeStyle = 'rgba(180,120,255,.85)'; ctx.lineWidth = 1.4;
-          ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI*2); ctx.stroke();
-          ctx.fillStyle = 'rgba(180,120,255,.9)';
-          ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
-          // Una línea corta hacia el mapa
-          ctx.strokeStyle = 'rgba(180,120,255,.3)'; ctx.lineWidth = 0.8;
-          ctx.beginPath(); ctx.moveTo(x + 8, y); ctx.lineTo(anchoMapa - 4, y); ctx.stroke();
+          if(y < 8 || y > H-8) continue;
+          // El anillo también en el canal, no sobre el mapa
+          ctx.strokeStyle = 'rgba(180,120,255,.9)'; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(xCanal + 7, y, 4.5, 0, Math.PI*2); ctx.stroke();
+          ctx.fillStyle = 'rgba(180,120,255,.95)';
+          ctx.beginPath(); ctx.arc(xCanal + 7, y, 1.6, 0, Math.PI*2); ctx.fill();
         }
 
         // Escala de precios
@@ -3102,7 +3115,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         for(let k = 0; k <= 4; k++){
           const y = H * k / 4;
           const p2 = mc.max - (mc.max - mc.min) * k / 4;
-          ctx.fillText('$' + fmt(p2), anchoMapa + 5, y + (k===0 ? 9 : k===4 ? -1 : 3));
+          ctx.fillText('$' + fmt(p2), anchoMapa + 23, y + (k===0 ? 9 : k===4 ? -1 : 3));
         }
         // Eje del tiempo
         ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.4)';
