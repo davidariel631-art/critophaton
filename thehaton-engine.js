@@ -4776,6 +4776,249 @@ export function contextoTransferencia(usd, marketCapUsd, volumenDiarioUsd){
   };
 }
 
+// ═══ MAPA DE CALOR REAL — DENSIDAD × TIEMPO ═══
+// Los mapas de calor de liquidez de verdad (Bookmap, Hyblock) no muestran un corte: muestran
+// cómo evolucionó la liquidez A LO LARGO DEL TIEMPO. Cada columna es un momento, cada fila un
+// precio, y el color la densidad. Así se ve algo que un corte estático no puede mostrar:
+//
+//     · un muro que se está ARMANDO (la mancha se hace más intensa con el tiempo)
+//     · un muro que se DISUELVE (se va apagando)
+//     · liquidez que se MUEVE con el precio (alguien reposicionando)
+//     · el rastro de dónde el precio ya barrió liquidez
+//
+// Todo sale de las velas: no hace falta el libro histórico, que sería de pago.
+export function mapaCalorTemporal(candles, opciones = {}){
+  if(!Array.isArray(candles) || candles.length < 60) return null;
+
+  const columnas = opciones.columnas ?? 48;      // cortes temporales
+  const filas = opciones.filas ?? 56;            // niveles de precio
+  const ventana = opciones.ventana ?? 60;        // velas que ve cada columna hacia atrás
+  const precio = candles.at(-1).c;
+  const rangoPct = opciones.rangoPct ?? 9;
+
+  const min = precio * (1 - rangoPct/100);
+  const max = precio * (1 + rangoPct/100);
+  const alto = (max - min) / filas;
+  const idxDe = (p) => (p < min || p >= max) ? -1 : Math.min(filas-1, Math.floor((p - min)/alto));
+
+  // Cada columna mira una ventana de velas que termina en un momento distinto.
+  // Así se ve cómo la liquidez de cada precio cambió con el tiempo.
+  const paso = Math.max(1, Math.floor((candles.length - ventana) / columnas));
+  const rejilla = [];      // [columna][fila] = densidad
+  const tiempos = [];
+
+  for(let col = 0; col < columnas; col++){
+    const fin = ventana + col * paso;
+    if(fin > candles.length) break;
+    const trozo = candles.slice(Math.max(0, fin - ventana), fin);
+    tiempos.push(candles[fin-1]?.t || null);
+
+    const columna = new Array(filas).fill(0);
+
+    // ── VOLUMEN POR PRECIO ──
+    // El volumen de cada vela se reparte en las franjas que tocó. Donde se negoció más,
+    // hay más órdenes pendientes.
+    for(const v of trozo){
+      const iLo = idxDe(v.l), iHi = idxDe(v.h);
+      if(iLo < 0 && iHi < 0) continue;
+      const a = Math.max(0, iLo < 0 ? 0 : iLo);
+      const b = Math.min(filas-1, iHi < 0 ? filas-1 : iHi);
+      const reparto = (v.v || 1) / Math.max(1, b - a + 1);
+      for(let i = a; i <= b; i++) columna[i] += reparto;
+    }
+
+    // ── RECHAZOS: donde el precio reaccionó ──
+    // Una mecha larga en un nivel vale mucho más que volumen repartido: es defensa activa.
+    for(const v of trozo){
+      const rango = v.h - v.l;
+      if(rango <= 0) continue;
+      const cuerpoTop = Math.max(v.o, v.c), cuerpoBot = Math.min(v.o, v.c);
+      const mechaSup = (v.h - cuerpoTop) / rango, mechaInf = (cuerpoBot - v.l) / rango;
+      if(mechaSup > 0.35){
+        const i = idxDe(v.h);
+        if(i >= 0) columna[i] += (v.v || 1) * mechaSup * 2.2;
+      }
+      if(mechaInf > 0.35){
+        const i = idxDe(v.l);
+        if(i >= 0) columna[i] += (v.v || 1) * mechaInf * 2.2;
+      }
+    }
+
+    // ── LIQUIDACIONES ──
+    // Si hay liquidaciones REALES (del stream de Binance), se usan esas: son eventos que
+    // ocurrieron de verdad, no una estimación. Es la diferencia entre "probablemente hay
+    // stops acá" y "acá reventaron $340K".
+    const liqReales = opciones.liquidacionesReales;
+    if(Array.isArray(liqReales) && liqReales.length){
+      // Solo las que caen en la ventana temporal de esta columna
+      const desdeTs = trozo[0]?.t || 0, hastaTs = trozo.at(-1)?.t || Date.now();
+      for(const L of liqReales){
+        if(L.time && (L.time < desdeTs || L.time > hastaTs)) continue;
+        const i = idxDe(L.price);
+        if(i < 0) continue;
+        // El peso es el valor real en USD, escalado para convivir con el volumen
+        columna[i] += (L.value || 0) * 0.0009;
+      }
+    } else {
+      // Sin datos reales, se estiman desde los precios de entrada probables
+      for(const v of trozo.slice(-Math.floor(ventana/2))){
+        for(const lev of [25, 50, 100]){
+          const iL = idxDe(v.h * (1 - 1/lev));
+          const iS = idxDe(v.l * (1 + 1/lev));
+          const peso = (v.v || 1) / lev * 1.4;
+          if(iL >= 0) columna[iL] += peso;
+          if(iS >= 0) columna[iS] += peso;
+        }
+      }
+    }
+
+    // ── DECAIMIENTO POR CONSUMO ──
+    // Si el precio ATRAVESÓ una franja en esta ventana, esa liquidez fue consumida.
+    // Es lo que hace que en el mapa se vea el "rastro" de los barridos.
+    const ultimas = trozo.slice(-8);
+    for(const v of ultimas){
+      const iLo = idxDe(v.l), iHi = idxDe(v.h);
+      if(iLo < 0 || iHi < 0) continue;
+      // Solo las franjas que el CUERPO atravesó, no las que solo tocó la mecha
+      const cLo = idxDe(Math.min(v.o, v.c)), cHi = idxDe(Math.max(v.o, v.c));
+      if(cLo < 0 || cHi < 0) continue;
+      for(let i = cLo; i <= cHi; i++) columna[i] *= 0.72;
+    }
+
+    // ── SUAVIZADO VERTICAL ──
+    // La liquidez no salta de una franja a otra: se difunde. Sin esto el mapa se ve como
+    // una grilla de píxeles sueltos; con esto se ve continuo, como los mapas reales.
+    const suave = new Array(filas).fill(0);
+    const kernel = [0.06, 0.24, 0.40, 0.24, 0.06];
+    for(let i = 0; i < filas; i++){
+      let acum = 0, peso = 0;
+      for(let k = -2; k <= 2; k++){
+        const j = i + k;
+        if(j < 0 || j >= filas) continue;
+        acum += columna[j] * kernel[k+2];
+        peso += kernel[k+2];
+      }
+      suave[i] = peso > 0 ? acum / peso : columna[i];
+    }
+    rejilla.push(suave);
+  }
+  if(rejilla.length < 4) return null;
+
+  // ── NORMALIZAR CON ESCALA LOGARÍTMICA ADAPTATIVA ──
+  // Normalizar contra el máximo aplasta todo: si una sola celda es enorme, el resto queda
+  // en negro. Los mapas profesionales usan escala logarítmica y recortan los extremos
+  // (percentiles) para que el rango medio —que es donde está la información útil— se vea.
+  const todosValores = rejilla.flat().filter(x => x > 0).sort((a,b) => a-b);
+  if(!todosValores.length) return null;
+  // El percentil 99 como techo: una celda excepcional no debería apagar todo lo demás
+  // El techo en el percentil 97 y el piso en el 55: por debajo de la mediana es fondo,
+  // no información. Sin ese corte el mapa queda saturado y todo parece un muro.
+  const p99 = todosValores[Math.floor(todosValores.length * 0.97)] || 1;
+  const p20 = todosValores[Math.floor(todosValores.length * 0.55)] || 0;
+  const logMax = Math.log1p(p99 - p20);
+  const norm = rejilla.map(colm => colm.map(x => {
+    if(x <= p20) return 0;
+    const v = Math.log1p(x - p20) / (logMax || 1);
+    return +Math.min(1, v).toFixed(3);
+  }));
+
+  // ── DIVERGENCIA PRECIO / LIQUIDEZ ──
+  // El patrón más útil que un mapa temporal puede detectar: el precio se aleja de un nivel
+  // pero la liquidez ahí SIGUE CRECIENDO. Eso significa que alguien está acumulando órdenes
+  // en un precio que ya no es el actual — está esperando a que vuelva.
+  // Es una señal anticipada de hacia dónde quieren llevar el precio.
+  const divergencias = [];
+  {
+    const mitadD = Math.floor(norm.length / 2);
+    const precioAntes = candles[Math.max(0, ventana + mitadD * paso - 1)]?.c || precio;
+    const precioAhora = precio;
+    const seAlejo = (p2) => {
+      const d1 = Math.abs(p2 - precioAntes), d2 = Math.abs(p2 - precioAhora);
+      return d2 > d1 * 1.25;   // el precio se alejó de ese nivel
+    };
+    for(let i = 0; i < filas; i++){
+      const viejoD = norm.slice(0, mitadD).reduce((s,cl)=>s+cl[i], 0) / mitadD;
+      const nuevoD = norm.slice(mitadD).reduce((s,cl)=>s+cl[i], 0) / (norm.length - mitadD);
+      const p2 = min + (i + 0.5) * alto;
+      // Creció la liquidez pero el precio se fue: alguien está poniendo órdenes lejos
+      if(nuevoD > viejoD * 1.5 && nuevoD > 0.2 && seAlejo(p2)){
+        divergencias.push({
+          precio: p2,
+          distPct: +((p2 - precio) / precio * 100).toFixed(2),
+          crecimiento: +((nuevoD - viejoD) / Math.max(0.01, viejoD)).toFixed(2),
+        });
+      }
+    }
+    divergencias.sort((a,b) => b.crecimiento - a.crecimiento);
+  }
+
+  // ── QUÉ CAMBIÓ ──
+  // Comparar la primera mitad con la última dice si cada nivel se armó o se disolvió.
+  const mitad = Math.floor(norm.length / 2);
+  const evolucion = [];
+  for(let i = 0; i < filas; i++){
+    const viejo = norm.slice(0, mitad).reduce((s,cl)=>s+cl[i], 0) / mitad;
+    const nuevo = norm.slice(mitad).reduce((s,cl)=>s+cl[i], 0) / (norm.length - mitad);
+    const precioFila = min + (i + 0.5) * alto;
+    evolucion.push({
+      fila: i, precio: precioFila,
+      distPct: +((precioFila - precio) / precio * 100).toFixed(2),
+      antes: +viejo.toFixed(3), ahora: +nuevo.toFixed(3),
+      cambio: +(nuevo - viejo).toFixed(3),
+      estado: nuevo > viejo * 1.4 && nuevo > 0.12 ? 'armándose'
+            : nuevo < viejo * 0.6 && viejo > 0.12 ? 'disolviéndose'
+            : nuevo > 0.25 ? 'estable' : null,
+    });
+  }
+
+  // Los focos: las franjas más densas AHORA
+  const ahora = norm.at(-1);
+  const focos = evolucion
+    .filter(e => ahora[e.fila] > 0.35)
+    .sort((a,b) => ahora[b.fila] - ahora[a.fila])
+    .slice(0, 6)
+    .map(e => ({ ...e, densidad: ahora[e.fila] }));
+
+  const armandose = evolucion.filter(e => e.estado === 'armándose').sort((a,b)=>b.cambio-a.cambio);
+  const disolviendose = evolucion.filter(e => e.estado === 'disolviéndose').sort((a,b)=>a.cambio-b.cambio);
+
+  // ── EL RECORRIDO DEL PRECIO ──
+  // Sin esto el mapa es una nube sin referencia. Con la línea del precio encima se ve
+  // qué zonas atravesó (y por eso están apagadas) y cuáles nunca tocó.
+  const recorrido = [];
+  for(let col = 0; col < norm.length; col++){
+    const fin = ventana + col * paso;
+    const v = candles[Math.min(candles.length-1, fin-1)];
+    if(v) recorrido.push({ col, precio: v.c, alto: v.h, bajo: v.l });
+  }
+
+  return {
+    // Si el mapa se construyó con liquidaciones reales o estimadas: cambia cuánto confiar
+    conLiquidacionesReales: Array.isArray(opciones.liquidacionesReales) && opciones.liquidacionesReales.length > 0,
+    rejilla: norm, filas, columnas: norm.length, tiempos, recorrido,
+    min, max, alto, precio,
+    evolucion, focos,
+    // Niveles donde se acumula liquidez aunque el precio se haya ido: alguien espera ahí
+    divergencias: divergencias.slice(0, 3),
+    armandose: armandose.slice(0, 3),
+    disolviendose: disolviendose.slice(0, 3),
+    // El dato que un corte estático no puede dar
+    resumen: (() => {
+      const p = [];
+      if(armandose.length){
+        const a = armandose[0];
+        p.push(`Se está armando liquidez en $${fmtPrecio(a.precio)} (${a.distPct > 0 ? '+' : ''}${a.distPct}%): la densidad creció ${Math.round(a.cambio/Math.max(0.01,a.antes)*100)}% en la ventana.`);
+      }
+      if(disolviendose.length){
+        const d = disolviendose[0];
+        p.push(`Se está disolviendo la de $${fmtPrecio(d.precio)} (${d.distPct > 0 ? '+' : ''}${d.distPct}%): ese nivel está perdiendo defensa.`);
+      }
+      if(!p.length) p.push('La liquidez se mantiene estable en la ventana observada.');
+      return p.join(' ');
+    })(),
+  };
+}
+
 // ═══ MAPA DE OBSTÁCULOS ═══
 // Otra idea, distinta al mapa de calor por franjas: en vez de pintar densidad, este mide
 // EL CAMINO. La pregunta que responde no es "dónde hay liquidez" sino:
@@ -4884,6 +5127,25 @@ export function mapaObstaculos(candles, precio, opciones = {}){
     }
   }
 
+  // ═══ CADA NIVEL ES UNA ZONA, NO UN PRECIO ═══
+  // En el mercado real la liquidez no está en $0.058280 exacto: está en una franja.
+  // Mostrar un precio puntual da una precisión falsa. La franja se calcula con las mechas
+  // que efectivamente tocaron ese nivel, así que refleja dónde reaccionó el precio de verdad.
+  for(const n of niveles){
+    const tol = 0.004;
+    const tocaron = candles.filter(v => v.l <= n.precio*(1+tol) && v.h >= n.precio*(1-tol));
+    if(tocaron.length >= 2){
+      const extremos = tocaron.map(v => n.tipo === 'techo' ? v.h : v.l);
+      n.zonaDesde = Math.min(...extremos);
+      n.zonaHasta = Math.max(...extremos);
+      n.anchoZonaPct = +((n.zonaHasta - n.zonaDesde) / n.precio * 100).toFixed(2);
+    } else {
+      n.zonaDesde = n.precio * 0.999;
+      n.zonaHasta = n.precio * 1.001;
+      n.anchoZonaPct = 0.2;
+    }
+  }
+
   // La calidad de cada nivel se calcula con lo que ya teníamos
   for(const n of niveles){
     const q = (()=>{ try{ return calidadNivel(candles, n.precio); }catch(e){ return null; } })();
@@ -4904,6 +5166,27 @@ export function mapaObstaculos(candles, precio, opciones = {}){
     // Cuánto tarda el precio en llegar, en días de movimiento típico. Es lo que traduce
     // "está a 6%" en algo útil: puede ser media hora o dos semanas.
     n.diasEstimados = atrPct ? +(Math.abs(n.dist) / atrPct).toFixed(1) : null;
+
+    // ═══ ¿SE ESTÁ REFORZANDO O DEBILITANDO? ═══
+    // Un nivel no es estático. Si los toques recientes vienen con más volumen que los viejos,
+    // se está cargando de órdenes. Si vienen con menos, se está agotando y va a ceder.
+    // Es la diferencia entre un muro que aguanta y uno que está por romperse.
+    const tocaronN = candles
+      .map((v, idx) => ({ v, idx }))
+      .filter(({v}) => v.l <= n.precio*1.004 && v.h >= n.precio*0.996);
+    if(tocaronN.length >= 4){
+      const mitad = Math.floor(tocaronN.length/2);
+      const volViejo = tocaronN.slice(0, mitad).reduce((s,x)=>s+(x.v.v||0),0) / mitad;
+      const volNuevo = tocaronN.slice(mitad).reduce((s,x)=>s+(x.v.v||0),0) / (tocaronN.length-mitad);
+      if(volViejo > 0){
+        const cambio = (volNuevo - volViejo) / volViejo;
+        n.tendencia = cambio > 0.3 ? 'reforzando' : cambio < -0.3 ? 'debilitando' : 'estable';
+        n.cambioVolPct = Math.round(cambio * 100);
+      }
+    }
+    // El nivel que se refuerza cuesta más cruzarlo; el que se debilita, menos
+    if(n.tendencia === 'reforzando') n.costo = +(n.costo * 1.25).toFixed(1);
+    else if(n.tendencia === 'debilitando') n.costo = +(n.costo * 0.75).toFixed(1);
   }
 
   // ═══ FILTRAR EL RUIDO ═══
@@ -5871,6 +6154,8 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
                                    // El camino hasta el objetivo: un muro entre el precio y
                                    // el TP significa que el objetivo probablemente no se alcanza
                                    obstaculos,
+                                   // La evolución de la liquidez en el tiempo
+                                   calorTemporal,
                                    // La memoria: qué patrones ya demostraron rendir peor
                                    memoria,
                                    // Cuántas posiciones abiertas hay: la 25ª no es como la 1ª
@@ -5994,6 +6279,13 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
         : peor.origen?.includes('libro')
         ? `un nivel con órdenes reales puestas${peor.usdLibro ? ` ($${(peor.usdLibro/1000).toFixed(0)}K)` : ''}`
         : `un nivel ${peor.calidad || 'técnico'}`;
+      // Si el nivel se está debilitando, el obstáculo pesa menos: puede ceder pronto.
+      // Si se está reforzando, es al revés y conviene esperar de verdad.
+      const evolucion = peor.tendencia === 'debilitando'
+        ? ` Ese nivel se está debilitando (${peor.cambioVolPct}% menos volumen en los toques recientes): puede ceder pronto.`
+        : peor.tendencia === 'reforzando'
+        ? ` Ese nivel se viene reforzando (${peor.cambioVolPct > 0 ? '+' : ''}${peor.cambioVolPct}% de volumen en los toques recientes): cada vez cuesta más romperlo.`
+        : '';
       const cuando = peor.diasEstimados != null
         ? (peor.diasEstimados < 1 ? ` A la volatilidad actual, el precio llega ahí en unas ${Math.round(peor.diasEstimados*24)} horas.`
            : ` A la volatilidad actual, tardaría unos ${peor.diasEstimados} días en llegar.`)
@@ -6002,7 +6294,7 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
         motivo: `Hay ${queEs} entre el precio y el objetivo`,
         queEsperar: `que supere $${fmtP(peor.precio)} (${peor.distPct > 0 ? '+' : ''}${peor.distPct}%) con volumen`,
         nivel: peor.precio,
-        porque: `El objetivo está detrás de ${enElMedio.length === 1 ? 'un nivel' : `${enElMedio.length} niveles`} que el precio tiene que consumir primero.${cuando} ${peor.porque || ''} Mientras no lo cruce, el TP no es alcanzable.`,
+        porque: `El objetivo está detrás de ${enElMedio.length === 1 ? 'un nivel' : `${enElMedio.length} niveles`} que el precio tiene que consumir primero.${evolucion}${cuando} ${peor.porque || ''} Mientras no lo cruce, el TP no es alcanzable.`,
       });
     }
 
@@ -6040,6 +6332,59 @@ export function decidirQueHacer({ sintesis, result, setup, liquidez, libro, comp
       sintesis.cruces.push({
         tipo: 'apoyo', modulo: 'liquidez',
         texto: `El camino hasta el objetivo está despejado: no hay niveles importantes en los próximos ${libre.toFixed(1)}% hacia ${esLong ? 'arriba' : 'abajo'}.`,
+      });
+    }
+  }
+
+  // ═══ ¿SE ESTÁ ARMANDO UN MURO EN EL CAMINO? ═══
+  // Esto solo se puede saber mirando la evolución: un corte estático muestra que hay un
+  // nivel, pero no que ESTÁ CRECIENDO. Si se arma justo entre el precio y el objetivo,
+  // la ventana para llegar se está cerrando.
+  if(calorTemporal?.armandose?.length && setup?.t1 && precio && dir){
+    const enCamino = calorTemporal.armandose.filter(e => {
+      return esLong ? (e.precio > precio && e.precio < setup.t1)
+                    : (e.precio < precio && e.precio > setup.t1);
+    });
+    if(enCamino.length){
+      const e0 = enCamino[0];
+      esperas.push({
+        motivo: 'Se está armando liquidez justo en el camino al objetivo',
+        queEsperar: `que el precio supere $${fmtP(e0.precio)} antes de que ese muro termine de formarse`,
+        nivel: e0.precio,
+        porque: `La densidad de órdenes en $${fmtP(e0.precio)} (${e0.distPct > 0 ? '+' : ''}${e0.distPct}%) viene creciendo. No es un nivel viejo: se está construyendo ahora, y cada hora que pasa es más difícil de cruzar.`,
+      });
+    }
+    // Y si se está disolviendo el que estaba en contra, eso juega a favor
+    const cediendo = (calorTemporal.disolviendose || []).filter(e => {
+      return esLong ? (e.precio > precio && e.precio < setup.t1 * 1.02)
+                    : (e.precio < precio && e.precio > setup.t1 * 0.98);
+    });
+    if(cediendo.length && Array.isArray(sintesis?.cruces)){
+      sintesis.cruces.push({
+        tipo: 'apoyo', modulo: 'liquidez',
+        texto: `El nivel de $${fmtP(cediendo[0].precio)} que estaba en el camino se está disolviendo: pierde defensa y es cada vez más fácil de cruzar.`,
+      });
+    }
+  }
+
+  // ═══ ALGUIEN ESPERA EN UN PRECIO ═══
+  // La liquidez crece en un nivel del que el precio ya se alejó. Eso no es casual: hay
+  // órdenes esperando ahí. Suele anticipar hacia dónde va a volver.
+  if(calorTemporal?.divergencias?.length && precio){
+    const dv = calorTemporal.divergencias[0];
+    const haciaAlla = dv.distPct > 0 ? 'arriba' : 'abajo';
+    const contraTesis = dir && ((esLong && dv.distPct < 0) || (!esLong && dv.distPct > 0));
+    if(contraTesis){
+      esperas.push({
+        motivo: `Se está acumulando liquidez a ${Math.abs(dv.distPct)}% en contra`,
+        queEsperar: `que el precio vaya a buscar $${fmtP(dv.precio)} antes de retomar la dirección`,
+        nivel: dv.precio,
+        porque: `La densidad en $${fmtP(dv.precio)} creció un ${Math.round(dv.crecimiento*100)}% aunque el precio ya se alejó de ahí. Eso significa que hay órdenes esperando en ese nivel: lo habitual es que el precio vuelva a buscarlas antes de seguir.`,
+      });
+    } else if(Array.isArray(sintesis?.cruces)){
+      sintesis.cruces.push({
+        tipo: 'apoyo', modulo: 'liquidez',
+        texto: `Se está acumulando liquidez a ${Math.abs(dv.distPct)}% ${haciaAlla} ($${fmtP(dv.precio)}), del mismo lado que esta operación: es hacia donde el precio tiende a ser atraído.`,
       });
     }
   }

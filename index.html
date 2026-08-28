@@ -869,8 +869,14 @@
         <div id="liqLibroPanel" style="display:none;margin-top:12px;"></div>
         <!-- El mapa de calor: se mira, no se lee -->
         <div id="liqHeatWrap" style="display:none;margin-top:12px;">
+          <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:7px;">🔥 MAPA DE CALOR · EVOLUCIÓN</div>
+          <canvas id="liqCalorCanvas" style="width:100%;height:240px;display:block;border-radius:8px;"></canvas>
+          <div id="liqCalorNota" style="display:flex;align-items:center;gap:10px;margin:8px 0 16px;
+            font-size:10.5px;color:var(--sub);min-height:22px;"></div>
           <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:7px;">🧱 CAMINO</div>
           <canvas id="liqHeatCanvas" style="width:100%;height:260px;display:block;border-radius:10px;"></canvas>
+          <div id="liqHeatDetalle" style="display:none;background:var(--panel2);border:1px solid var(--border);
+            border-radius:9px;padding:11px 13px;margin-top:9px;"></div>
           <div id="liqHeatLeyenda" style="display:flex;justify-content:space-between;align-items:center;
             margin-top:7px;font-size:11px;color:var(--sub);"></div>
         </div>
@@ -2896,6 +2902,8 @@ document.getElementById('liqLiveToggle').addEventListener('change', (e)=>{
         const o = msg.o;
         if(!o) return;
         liqEvents.unshift({ symbol:o.s, side:o.S, qty:parseFloat(o.q), price:parseFloat(o.ap||o.p), value:parseFloat(o.q)*parseFloat(o.ap||o.p), time:o.T });
+        // Se guardan para el mapa de calor: son liquidez REAL, no estimada
+        window._liqReales = liqEvents.filter(x => !liqLiveSymbol || x.symbol === liqLiveSymbol + 'USDT');
         liqEvents = liqEvents.slice(0,200); // guardamos más de las que mostramos, por si cambiás de moneda y ya había algo filtrado afuera
         renderLiqFeed();
       };
@@ -2944,6 +2952,224 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   try{
     const data = await fetchTokenData(q, liqCurrentTf);
 
+    // ═══ MAPA DE CALOR TEMPORAL ═══
+    // Un mapa de calor de verdad: cada columna es un momento, cada fila un precio, el color
+    // la densidad de liquidez. Muestra algo que un corte estático no puede: si un muro se
+    // está armando o disolviendo.
+    (async () => {
+      const cvC = document.getElementById('liqCalorCanvas');
+      const nota = document.getElementById('liqCalorNota');
+      try{
+        const mc = TheHatonEngine.mapaCalorTemporal(data.candles, {
+          columnas: 64, filas: 70, rangoPct: 9,
+          // Las liquidaciones reales del stream, si el feed está activo. Con ellas el mapa
+          // deja de estimar dónde hay stops y muestra dónde reventaron de verdad.
+          liquidacionesReales: (window._liqReales || []).filter(x =>
+            !data.displayName || x.symbol === data.displayName + 'USDT'),
+        });
+        if(!mc){ cvC.style.display='none'; nota.style.display='none'; return; }
+        cvC.style.display = 'block'; nota.style.display = '';
+
+        const dpr = window.devicePixelRatio || 1;
+        const W = cvC.clientWidth || cvC.parentElement?.clientWidth || 320;
+        const H = 240;
+        cvC.width = W*dpr; cvC.height = H*dpr;
+        const ctx = cvC.getContext('2d');
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.fillStyle = '#060809'; ctx.fillRect(0,0,W,H);
+
+        const margenDer = 54;
+        const anchoMapa = W - margenDer;
+        const wCol = anchoMapa / mc.columnas;
+        const hFila = H / mc.filas;
+
+        // La escala de calor: de azul profundo a blanco incandescente. Es la que usan los
+        // mapas de liquidez profesionales porque el ojo distingue bien los saltos.
+        const calor = (d) => {
+          if(d < 0.02) return null;
+          const t = Math.pow(d, 0.62);
+          if(t < 0.16) return `rgba(12,32,64,${0.35 + t*2})`;
+          if(t < 0.34) return `rgba(16,84,150,${0.5 + t})`;
+          if(t < 0.52) return `rgba(0,168,190,${0.6 + t*0.6})`;
+          if(t < 0.70) return `rgba(40,205,120,${0.7 + t*0.4})`;
+          if(t < 0.85) return `rgba(232,196,50,${0.8 + t*0.25})`;
+          if(t < 0.94) return `rgba(255,128,40,${0.88 + t*0.15})`;
+          return `rgba(255,236,210,${0.92 + t*0.1})`;
+        };
+
+        // Las celdas
+        for(let col = 0; col < mc.columnas; col++){
+          for(let fil = 0; fil < mc.filas; fil++){
+            const d = mc.rejilla[col][fil];
+            const c2 = calor(d);
+            if(!c2) continue;
+            ctx.fillStyle = c2;
+            ctx.fillRect(col*wCol, H - (fil+1)*hFila, wCol + 0.6, hFila + 0.6);
+          }
+        }
+
+        // Un velo que oscurece el pasado: el ojo va primero a lo reciente, que es lo que importa
+        const velo = ctx.createLinearGradient(0, 0, anchoMapa, 0);
+        velo.addColorStop(0, 'rgba(6,8,9,.45)');
+        velo.addColorStop(0.55, 'rgba(6,8,9,.1)');
+        velo.addColorStop(1, 'rgba(6,8,9,0)');
+        ctx.fillStyle = velo; ctx.fillRect(0, 0, anchoMapa, H);
+
+        // ── EL RECORRIDO DEL PRECIO SOBRE EL MAPA ──
+        // Es lo que convierte una nube de color en un gráfico: se ve por dónde pasó el
+        // precio, qué zonas atravesó (y por eso están apagadas) y cuáles nunca tocó.
+        if(mc.recorrido?.length > 2){
+          const yP2 = (p2) => H - ((p2 - mc.min) / (mc.max - mc.min)) * H;
+          // La sombra del rango alto-bajo, muy tenue
+          ctx.beginPath();
+          mc.recorrido.forEach((r, k) => {
+            const x = (r.col + 0.5) * wCol;
+            k === 0 ? ctx.moveTo(x, yP2(r.alto)) : ctx.lineTo(x, yP2(r.alto));
+          });
+          for(let k = mc.recorrido.length-1; k >= 0; k--){
+            const r = mc.recorrido[k];
+            ctx.lineTo((r.col + 0.5) * wCol, yP2(r.bajo));
+          }
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(255,255,255,.055)';
+          ctx.fill();
+          // La línea del cierre
+          ctx.beginPath();
+          mc.recorrido.forEach((r, k) => {
+            const x = (r.col + 0.5) * wCol;
+            k === 0 ? ctx.moveTo(x, yP2(r.precio)) : ctx.lineTo(x, yP2(r.precio));
+          });
+          ctx.strokeStyle = 'rgba(255,255,255,.42)'; ctx.lineWidth = 1.1;
+          ctx.stroke();
+        }
+
+        // El precio actual
+        const yPrecio = H - ((data.price - mc.min) / (mc.max - mc.min)) * H;
+        ctx.save();
+        ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = 7;
+        ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, yPrecio); ctx.lineTo(anchoMapa, yPrecio); ctx.stroke();
+        ctx.restore();
+
+        // Los niveles que están cambiando: lo que este mapa muestra y otros no
+        // ═══ LOS CAMBIOS, COMO GRÁFICO ═══
+        // En vez de símbolos: una cuña que crece hacia la derecha si el nivel se está
+        // armando, y que se achica si se disuelve. La forma dice la dirección sin leer.
+        const marcarCambio = (arr, creciendo) => {
+          for(const e of arr.slice(0,3)){
+            const y = H - ((e.precio - mc.min) / (mc.max - mc.min)) * H;
+            if(y < 10 || y > H-10) continue;
+            const col = creciendo ? 'rgba(255,196,60,' : 'rgba(120,135,150,';
+            const largo = 30 + Math.min(26, Math.abs(e.cambio) * 130);
+            const x0 = anchoMapa - largo - 4;
+            // La cuña: gruesa donde hay más densidad
+            ctx.beginPath();
+            if(creciendo){
+              ctx.moveTo(x0, y - 1); ctx.lineTo(anchoMapa - 4, y - 4.5);
+              ctx.lineTo(anchoMapa - 4, y + 4.5); ctx.lineTo(x0, y + 1);
+            } else {
+              ctx.moveTo(x0, y - 4.5); ctx.lineTo(anchoMapa - 4, y - 1);
+              ctx.lineTo(anchoMapa - 4, y + 1); ctx.lineTo(x0, y + 4.5);
+            }
+            ctx.closePath();
+            const g2 = ctx.createLinearGradient(x0, 0, anchoMapa - 4, 0);
+            g2.addColorStop(0, col + (creciendo ? '.15)' : '.55)'));
+            g2.addColorStop(1, col + (creciendo ? '.85)' : '.12)'));
+            ctx.fillStyle = g2; ctx.fill();
+          }
+        };
+        marcarCambio(mc.armandose, true);
+        marcarCambio(mc.disolviendose, false);
+
+        // ═══ DIVERGENCIA: alguien espera acá ═══
+        // Un anillo pulsante en los niveles donde crece la liquidez aunque el precio se fue.
+        // Es la señal más anticipada que da el mapa.
+        for(const dv of (mc.divergencias || []).slice(0,2)){
+          const y = H - ((dv.precio - mc.min) / (mc.max - mc.min)) * H;
+          if(y < 10 || y > H-10) continue;
+          const x = anchoMapa - 62;
+          ctx.strokeStyle = 'rgba(180,120,255,.85)'; ctx.lineWidth = 1.4;
+          ctx.beginPath(); ctx.arc(x, y, 5.5, 0, Math.PI*2); ctx.stroke();
+          ctx.fillStyle = 'rgba(180,120,255,.9)';
+          ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI*2); ctx.fill();
+          // Una línea corta hacia el mapa
+          ctx.strokeStyle = 'rgba(180,120,255,.3)'; ctx.lineWidth = 0.8;
+          ctx.beginPath(); ctx.moveTo(x + 8, y); ctx.lineTo(anchoMapa - 4, y); ctx.stroke();
+        }
+
+        // Escala de precios
+        ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.55)';
+        for(let k = 0; k <= 4; k++){
+          const y = H * k / 4;
+          const p2 = mc.max - (mc.max - mc.min) * k / 4;
+          ctx.fillText('$' + fmt(p2), anchoMapa + 5, y + (k===0 ? 9 : k===4 ? -1 : 3));
+        }
+        // Eje del tiempo
+        ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.4)';
+        ctx.fillText('ANTES', 3, H - 4);
+        ctx.textAlign = 'right'; ctx.fillText('AHORA', anchoMapa - 3, H - 4); ctx.textAlign = 'left';
+
+        // ═══ TOCAR PARA VER QUÉ PASÓ EN ESE PRECIO ═══
+        cvC.style.cursor = 'crosshair';
+        const detC = document.getElementById('liqCalorNota');
+        const verFila = (clientY) => {
+          const r = cvC.getBoundingClientRect();
+          const y = (clientY - r.top) * (H / r.height);
+          const fil = Math.max(0, Math.min(mc.filas-1, Math.floor((H - y) / hFila)));
+          const e = mc.evolucion[fil];
+          if(!e) return;
+          const dens = mc.rejilla.at(-1)[fil];
+          const col2 = e.distPct > 0 ? 'var(--rose)' : 'var(--teal)';
+          const est = e.estado === 'armándose' ? '<span style="color:var(--amber)">▲ armándose</span>'
+                    : e.estado === 'disolviéndose' ? '<span style="color:var(--sub)">▽ disolviéndose</span>'
+                    : e.estado === 'estable' ? 'estable' : 'sin actividad';
+          // Barra real, no caracteres: se compara de un vistazo
+          const barra = (v2, col3) => `<span style="display:inline-block;width:42px;height:5px;
+            background:rgba(255,255,255,.07);border-radius:2px;position:relative;vertical-align:middle;">
+            <span style="position:absolute;left:0;top:0;bottom:0;width:${Math.round(v2*100)}%;
+              background:${col3};border-radius:2px;"></span></span>`;
+          // Solo el precio, dos barras comparativas y una flecha. Sin frases.
+          const flecha = e.estado === 'armándose'
+            ? `<span style="color:var(--amber);font-size:13px;">▲</span>`
+            : e.estado === 'disolviéndose'
+            ? `<span style="color:var(--sub);font-size:13px;">▽</span>` : '';
+          detC.innerHTML = `
+            <span style="color:${col2};font-family:var(--display);font-weight:800;font-size:13px;">$${fmt(e.precio)}</span>
+            <span style="color:${col2};font-size:11px;">${e.distPct > 0 ? '+' : ''}${e.distPct}%</span>
+            <span style="flex:1;display:flex;gap:9px;align-items:center;justify-content:flex-end;">
+              ${barra(e.antes, 'rgba(139,152,168,.5)')}
+              <span style="color:var(--sub);opacity:.5;">→</span>
+              ${barra(e.ahora, e.ahora > e.antes ? 'var(--amber)' : 'var(--sub)')}
+            </span>
+            ${flecha}`;
+        };
+        cvC.onclick = (ev) => verFila(ev.clientY);
+        cvC.ontouchstart = (ev) => { const t3 = ev.touches?.[0]; if(t3){ ev.preventDefault(); verFila(t3.clientY); } };
+        // ═══ EL ESTADO, SIN FRASES ═══
+        // Dos indicadores: cuántos niveles se arman y cuántos se disuelven, con su distancia.
+        const chip = (n2, txt, col3) => n2 === 0 ? '' :
+          `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;
+            border:1px solid ${col3}44;border-radius:99px;color:${col3};font-size:10.5px;">
+            ${txt}</span>`;
+        const a0 = mc.armandose[0], d0 = mc.disolviendose[0];
+        nota.innerHTML =
+          chip(mc.armandose.length, `▲ ${mc.armandose.length}${a0 ? ` · ${a0.distPct > 0 ? '+' : ''}${a0.distPct}%` : ''}`, 'rgb(255,196,60)') +
+          chip(mc.disolviendose.length, `▽ ${mc.disolviendose.length}${d0 ? ` · ${d0.distPct > 0 ? '+' : ''}${d0.distPct}%` : ''}`, 'rgb(139,152,168)') +
+          chip((mc.divergencias||[]).length, `◎ ${(mc.divergencias||[]).length}${mc.divergencias?.[0] ? ` · ${mc.divergencias[0].distPct > 0 ? '+' : ''}${mc.divergencias[0].distPct}%` : ''}`, 'rgb(180,120,255)') +
+          (mc.conLiquidacionesReales ? `<span style="display:inline-flex;align-items:center;gap:4px;
+            padding:3px 8px;border:1px solid rgba(255,59,92,.35);border-radius:99px;
+            color:rgb(255,90,110);font-size:10px;">💥 real</span>` : '') +
+          `<span style="flex:1;"></span>
+           <span style="display:flex;align-items:center;gap:3px;opacity:.55;">
+             ${[0.15,0.35,0.55,0.75,0.95].map(v2 => {
+               const cc = v2 < 0.34 ? 'rgb(16,84,150)' : v2 < 0.52 ? 'rgb(0,168,190)'
+                        : v2 < 0.70 ? 'rgb(40,205,120)' : v2 < 0.85 ? 'rgb(232,196,50)' : 'rgb(255,128,40)';
+               return `<span style="width:11px;height:5px;background:${cc};border-radius:1px;"></span>`;
+             }).join('')}
+           </span>`;
+      }catch(e){ cvC.style.display='none'; nota.style.display='none'; }
+    })();
+
     // ═══ MAPA DE OBSTÁCULOS ═══
     // Muestra el camino: qué hay entre el precio y el objetivo. Con el stop y el TP dibujados,
     // porque un muro solo importa según de qué lado del objetivo esté.
@@ -2976,127 +3202,278 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const anchoMax = W - cx - 58;
         const pctDe = (precio) => (precio - data.price) / data.price * 100;
 
-        // ── EL ÁREA DE VALOR, DE FONDO ──
-        // Donde se negoció la mayor parte del volumen. El precio se mueve lento adentro
-        // y rápido afuera, así que saber si estás dentro o fuera cambia la expectativa.
-        if(perfil?.vah && perfil?.val){
-          const y1 = yDe(pctDe(perfil.vah)), y2 = yDe(pctDe(perfil.val));
-          ctx.fillStyle = 'rgba(255,255,255,.028)';
-          ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
-          ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
-          ctx.fillText('ÁREA DE VALOR', 4, Math.min(y1,y2) + 11);
-        }
-
-        // ── ZONAS LIBRES ──
-        const zona = (desde, hasta, col) => {
-          const y1 = yDe(hasta), y2 = yDe(desde);
-          const g = ctx.createLinearGradient(0, Math.min(y1,y2), 0, Math.max(y1,y2));
-          g.addColorStop(0, col.replace('X','.14')); g.addColorStop(1, col.replace('X','.02'));
-          ctx.fillStyle = g;
-          ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
-        };
-        zona(0, Math.min(alcance, m.libreArriba), 'rgba(16,185,129,X)');
-        zona(-Math.min(alcance, m.libreAbajo), 0, 'rgba(16,185,129,X)');
-
-        // ── STOP Y OBJETIVO ──
-        // Sin esto el mapa muestra obstáculos sin referencia: no se sabe si están
-        // antes o después del TP, que es lo único que decide si importan.
-        const marcarNivel = (precio, etiqueta, col, punteado) => {
-          if(precio == null) return null;
-          const pct = pctDe(precio);
-          if(Math.abs(pct) > alcance) return null;
-          const y = yDe(pct);
-          ctx.strokeStyle = col; ctx.lineWidth = 1;
-          if(punteado) ctx.setLineDash([3,3]);
-          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.font = '700 9px Manrope, sans-serif'; ctx.fillStyle = col;
-          ctx.fillText(etiqueta, 4, y - 4);
-          return y;
-        };
-        // Se toman del setup si existe; si no, del análisis de la moneda
-        // Solo vale si es de ESTA moneda: si analizaste BTC y ahora mirás la liquidez de
-        // otra, el stop de BTC no tiene nada que ver.
-        const sa = window._setupActual;
-        const setupLiq = (sa && sa.symbol === data.displayName) ? sa : null;
-        marcarNivel(setupLiq?.stop, 'STOP', 'rgba(239,68,68,.75)', true);
-        marcarNivel(setupLiq?.t1, 'OBJETIVO', 'rgba(16,185,129,.75)', true);
-        if(perfil?.poc){
-          const yPoc = yDe(pctDe(perfil.poc));
-          if(yPoc > padY && yPoc < H-padY){
-            ctx.strokeStyle = 'rgba(0,217,255,.35)'; ctx.lineWidth = 1;
-            ctx.setLineDash([1,4]);
-            ctx.beginPath(); ctx.moveTo(0, yPoc); ctx.lineTo(W, yPoc); ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(0,217,255,.55)';
-            ctx.fillText('POC', 4, yPoc + 10);
-          }
-        }
-
-        // ── LAS BARRAS ──
+        // Las variables del estado táctil viven afuera del dibujo, porque se redibuja
+        // cada vez que se toca un nivel distinto.
+        const zonasTactiles = [];
         const todos = [...m.arriba, ...m.abajo];
-        const maxCosto = Math.max(...todos.map(n=>n.costo), 1);
-        for(const n of todos){
-          const y = yDe(n.distPct);
-          if(y < padY-4 || y > H-padY+4) continue;
-          const arriba = n.distPct > 0;
-          const col = arriba ? '#ef4444' : '#10b981';
-          // Un nivel ya perforado se dibuja más tenue: está debilitado
-          const alpha = n.perforaciones > 0 ? '77' : 'ee';
-          const w = anchoMax * (0.18 + 0.82 * (n.costo / maxCosto));
-          const h = n.calidad === 'MURO' ? 11 : n.calidad === 'sólido' ? 7 : 4;
-          const g = ctx.createLinearGradient(cx, 0, cx + w, 0);
-          g.addColorStop(0, col + alpha); g.addColorStop(1, col + '22');
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          if(ctx.roundRect) ctx.roundRect(cx, y - h/2, w, h, h/2);
-          else ctx.rect(cx, y - h/2, w, h);
-          ctx.fill();
+        let seleccionado = null;
 
-          // ═══ EL ORIGEN SE VE ═══
-          // Un swing es un nivel deducido de lo que pasó. El libro son órdenes puestas ahora.
-          // Una zona de liquidación son cierres forzados que van a ocurrir sí o sí.
-          // No son lo mismo y el mapa lo marca sin escribirlo.
-          if(n.zonaLiquidacion){
-            // Línea punteada que atraviesa: liquidez garantizada
-            ctx.strokeStyle = col + '55'; ctx.lineWidth = 1; ctx.setLineDash([2,3]);
-            ctx.beginPath(); ctx.moveTo(cx + w, y); ctx.lineTo(W - 34, y); ctx.stroke();
+        function dibujarTodo(){
+          ctx.clearRect(0, 0, W, H);
+          // Fondo con caída de luz: da profundidad sin distraer
+          const fondo = ctx.createLinearGradient(0, 0, 0, H);
+          fondo.addColorStop(0, 'rgba(255,255,255,.022)');
+          fondo.addColorStop(0.5, 'rgba(0,0,0,0)');
+          fondo.addColorStop(1, 'rgba(255,255,255,.022)');
+          ctx.fillStyle = fondo; ctx.fillRect(0, 0, W, H);
+          // Retícula de referencia, apenas perceptible
+          ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 0.5;
+          for(const pct of [6, 4, 2, -2, -4, -6]){
+            const yy = yDe(pct);
+            ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke();
+          }
+          // ── EL ÁREA DE VALOR, DE FONDO ──
+          // Donde se negoció la mayor parte del volumen. El precio se mueve lento adentro
+          // y rápido afuera, así que saber si estás dentro o fuera cambia la expectativa.
+          if(perfil?.vah && perfil?.val){
+            const y1 = yDe(pctDe(perfil.vah)), y2 = yDe(pctDe(perfil.val));
+            ctx.fillStyle = 'rgba(255,255,255,.028)';
+            ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
+            ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
+            ctx.fillText('ÁREA DE VALOR', 4, Math.min(y1,y2) + 11);
+          }
+
+          // ── ZONAS LIBRES ──
+          const zona = (desde, hasta, col) => {
+            const y1 = yDe(hasta), y2 = yDe(desde);
+            const g = ctx.createLinearGradient(0, Math.min(y1,y2), 0, Math.max(y1,y2));
+            g.addColorStop(0, col.replace('X','.14')); g.addColorStop(1, col.replace('X','.02'));
+            ctx.fillStyle = g;
+            ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
+          };
+          zona(0, Math.min(alcance, m.libreArriba), 'rgba(16,185,129,X)');
+          zona(-Math.min(alcance, m.libreAbajo), 0, 'rgba(16,185,129,X)');
+
+          // ── STOP Y OBJETIVO ──
+          // Sin esto el mapa muestra obstáculos sin referencia: no se sabe si están
+          // antes o después del TP, que es lo único que decide si importan.
+          const marcarNivel = (precio, etiqueta, col, punteado) => {
+            if(precio == null) return null;
+            const pct = pctDe(precio);
+            if(Math.abs(pct) > alcance) return null;
+            const y = yDe(pct);
+            ctx.strokeStyle = col; ctx.lineWidth = 1;
+            if(punteado) ctx.setLineDash([3,3]);
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
             ctx.setLineDash([]);
-          }
-          if(n.origen?.includes('libro')){
-            // Un punto lleno al final: hay órdenes reales acá
-            ctx.fillStyle = col;
-            ctx.beginPath(); ctx.arc(cx + w + 5, y, 2.5, 0, Math.PI*2); ctx.fill();
+            ctx.font = '700 9px Manrope, sans-serif'; ctx.fillStyle = col;
+            ctx.fillText(etiqueta, 4, y - 4);
+            return y;
+          };
+          // Se toman del setup si existe; si no, del análisis de la moneda
+          // Solo vale si es de ESTA moneda: si analizaste BTC y ahora mirás la liquidez de
+          // otra, el stop de BTC no tiene nada que ver.
+          const sa = window._setupActual;
+          const setupLiq = (sa && sa.symbol === data.displayName) ? sa : null;
+          marcarNivel(setupLiq?.stop, 'STOP', 'rgba(239,68,68,.75)', true);
+          marcarNivel(setupLiq?.t1, 'OBJETIVO', 'rgba(16,185,129,.75)', true);
+          if(perfil?.poc){
+            const yPoc = yDe(pctDe(perfil.poc));
+            if(yPoc > padY && yPoc < H-padY){
+              ctx.strokeStyle = 'rgba(0,217,255,.35)'; ctx.lineWidth = 1;
+              ctx.setLineDash([1,4]);
+              ctx.beginPath(); ctx.moveTo(0, yPoc); ctx.lineTo(W, yPoc); ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(0,217,255,.55)';
+              ctx.fillText('POC', 4, yPoc + 10);
+            }
           }
 
-          ctx.font = '600 10px Manrope, sans-serif';
-          ctx.fillStyle = col + (n.perforaciones > 0 ? '88' : 'dd');
-          ctx.textAlign = 'right';
-          ctx.fillText('$' + fmt(n.precio), cx - 8, y + 3.5);
-          // El tiempo estimado: traduce la distancia en algo útil
-          if(n.diasEstimados != null && n.costo >= 2){
-            const t = n.diasEstimados < 1 ? `${Math.round(n.diasEstimados*24)}h` : `${n.diasEstimados}d`;
-            ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.55)';
-            ctx.fillText(t, cx - 8 - ctx.measureText('$' + fmt(n.precio)).width - 46, y + 3.5);
+          // ── LAS BARRAS ──
+          zonasTactiles.length = 0;
+          const maxCosto = Math.max(...todos.map(n=>n.costo), 1);
+          for(const n of todos){
+            const y = yDe(n.distPct);
+            if(y < padY-4 || y > H-padY+4) continue;
+            const arriba = n.distPct > 0;
+            const col = arriba ? '#ef4444' : '#10b981';
+            // Un nivel ya perforado se dibuja más tenue: está debilitado
+            const alpha = n.perforaciones > 0 ? '77' : 'ee';
+            const w = anchoMax * (0.18 + 0.82 * (n.costo / maxCosto));
+            const h = n.calidad === 'MURO' ? 11 : n.calidad === 'sólido' ? 7 : 4;
+  
+            const elegido = seleccionado && Math.abs(seleccionado.precio - n.precio) < 1e-12;
+            // ═══ LA ZONA, NO LA LÍNEA ═══
+            // La liquidez ocupa una franja de precios, no un punto. Dibujar la zona real
+            // muestra dónde puede reaccionar el precio, que es más honesto que una línea fina.
+            const yTop = yDe((n.zonaHasta - data.price) / data.price * 100);
+            const yBot = yDe((n.zonaDesde - data.price) / data.price * 100);
+            const altoZona = Math.max(elegido ? 7 : 4, Math.abs(yBot - yTop));
+            const yZona = Math.min(yTop, yBot);
+
+            const g = ctx.createLinearGradient(cx, 0, cx + w, 0);
+            g.addColorStop(0, col + (elegido ? 'ff' : alpha));
+            g.addColorStop(0.72, col + (elegido ? '77' : '44'));
+            g.addColorStop(1, col + '00');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, altoZona, Math.min(3, altoZona/2));
+            else ctx.rect(cx, yZona, w, altoZona);
+            ctx.fill();
+
+            // Un borde fino marca los límites exactos de la zona
+            if(altoZona > 5){
+              ctx.strokeStyle = col + (elegido ? '99' : '44'); ctx.lineWidth = 0.6;
+              ctx.beginPath();
+              ctx.moveTo(cx, yZona + 0.3); ctx.lineTo(cx + w*0.86, yZona + 0.3);
+              ctx.moveTo(cx, yZona + altoZona - 0.3); ctx.lineTo(cx + w*0.86, yZona + altoZona - 0.3);
+              ctx.stroke();
+            }
+
+            // La tendencia: una flechita si el nivel se está reforzando o debilitando
+            if(n.tendencia === 'reforzando' || n.tendencia === 'debilitando'){
+              const sube = n.tendencia === 'reforzando';
+              ctx.font = '9px Manrope, sans-serif';
+              ctx.fillStyle = sube ? col + 'cc' : 'rgba(139,152,168,.6)';
+              ctx.fillText(sube ? '▲' : '▽', cx + w + (n.origen?.includes('libro') ? 12 : 4), yZona + altoZona/2 + 3);
+            }
+            // El seleccionado lleva una línea que cruza todo el ancho: se ve cuál es
+            if(elegido){
+              ctx.strokeStyle = col + '66'; ctx.lineWidth = 1;
+              ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+            }
+
+            // ═══ EL ORIGEN SE VE ═══
+            // Un swing es un nivel deducido de lo que pasó. El libro son órdenes puestas ahora.
+            // Una zona de liquidación son cierres forzados que van a ocurrir sí o sí.
+            // No son lo mismo y el mapa lo marca sin escribirlo.
+            if(n.zonaLiquidacion){
+              // Línea punteada que atraviesa: liquidez garantizada
+              ctx.strokeStyle = col + '55'; ctx.lineWidth = 1; ctx.setLineDash([2,3]);
+              ctx.beginPath(); ctx.moveTo(cx + w, y); ctx.lineTo(W - 34, y); ctx.stroke();
+              ctx.setLineDash([]);
+            }
+            if(n.origen?.includes('libro')){
+              // Un punto lleno al final: hay órdenes reales acá
+              ctx.fillStyle = col;
+              ctx.beginPath(); ctx.arc(cx + w + 5, y, 2.5, 0, Math.PI*2); ctx.fill();
+            }
+
+            // Cada barra queda registrada con una banda táctil generosa (24px) para que
+            // se pueda tocar con el dedo sin apuntar exacto
+            zonasTactiles.push({ y, alto: 24, nivel: n });
+
+            ctx.font = '600 10px Manrope, sans-serif';
+            ctx.textAlign = 'right';
+            const et = '$' + fmt(n.precio);
+            const anchoEt = ctx.measureText(et).width;
+            // El elegido lleva una pastilla detrás para que se lea sobre cualquier color
+            if(elegido){
+              ctx.fillStyle = col + '22';
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(cx - 12 - anchoEt, y - 8, anchoEt + 9, 16, 3);
+              else ctx.rect(cx - 12 - anchoEt, y - 8, anchoEt + 9, 16);
+              ctx.fill();
+            }
+            ctx.fillStyle = col + (n.perforaciones > 0 ? '88' : elegido ? 'ff' : 'dd');
+            ctx.fillText(et, cx - 8, y + 3.5);
+            // El tiempo estimado: traduce la distancia en algo útil
+            if(n.diasEstimados != null && n.costo >= 2){
+              const t = n.diasEstimados < 1 ? `${Math.round(n.diasEstimados*24)}h` : `${n.diasEstimados}d`;
+              ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.55)';
+              ctx.fillText(t, cx - 8 - ctx.measureText('$' + fmt(n.precio)).width - 46, y + 3.5);
+            }
+            ctx.textAlign = 'left';
           }
+
+          // ── EL PRECIO ──
+          const yP = yDe(0);
+          // La línea del precio con halo: es la referencia de todo y tiene que destacarse
+          // sobre las zonas sin taparlas.
+          ctx.save();
+          ctx.shadowColor = 'rgba(255,255,255,.5)'; ctx.shadowBlur = 6;
+          ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1.2;
+          ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(W, yP); ctx.stroke();
+          ctx.restore();
+          // El punto del precio, con anillo
+          ctx.fillStyle = '#0d0d0d';
+          ctx.beginPath(); ctx.arc(cx, yP, 5, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.arc(cx, yP, 4, 0, Math.PI*2); ctx.stroke();
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(cx, yP, 1.6, 0, Math.PI*2); ctx.fill();
+          ctx.font = '800 11px Manrope, sans-serif'; ctx.textAlign = 'right';
+          ctx.fillText('$' + fmt(data.price), cx - 8, yP + 3.5);
           ctx.textAlign = 'left';
-        }
 
-        // ── EL PRECIO ──
-        const yP = yDe(0);
-        ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.3;
-        ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(W, yP); ctx.stroke();
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(cx, yP, 3.5, 0, Math.PI*2); ctx.fill();
-        ctx.font = '800 11px Manrope, sans-serif'; ctx.textAlign = 'right';
-        ctx.fillText('$' + fmt(data.price), cx - 8, yP + 3.5);
-        ctx.textAlign = 'left';
+          // ── ESCALA ──
+          ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
+          for(const pct of [alcance, alcance/2, -alcance/2, -alcance]){
+            ctx.fillText(`${pct>0?'+':''}${pct}%`, W - 28, yDe(pct) + 3);
+          }
 
-        // ── ESCALA ──
-        ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
-        for(const pct of [alcance, alcance/2, -alcance/2, -alcance]){
-          ctx.fillText(`${pct>0?'+':''}${pct}%`, W - 28, yDe(pct) + 3);
         }
+        dibujarTodo();
+
+        // ═══ TOCAR PARA VER EL DETALLE ═══
+        // El mapa muestra dónde está cada cosa; tocando se ve POR QUÉ ese nivel importa,
+        // sin llenar el gráfico de texto.
+        const det = document.getElementById('liqHeatDetalle');
+        const mostrarDetalle = (n) => {
+          if(!n){ det.style.display = 'none'; return; }
+          const arriba = n.distPct > 0;
+          const col = arriba ? 'var(--rose)' : 'var(--teal)';
+          // ═══ SIN FRASES: iconos, barras y números ═══
+          // El origen como icono, la fuerza como barra, la tendencia como flecha.
+          const icoOrigen = n.zonaLiquidacion ? '💥' : n.origen?.includes('libro') ? '📖' : '📊';
+          const nivelFuerza = n.calidad === 'MURO' ? 3 : n.calidad === 'sólido' ? 2 : n.calidad === 'débil' ? 1 : 0;
+          const puntos = Array.from({length:3}, (_, i) =>
+            `<span style="display:inline-block;width:6px;height:6px;border-radius:99px;margin-right:3px;
+              background:${i < nivelFuerza ? col : 'rgba(255,255,255,.12)'};"></span>`).join('');
+          const t = n.diasEstimados == null ? null
+            : n.diasEstimados < 1 ? `${Math.round(n.diasEstimados*24)}h` : `${n.diasEstimados}d`;
+          const flecha = n.tendencia === 'reforzando'
+            ? `<span style="color:${col};">▲</span>`
+            : n.tendencia === 'debilitando' ? `<span style="color:var(--sub);">▽</span>` : '';
+
+          det.innerHTML = `
+            <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap;">
+              <span style="font-size:14px;">${icoOrigen}</span>
+              <span style="color:${col};font-family:var(--display);font-weight:800;font-size:15px;">$${fmt(n.precio)}</span>
+              <span style="color:${col};font-size:12px;font-weight:700;">${arriba?'+':''}${n.distPct}%</span>
+              <span style="flex:1;"></span>
+              <span>${puntos}</span>
+              ${flecha}
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:10.5px;color:var(--sub);">
+              ${n.zonaDesde && n.anchoZonaPct > 0.25 ? `<span style="display:flex;align-items:center;gap:5px;">
+                <span style="display:inline-block;width:24px;height:7px;background:${col};opacity:.35;border-radius:2px;"></span>
+                ${n.anchoZonaPct}%</span>` : ''}
+              ${n.toques > 1 ? `<span>${'▏'.repeat(Math.min(6, n.toques))} ${n.toques}</span>` : ''}
+              ${t ? `<span>◷ ${t}</span>` : ''}
+              ${n.usdLibro ? `<span>$${(n.usdLibro/1000).toFixed(0)}K</span>` : ''}
+              ${n.perforaciones > 0 ? `<span style="opacity:.6;">✕${n.perforaciones}</span>` : ''}
+            </div>`;
+          det.style.display = '';
+        };
+
+        // El toque y el mouse buscan la barra más cercana verticalmente
+        const buscarEn = (clientY) => {
+          const r = cv.getBoundingClientRect();
+          const y = (clientY - r.top) * (H / r.height);
+          let mejor = null, dist = 99;
+          for(const z of zonasTactiles){
+            const d2 = Math.abs(z.y - y);
+            if(d2 < z.alto/2 && d2 < dist){ dist = d2; mejor = z.nivel; }
+          }
+          return mejor;
+        };
+        // Al tocar: se marca el nivel elegido y se redibuja para que se vea cuál es
+        const elegir = (n) => {
+          if(!n) return;
+          seleccionado = n;
+          dibujarTodo();
+          mostrarDetalle(n);
+        };
+        cv.style.cursor = 'pointer';
+        cv.onclick = (ev) => elegir(buscarEn(ev.clientY));
+        cv.ontouchstart = (ev) => {
+          const t2 = ev.touches?.[0];
+          if(t2){ ev.preventDefault(); elegir(buscarEn(t2.clientY)); }
+        };
+        // Arranca con el obstáculo más importante marcado, para que no quede vacío
+        const masFuerte = [...todos].sort((a,b)=>b.costo-a.costo)[0];
+        if(masFuerte) elegir(masFuerte);
 
         // ── LEYENDA: dos números ──
         const col2 = m.ladoLibre === 'parejo' ? 'var(--sub)' : 'var(--teal)';
