@@ -919,8 +919,17 @@ const FOMC_ANNOUNCEMENTS_UTC = [
 const FOMC_2026 = [   // fechas oficiales publicadas por la Reserva Federal
   '2026-01-28','2026-03-18','2026-04-29','2026-06-17','2026-07-29','2026-09-16','2026-11-04','2026-12-16',
 ];
+// ═══ 2027 ═══
+// La Fed publica el calendario del año siguiente cada septiembre. Estas son las fechas
+// habituales (ocho reuniones, cada seis semanas aprox.) y hay que reemplazarlas por las
+// oficiales cuando salgan. Sin esto, a partir de enero de 2027 el calendario queda vacío
+// y el bot deja de avisar de las reuniones.
+const FOMC_2027 = [
+  '2027-01-27','2027-03-17','2027-04-28','2027-06-16','2027-07-28','2027-09-22','2027-11-03','2027-12-15',
+];
+const TODAS_FOMC = [...FOMC_2026, ...FOMC_2027];
 // Las minutas salen 3 semanas después de cada reunión
-const MINUTAS_2026 = FOMC_2026.map(d => {
+const MINUTAS_2026 = TODAS_FOMC.map(d => {
   const x = new Date(d + 'T19:00:00Z'); x.setUTCDate(x.getUTCDate() + 21); return x.toISOString().slice(0,10);
 });
 
@@ -938,7 +947,7 @@ export function calendarioMacro(ahora = new Date()){
     const d = new Date(hoy); d.setUTCDate(d.getUTCDate() + i);
     const fecha = iso(d), dia = d.getUTCDay(), diaMes = d.getUTCDate();
 
-    if(FOMC_2026.includes(fecha)) eventos.push({
+    if(TODAS_FOMC.includes(fecha)) eventos.push({
       fecha, hora:'19:00 UTC', nombre:'Decisión de tasas de la Fed (FOMC)', impacto:'MUY ALTO', exacta:true,
       horas: enHoras(fecha,19),
       queEs:'La Fed anuncia si sube, baja o mantiene las tasas. Es el evento que más mueve todo: dólar, oro, acciones y cripto.' });
@@ -973,11 +982,17 @@ export function calendarioMacro(ahora = new Date()){
   const proximos = eventos.filter(e => e.horas > -2);
   const inminente = proximos.find(e => e.horas <= 24 && (e.impacto === 'MUY ALTO' || e.impacto === 'ALTO'));
   const enCurso = eventos.find(e => e.horas <= 0.5 && e.horas > -2);
+  // ═══ EVENTOS QUE YA PASARON ═══
+  // Hasta ahora el calendario avisaba ANTES y se olvidaba. Pero lo que más importa de un
+  // dato macro es cómo REACCIONÓ el mercado: la Fed puede subir tasas y el mercado subir
+  // igual. Sin eso, el aviso previo queda a mitad de camino.
+  const recienPasado = eventos.find(e => e.horas <= -2 && e.horas > -14 && e.impacto === 'MUY ALTO');
 
   return {
     proximos: proximos.slice(0, 6),
     inminente: inminente || null,
     enCurso: enCurso || null,
+    recienPasado: recienPasado || null,
     // El aviso concreto: si hay algo grande en las próximas horas, conviene no abrir posiciones
     aviso: enCurso
       ? `🔴 ${enCurso.nombre} está saliendo AHORA. El mercado puede moverse de forma violenta e impredecible en los próximos minutos.`
@@ -4773,6 +4788,201 @@ export function contextoTransferencia(usd, marketCapUsd, volumenDiarioUsd){
     pctVolumenDiario: pctVol != null ? +pctVol.toFixed(1) : null,
     relevante: nivel === 'ALTO' || nivel === 'MUY ALTO',
     lectura: lecturas.length ? lecturas.join(' ') : `Movimiento chico para el tamaño de esta moneda: probablemente no mueva el precio.`,
+  };
+}
+
+// ═══ LÍNEA DE TENDENCIA, RUPTURA Y RETESTEO ═══
+// El motor detecta pivotes pero nunca traza la línea que los une. Y esa línea es de lo más
+// básico que mira cualquiera: mientras el precio la respeta, la tendencia sigue; cuando la
+// rompe, cambia algo; y el RETESTEO —volver a tocarla desde el otro lado— es de las entradas
+// con mejor relación riesgo/beneficio que hay.
+export function lineaTendencia(candles, opciones = {}){
+  if(!Array.isArray(candles) || candles.length < 30) return null;
+  const minToques = opciones.minToques ?? 4;
+  const tol = opciones.tolerancia ?? 0.006;
+
+  // Pivotes: máximos y mínimos locales
+  const piv = (tipo) => {
+    const out = [];
+    for(let i = 3; i < candles.length - 3; i++){
+      const v = candles[i];
+      const ventana = candles.slice(i-3, i+4);
+      if(tipo === 'max' && v.h >= Math.max(...ventana.map(x=>x.h))) out.push({ i, p: v.h });
+      if(tipo === 'min' && v.l <= Math.min(...ventana.map(x=>x.l))) out.push({ i, p: v.l });
+    }
+    return out;
+  };
+
+  // Se prueban pares de pivotes y se queda la recta que más toques acumula.
+  // Una línea con 2 toques la dibuja cualquiera; con 4 o más ya es significativa.
+  const mejorRecta = (pivotes, tipo) => {
+    if(pivotes.length < 2) return null;
+    let mejor = null;
+    for(let a = 0; a < pivotes.length - 1; a++){
+      for(let b = a + 1; b < pivotes.length; b++){
+        const p1 = pivotes[a], p2 = pivotes[b];
+        if(p2.i - p1.i < 8) continue;                 // demasiado juntos
+        const m = (p2.p - p1.p) / (p2.i - p1.i);
+        const en = (i) => p1.p + m * (i - p1.i);
+
+        // ¿Cuántos pivotes toca esta recta? ¿Y el precio la respeta?
+        let toques = 0, violaciones = 0;
+        for(const pv of pivotes){
+          const esperado = en(pv.i);
+          if(Math.abs(pv.p - esperado) / esperado < tol) toques++;
+        }
+        // ═══ LAS VIOLACIONES SE CUENTAN HASTA LA PRIMERA RUPTURA ═══
+        // Una línea que el precio rompió y dejó atrás NO es una línea mala: es una línea
+        // que cumplió su función y después se rompió. Contar como violación cada vela
+        // posterior a la ruptura hacía que las líneas rotas —que son justo las más
+        // interesantes— quedaran descartadas.
+        let idxRuptura = -1;
+        for(let i = p1.i; i < candles.length; i++){
+          const esperado = en(i);
+          const cerroFuera = tipo === 'max'
+            ? candles[i].c > esperado * (1 + tol*1.5)
+            : candles[i].c < esperado * (1 - tol*1.5);
+          if(cerroFuera){
+            // ¿Se sostuvo? Entonces es ruptura, y desde acá ya no se cuentan violaciones
+            const sig = candles.slice(i+1, i+3);
+            const sostuvo = sig.length >= 1 && sig.every(x => tipo === 'max'
+              ? x.c > esperado * (1 - tol) : x.c < esperado * (1 + tol));
+            if(sostuvo){ idxRuptura = i; break; }
+            violaciones++;
+          }
+        }
+        if(toques < minToques) continue;
+
+        // ═══ ¿ES UNA LÍNEA O ES CASUALIDAD? ═══
+        // Con suficientes pivotes, cualquier recta "toca" algunos por azar. Para que cuente
+        // como línea de tendencia real hacen falta dos cosas más:
+        //  · Los toques tienen que estar REPARTIDOS, no amontonados en una zona
+        //  · Tiene que haber una proporción decente de los pivotes disponibles
+        const tocados = pivotes.filter(pv => {
+          const esp = en(pv.i);
+          return Math.abs(pv.p - esp) / esp < tol;
+        });
+        if(tocados.length < minToques) continue;
+        // Reparto: la distancia entre el primer y el último toque, sobre el total
+        const spread = (tocados.at(-1).i - tocados[0].i) / candles.length;
+        if(spread < 0.35) continue;               // amontonados: no es una línea
+        // Y que toque una fracción razonable de los pivotes, no 3 de 40
+        if(tocados.length / pivotes.length < 0.28) continue;
+
+        // ═══ FILTRO CONTRA ALINEACIONES CASUALES ═══
+        // Con N pivotes hay N·(N-1)/2 rectas posibles: con 17 pivotes son 136 pruebas, y
+        // alguna alinea 5 o 6 puntos por puro azar. Estimar eso con una fórmula de banda
+        // fija no funciona, porque una recta inclinada barre todo el rango de precios.
+        //
+        // El criterio que sí discrimina: los toques tienen que ser una MAYORÍA de los
+        // pivotes del mismo lado, y estar bien repartidos en el tiempo. En una tendencia
+        // real, casi todos los máximos (o mínimos) caen sobre la línea. En ruido, no.
+        if(tocados.length < Math.ceil(pivotes.length * 0.5)) continue;
+
+        // Y la separación entre toques consecutivos tiene que ser pareja: si tres toques
+        // están pegados y uno lejos, es casualidad, no una línea respetada.
+        const huecos = [];
+        for(let k = 1; k < tocados.length; k++) huecos.push(tocados[k].i - tocados[k-1].i);
+        if(huecos.length >= 2){
+          const prom = huecos.reduce((s,x)=>s+x,0) / huecos.length;
+          const maxHueco = Math.max(...huecos);
+          if(maxHueco > prom * 3.2) continue;    // un salto enorme: no es una línea continua
+        }
+        // ═══ EL PUNTAJE ═══
+        // Contar toques a secas favorece líneas triviales: una recta muy alejada del precio
+        // "toca" muchos pivotes por casualidad y no se viola nunca, porque nadie llega ahí.
+        // Lo que importa es que la línea esté CERCA de la acción y que el precio la respete
+        // de verdad.
+        // La cercanía se mide en el punto donde la línea todavía era válida: si se rompió,
+        // ahí; si no, al final. Así una línea rota hace 10 velas sigue siendo relevante.
+        const hastaIdx = idxRuptura >= 0 ? idxRuptura : candles.length - 1;
+        const valorRef = en(hastaIdx);
+        const precioRef = candles[hastaIdx].c;
+        const cercania = Math.abs(precioRef - valorRef) / precioRef;
+        if(cercania > 0.12) continue;
+        const bonusCercania = Math.max(0, 1 - cercania * 8);
+        const alcance = hastaIdx / candles.length;
+        // Una línea rota recientemente vale más: es la información más accionable que hay
+        const bonusRuptura = idxRuptura >= 0 && (candles.length - idxRuptura) <= 25 ? 2.5 : 0;
+        const puntaje = toques * 1.5 - violaciones * 0.5 + alcance * 2 + bonusCercania * 3 + bonusRuptura;
+        if(!mejor || puntaje > mejor.puntaje){
+          mejor = { p1, p2, m, en, toques, violaciones, puntaje, tipo };
+        }
+      }
+    }
+    return mejor;
+  };
+
+  const techo = mejorRecta(piv('max'), 'max');
+  const piso = mejorRecta(piv('min'), 'min');
+  // Se elige la más sólida de las dos
+  const linea = (!techo && !piso) ? null
+              : !techo ? piso : !piso ? techo
+              : (techo.puntaje >= piso.puntaje ? techo : piso);
+  if(!linea) return null;
+
+  const n = candles.length;
+  const precioAhora = candles.at(-1).c;
+  const valorAhora = linea.en(n - 1);
+  const esResistencia = linea.tipo === 'max';
+
+  // ── ¿LA ROMPIÓ? ──
+  // Una ruptura necesita cierre del otro lado, no solo una mecha.
+  let ruptura = null;
+  for(let i = Math.max(linea.p2.i, n - 30); i < n; i++){
+    const esperado = linea.en(i);
+    const rompio = esResistencia
+      ? candles[i].c > esperado * (1 + tol)
+      : candles[i].c < esperado * (1 - tol);
+    if(rompio){
+      // Que se sostenga al menos dos velas, para no contar un pinchazo
+      const sig = candles.slice(i+1, i+3);
+      const sostuvo = sig.length >= 1 && sig.every(v => esResistencia
+        ? v.c > esperado * (1 - tol/2) : v.c < esperado * (1 + tol/2));
+      if(sostuvo){
+        ruptura = { i, precio: candles[i].c, nivel: esperado,
+                    velasAtras: n - 1 - i, direccion: esResistencia ? 'alcista' : 'bajista' };
+        break;
+      }
+    }
+  }
+
+  // ── ¿HUBO RETESTEO? ──
+  // Después de romper, el precio suele volver a tocar la línea desde el otro lado.
+  // Ese toque, si la línea aguanta, es la entrada con mejor riesgo/beneficio.
+  let retesteo = null;
+  if(ruptura){
+    for(let i = ruptura.i + 2; i < n; i++){
+      const esperado = linea.en(i);
+      const volvio = esResistencia
+        ? (candles[i].l <= esperado * (1 + tol) && candles[i].c > esperado * (1 - tol))
+        : (candles[i].h >= esperado * (1 - tol) && candles[i].c < esperado * (1 + tol));
+      if(volvio){
+        retesteo = { i, precio: esperado, velasAtras: n - 1 - i,
+                     aguanto: esResistencia ? candles[i].c > esperado : candles[i].c < esperado };
+        break;
+      }
+    }
+  }
+
+  const distPct = +((precioAhora - valorAhora) / valorAhora * 100).toFixed(2);
+
+  return {
+    tipo: esResistencia ? 'resistencia' : 'soporte',
+    desdeIdx: linea.p1.i, hastaIdx: n - 1,
+    precioDesde: linea.p1.p, precioHasta: valorAhora,
+    pendiente: linea.m,
+    toques: linea.toques, violaciones: linea.violaciones,
+    // La función para saber el valor de la línea en cualquier vela: la usa el dibujo
+    valorEn: linea.en,
+    distPct, valorAhora,
+    ruptura, retesteo,
+    // Cuán confiable es: pocas violaciones y muchos toques
+    fuerza: linea.toques >= 5 && linea.violaciones <= 2 ? 'fuerte'
+          : linea.toques >= 3 ? 'moderada' : 'débil',
+    estado: ruptura
+      ? (retesteo ? `rota y reteseada hace ${retesteo.velasAtras} velas` : `rota hace ${ruptura.velasAtras} velas`)
+      : `intacta · el precio está a ${Math.abs(distPct)}% ${distPct > 0 ? 'por encima' : 'por debajo'}`,
   };
 }
 

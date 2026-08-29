@@ -3853,6 +3853,30 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             ctx.setLineDash([5,4]);
           });
           ctx.setLineDash([]);
+
+          // ═══ ETIQUETAS DE LOS NIVELES DE LIQUIDEZ ═══
+          // Las zonas ya se dibujaban, pero sin nombre: había que deducir cuál era soporte
+          // y cuál resistencia. Ahora cada una lleva su rótulo y cuántas veces fue tocada.
+          try{
+            const lh = TheHatonEngine.detectLiquidezPorHorizonte(data.candles);
+            const marcarNiv = (n, esArriba) => {
+              if(!n?.precio) return;
+              const y = candleSeries.priceToCoordinate(n.precio);
+              if(y == null || y < 12 || y > cssH - 12) return;
+              const col = esArriba ? '239,68,68' : '16,185,129';
+              const txt = `${esArriba ? 'RESISTENCIA' : 'SOPORTE'} · ${n.toques || 1} ${(n.toques||1) === 1 ? 'toque' : 'toques'}`;
+              ctx.font = 'bold 9px Manrope'; ctx.textAlign = 'left';
+              const w = ctx.measureText(txt).width;
+              // Pastilla de fondo para que se lea sobre las velas
+              ctx.fillStyle = `rgba(${col},0.16)`;
+              ctx.fillRect(lastCandleX ? Math.min(lastCandleX + 8, cssW - w - 14) : 40, y - 13, w + 10, 14);
+              ctx.fillStyle = `rgba(${col},0.95)`;
+              ctx.fillText(txt, (lastCandleX ? Math.min(lastCandleX + 8, cssW - w - 14) : 40) + 5, y - 3);
+            };
+            marcarNiv(lh?.cercanaArriba, true);
+            marcarNiv(lh?.cercanaAbajo, false);
+          }catch(e){ /* si falla, el gráfico sigue igual que antes */ }
+
           // POC: la línea más importante, sólida y naranja
           if(yPoc!=null){
             ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.6;
