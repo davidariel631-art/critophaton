@@ -867,33 +867,28 @@
         </div>
         <div id="liqMultiPanel" style="display:none;margin-top:12px;"></div>
         <div id="liqLibroPanel" style="display:none;margin-top:12px;"></div>
-        <!-- ═══ MIS DOS INDICADORES ═══
-             Cada uno responde una pregunta concreta, escrita arriba. El gráfico es el
-             respaldo de esa frase, no el trabajo que tiene que hacer quien lo mira. -->
-        <div id="liqHeatWrap" style="display:none;margin-top:16px;">
-          <div style="font-family:var(--display);font-size:14px;font-weight:800;">🔥 Evolución de la liquidez</div>
-          <div style="font-size:11.5px;color:#a8b4c0;margin-top:3px;line-height:1.4;">¿Se está armando o disolviendo liquidez, y dónde?</div>
-          <div id="liqCalorResp" style="display:flex;align-items:center;gap:9px;padding:11px 13px;
-            border-radius:10px;margin:11px 0 12px;"></div>
+        <!-- ═══ MIS DOS INDICADORES, SOBRE VELAS ═══
+             Antes eran formatos inventados —barras horizontales y una cuadrícula de color—
+             que había que aprender a leer. Ahora dibujan lo mismo sobre un gráfico de velas,
+             que es un formato que se lee sin explicación. -->
+        <div id="liqHeatWrap" style="display:none;margin-top:18px;">
+          <div style="font-family:var(--display);font-size:14px;font-weight:700;">🧱 Camino</div>
+          <div style="font-size:11.5px;color:#a8b4c0;margin:3px 0 12px;line-height:1.4;">Las zonas que va a encontrar el precio, sobre el gráfico</div>
+          <div id="liqCaminoResp" style="display:flex;align-items:center;gap:9px;padding:10px 12px;
+            border-radius:9px;margin-bottom:13px;font-size:12px;line-height:1.45;"></div>
           <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#0a0c0f;">
-            <canvas id="liqCalorCanvas" style="width:100%;height:320px;display:block;cursor:crosshair;"></canvas>
+            <canvas id="liqHeatCanvas" style="width:100%;height:380px;display:block;"></canvas>
           </div>
-          <div id="liqCalorNota" style="background:var(--panel2);border:1px solid var(--border);
-            border-radius:10px;padding:11px 13px;margin-top:10px;min-height:22px;"></div>
-          <div style="font-size:10px;color:var(--sub);text-align:center;margin-top:7px;opacity:.6;">tocá cualquier altura para ver ese precio</div>
-          <div id="liqCalorLeg" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px;font-size:10px;color:var(--sub);"></div>
+          <div id="liqHeatLeyenda" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:10.5px;color:#a8b4c0;"></div>
 
-          <div style="margin-top:22px;font-family:var(--display);font-size:14px;font-weight:800;">🧱 Camino</div>
-          <div style="font-size:11.5px;color:#a8b4c0;margin-top:3px;line-height:1.4;">¿Qué se va a encontrar el precio si sube o si baja?</div>
-          <div id="liqCaminoResp" style="display:flex;align-items:center;gap:9px;padding:11px 13px;
-            border-radius:10px;margin:11px 0 12px;"></div>
+          <div style="margin-top:24px;font-family:var(--display);font-size:14px;font-weight:700;">🔥 Evolución de la liquidez</div>
+          <div style="font-size:11.5px;color:#a8b4c0;margin:3px 0 12px;line-height:1.4;">Dónde se acumula y de dónde se retira, sobre el gráfico</div>
+          <div id="liqCalorResp" style="display:flex;align-items:center;gap:9px;padding:10px 12px;
+            border-radius:9px;margin-bottom:13px;font-size:12px;line-height:1.45;"></div>
           <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#0a0c0f;">
-            <canvas id="liqHeatCanvas" style="width:100%;height:330px;display:block;cursor:pointer;"></canvas>
+            <canvas id="liqCalorCanvas" style="width:100%;height:380px;display:block;"></canvas>
           </div>
-          <div id="liqHeatDetalle" style="display:none;background:var(--panel2);border:1px solid var(--border);
-            border-radius:10px;padding:11px 13px;margin-top:10px;"></div>
-          <div style="font-size:10px;color:var(--sub);text-align:center;margin-top:7px;opacity:.6;">tocá una barra para ver el detalle</div>
-          <div id="liqHeatLeyenda" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px;font-size:10px;color:var(--sub);"></div>
+          <div id="liqCalorLeg" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;font-size:10.5px;color:#a8b4c0;"></div>
         </div>
 
       </div>
@@ -1006,6 +1001,16 @@
           <div><div class="mini-ring-label">Profit Factor</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thProfitFactor">—</div></div>
           <div><div class="mini-ring-label">Drawdown</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thDrawdown">—</div></div>
           <div><div class="mini-ring-label">Cuenta #</div><div style="font-family:var(--display);font-size:28px;font-weight:700;" id="thAccountId">—</div></div>
+        </div>
+
+        <!-- ═══ SALUD DEL SISTEMA ═══
+             Qué está corriendo, cuándo fue la última vez y si algo falló. Antes había que
+             abrir el log de GitHub Actions para saberlo. -->
+        <div id="thSalud" style="background:var(--panel2);border:1px solid var(--border);
+          border-radius:12px;padding:14px;margin-top:16px;">
+          <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:11px;">
+            ⚙️ SALUD DEL SISTEMA</div>
+          <div id="thSaludBody" style="font-size:12.5px;color:var(--sub);">Cargando…</div>
         </div>
 
         <div class="indi-grid" style="margin-top:18px;">
@@ -2970,663 +2975,175 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
   try{
     const data = await fetchTokenData(q, liqCurrentTf);
 
-    // ═══ MAPA DE CALOR TEMPORAL ═══
-    // Un mapa de calor de verdad: cada columna es un momento, cada fila un precio, el color
-    // la densidad de liquidez. Muestra algo que un corte estático no puede: si un muro se
-    // está armando o disolviendo.
-    (async () => {
-      const cvC = document.getElementById('liqCalorCanvas');
-      const nota = document.getElementById('liqCalorNota');
-      try{
-        const mc = TheHatonEngine.mapaCalorTemporal(data.candles, {
-          // ═══ MENOS CELDAS, MÁS GRANDES ═══
-          // Con 64×70 cada celda medía 5×3 píxeles: imposible de distinguir, todo se veía
-          // como una mancha. Con 30×32 cada celda mide 11×8, que ya se lee.
-          // Y el rango baja a 6%: concentra el detalle donde el precio realmente se mueve.
-          // Menos celdas y más grandes: pasan de 13×11 a 16×13 píxeles, que ya se
-          // distinguen como piezas en vez de verse como una mancha continua.
-          // Con la superficie continua se puede subir la resolución sin que se vea roto
-          columnas: 34, filas: 38, rangoPct: 6,
-          // Las liquidaciones reales del stream, si el feed está activo. Con ellas el mapa
-          // deja de estimar dónde hay stops y muestra dónde reventaron de verdad.
-          liquidacionesReales: (window._liqReales || []).filter(x =>
-            !data.displayName || x.symbol === data.displayName + 'USDT'),
-        });
-        if(!mc){ cvC.style.display='none'; nota.style.display='none'; return; }
-        cvC.style.display = 'block'; nota.style.display = '';
-
-        const dpr = window.devicePixelRatio || 1;
-        const W = cvC.clientWidth || cvC.parentElement?.clientWidth || 320;
-        const H = 290;
-        cvC.width = W*dpr; cvC.height = H*dpr;
-        const ctx = cvC.getContext('2d');
-        ctx.setTransform(dpr,0,0,dpr,0,0);
-        ctx.fillStyle = '#060809'; ctx.fillRect(0,0,W,H);
-
-        const margenDer = 74;   // 20 para el canal de marcadores + 54 para los precios
-        const anchoMapa = W - margenDer;
-        const wCol = anchoMapa / mc.columnas;
-        const hFila = H / mc.filas;
-
-        // La escala de calor: de azul profundo a blanco incandescente. Es la que usan los
-        // mapas de liquidez profesionales porque el ojo distingue bien los saltos.
-        // Escala más contrastada: se agrega un verde lima entre el turquesa y el amarillo
-        // para que los saltos de densidad se distingan a simple vista.
-        // ═══ TODAS LAS CELDAS SE PINTAN ═══
-        // Antes las de poca densidad se devolvían como null y quedaban en negro: el 66% del
-        // mapa quedaba vacío y se veía roto. Ahora la escala arranca en un azul muy oscuro
-        // pero visible, así el mapa es una superficie continua donde la densidad se lee por
-        // el color, no por si hay celda o no.
-        // ═══ ESCALA CONTINUA ═══
-        // Interpolación entre paradas de color en vez de saltos discretos: el degradado
-        // es suave y no se ven bandas. Todas las celdas se pintan.
-        const paradas = [[0,26,42,66],[.22,26,58,92],[.42,13,143,168],[.60,10,175,150],
-                         [.76,120,190,80],[.88,220,175,55],[1,245,140,45]];
-        const calor = (d) => {
-          const t = Math.max(0, Math.min(1, Math.pow(d, 0.62)));
-          for(let i = 1; i < paradas.length; i++){
-            if(t <= paradas[i][0]){
-              const a = paradas[i-1], b = paradas[i];
-              const f = (t - a[0]) / (b[0] - a[0] || 1);
-              return `rgb(${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)},${Math.round(a[3]+(b[3]-a[3])*f)})`;
-            }
-          }
-          return 'rgb(245,140,45)';
-        };
-
-
-        // Las celdas
-        // Cada celda con una separación de 1px y esquinas redondeadas: eso es lo que
-        // convierte una mancha continua en un mapa donde se distinguen las zonas.
-        // Sin separación: las celdas se tocan y forman una superficie pareja.
-        // El +0.5 de solape evita las líneas finas que deja el antialiasing.
-        for(let col = 0; col < mc.columnas; col++){
-          for(let fil = 0; fil < mc.filas; fil++){
-            ctx.fillStyle = calor(mc.rejilla[col][fil]);
-            ctx.fillRect(col*wCol, H - (fil+1)*hFila, wCol + 0.5, hFila + 0.5);
-          }
-        }
-
-        // Un velo que oscurece el pasado: el ojo va primero a lo reciente, que es lo que importa
-        // Un velo suave: antes con .45 el pasado quedaba casi negro y el mapa perdía
-        // la mitad de la información. Con .22 se nota la profundidad sin borrar nada.
-        const velo = ctx.createLinearGradient(0, 0, anchoMapa, 0);
-        velo.addColorStop(0, 'rgba(6,8,9,.22)');
-        velo.addColorStop(0.6, 'rgba(6,8,9,.04)');
-        velo.addColorStop(1, 'rgba(6,8,9,0)');
-        ctx.fillStyle = velo; ctx.fillRect(0, 0, anchoMapa, H);
-
-        // ── EL RECORRIDO DEL PRECIO SOBRE EL MAPA ──
-        // Es lo que convierte una nube de color en un gráfico: se ve por dónde pasó el
-        // precio, qué zonas atravesó (y por eso están apagadas) y cuáles nunca tocó.
-        if(mc.recorrido?.length > 2){
-          const yP2 = (p2) => H - ((p2 - mc.min) / (mc.max - mc.min)) * H;
-          // La sombra del rango alto-bajo, muy tenue
-          ctx.beginPath();
-          mc.recorrido.forEach((r, k) => {
-            const x = (r.col + 0.5) * wCol;
-            k === 0 ? ctx.moveTo(x, yP2(r.alto)) : ctx.lineTo(x, yP2(r.alto));
-          });
-          for(let k = mc.recorrido.length-1; k >= 0; k--){
-            const r = mc.recorrido[k];
-            ctx.lineTo((r.col + 0.5) * wCol, yP2(r.bajo));
-          }
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(255,255,255,.035)';
-          ctx.fill();
-          // La línea del cierre
-          ctx.beginPath();
-          mc.recorrido.forEach((r, k) => {
-            const x = (r.col + 0.5) * wCol;
-            k === 0 ? ctx.moveTo(x, yP2(r.precio)) : ctx.lineTo(x, yP2(r.precio));
-          });
-          // Más fina y tenue: es una referencia, no el protagonista
-          // Línea plana, sin sombra: estilo limpio
-          ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2;
-          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-          ctx.stroke();
-          // El punto final con resplandor: marca dónde está el precio ahora
-          const ptX = (mc.recorrido.at(-1).col + 0.5) * wCol;
-          const ptY = yP2(mc.recorrido.at(-1).precio);
-          ctx.fillStyle = '#0a0c0f';
-          ctx.beginPath(); ctx.arc(Math.min(ptX, anchoMapa-6), ptY, 4.5, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(Math.min(ptX, anchoMapa-6), ptY, 3, 0, Math.PI*2); ctx.fill();
-        }
-
-        // El precio actual
-        const yPrecio = H - ((data.price - mc.min) / (mc.max - mc.min)) * H;
-        ctx.save();
-        ctx.shadowColor = 'rgba(255,255,255,.6)'; ctx.shadowBlur = 7;
-        ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, yPrecio); ctx.lineTo(anchoMapa, yPrecio); ctx.stroke();
-        ctx.restore();
-
-        // Los niveles que están cambiando: lo que este mapa muestra y otros no
-        // ═══ LOS CAMBIOS, COMO GRÁFICO ═══
-        // En vez de símbolos: una cuña que crece hacia la derecha si el nivel se está
-        // armando, y que se achica si se disuelve. La forma dice la dirección sin leer.
-        // ═══ LOS MARCADORES VAN EN UN CANAL PROPIO ═══
-        // Antes se dibujaban ENCIMA del mapa y competían con los colores. Ahora tienen su
-        // franja a la derecha, separada por una línea. El mapa queda limpio.
-        const xCanal = anchoMapa + 3;
-        const anchoCanal = 16;
-        ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(anchoMapa + 1, 0); ctx.lineTo(anchoMapa + 1, H); ctx.stroke();
-
-        const marcarCambio = (arr, creciendo) => {
-          for(const e of arr.slice(0,3)){
-            const y = H - ((e.precio - mc.min) / (mc.max - mc.min)) * H;
-            if(y < 8 || y > H-8) continue;
-            const col = creciendo ? 'rgba(255,196,60,.9)' : 'rgba(120,135,150,.75)';
-            // Un triángulo sólido: la punta indica la dirección del cambio
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            if(creciendo){
-              ctx.moveTo(xCanal + 2, y + 4); ctx.lineTo(xCanal + 7, y - 4); ctx.lineTo(xCanal + 12, y + 4);
-            } else {
-              ctx.moveTo(xCanal + 2, y - 4); ctx.lineTo(xCanal + 7, y + 4); ctx.lineTo(xCanal + 12, y - 4);
-            }
-            ctx.closePath(); ctx.fill();
-          }
-        };
-        marcarCambio(mc.armandose, true);
-        marcarCambio(mc.disolviendose, false);
-
-        // ═══ DIVERGENCIA: alguien espera acá ═══
-        // Un anillo pulsante en los niveles donde crece la liquidez aunque el precio se fue.
-        // Es la señal más anticipada que da el mapa.
-        for(const dv of (mc.divergencias || []).slice(0,2)){
-          const y = H - ((dv.precio - mc.min) / (mc.max - mc.min)) * H;
-          if(y < 8 || y > H-8) continue;
-          // El anillo también en el canal, no sobre el mapa
-          ctx.strokeStyle = 'rgba(180,120,255,.9)'; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.arc(xCanal + 7, y, 4.5, 0, Math.PI*2); ctx.stroke();
-          ctx.fillStyle = 'rgba(180,120,255,.95)';
-          ctx.beginPath(); ctx.arc(xCanal + 7, y, 1.6, 0, Math.PI*2); ctx.fill();
-        }
-
-        // Escala de precios
-        ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.55)';
-        for(let k = 0; k <= 4; k++){
-          const y = H * k / 4;
-          const p2 = mc.max - (mc.max - mc.min) * k / 4;
-          ctx.fillText('$' + fmt(p2), anchoMapa + 23, y + (k===0 ? 9 : k===4 ? -1 : 3));
-        }
-        // Eje del tiempo
-        ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.4)';
-        ctx.fillText('hace 24h', 3, H - 4);
-        ctx.textAlign = 'right'; ctx.fillText('ahora', anchoMapa - 3, H - 4); ctx.textAlign = 'left';
-
-        // ═══ TOCAR PARA VER QUÉ PASÓ EN ESE PRECIO ═══
-        cvC.style.cursor = 'crosshair';
-        const detC = document.getElementById('liqCalorNota');
-        const verFila = (clientY) => {
-          const r = cvC.getBoundingClientRect();
-          const y = (clientY - r.top) * (H / r.height);
-          const fil = Math.max(0, Math.min(mc.filas-1, Math.floor((H - y) / hFila)));
-          const e = mc.evolucion[fil];
-          if(!e) return;
-          const dens = mc.rejilla.at(-1)[fil];
-          // Convención de trading: verde para arriba, rojo para abajo. Antes un nivel a
-          // +5.84% salía en rojo y se leía como pérdida.
-          const col2 = e.distPct > 0 ? 'var(--teal)' : 'var(--rose)';
-          const est = e.estado === 'armándose' ? '<span style="color:var(--amber)">▲ armándose</span>'
-                    : e.estado === 'disolviéndose' ? '<span style="color:var(--sub)">▽ disolviéndose</span>'
-                    : e.estado === 'estable' ? 'estable' : 'sin actividad';
-          // Barra real, no caracteres: se compara de un vistazo
-          const barra = (v2, col3) => `<span style="display:inline-block;width:42px;height:5px;
-            background:rgba(255,255,255,.07);border-radius:2px;position:relative;vertical-align:middle;">
-            <span style="position:absolute;left:0;top:0;bottom:0;width:${Math.round(v2*100)}%;
-              background:${col3};border-radius:2px;"></span></span>`;
-          // Solo el precio, dos barras comparativas y una flecha. Sin frases.
-          const flecha = e.estado === 'armándose'
-            ? `<span style="color:var(--amber);font-size:13px;">▲</span>`
-            : e.estado === 'disolviéndose'
-            ? `<span style="color:var(--sub);font-size:13px;">▽</span>` : '';
-          detC.innerHTML = `
-            <span style="color:${col2};font-family:var(--display);font-weight:800;font-size:13px;">$${fmt(e.precio)}</span>
-            <span style="color:${col2};font-size:11px;">${e.distPct > 0 ? '+' : ''}${e.distPct}%</span>
-            <span style="flex:1;display:flex;gap:9px;align-items:center;justify-content:flex-end;">
-              ${barra(e.antes, 'rgba(139,152,168,.5)')}
-              <span style="color:var(--sub);opacity:.5;">→</span>
-              ${barra(e.ahora, e.ahora > e.antes ? 'var(--amber)' : 'var(--sub)')}
-            </span>
-            ${flecha}`;
-        };
-        cvC.onclick = (ev) => verFila(ev.clientY);
-        cvC.ontouchstart = (ev) => { const t3 = ev.touches?.[0]; if(t3){ ev.preventDefault(); verFila(t3.clientY); } };
-        // ═══ LA RESPUESTA, ARRIBA DE TODO ═══
-        // Antes había que interpretar el mapa para sacar la conclusión. Ahora la conclusión
-        // está escrita y el mapa la respalda.
-        const rc = document.getElementById('liqCalorResp');
-        if(rc){
-          const a1 = mc.armandose?.[0], d1 = mc.disolviendose?.[0];
-          const hay = a1 || d1;
-          // ═══ EL ÍCONO INDICA DÓNDE, NO QUÉ ═══
-          // Antes ▲ significaba "se está armando" pero se leía como "el precio sube".
-          // Con un nivel a −5.21% el ▲ contradecía al número. Ahora la flecha apunta a
-          // DÓNDE está el nivel, que es lo que el ojo espera.
-          const principal = a1 || d1;
-          const haciaArriba = principal && principal.distPct > 0;
-          const esArmar = !!a1;
-          rc.style.background = hay ? 'rgba(255,176,32,.10)' : 'rgba(255,255,255,.04)';
-          rc.style.border = `1px solid ${hay ? 'rgba(255,176,32,.28)' : 'var(--border)'}`;
-
-          // Redacción directa: qué pasa, cuánto y dónde
-          let texto;
-          if(a1 && d1){
-            texto = `Se acumula liquidez en <b>$${fmt(a1.precio)}</b> (${a1.distPct > 0 ? '+' : ''}${a1.distPct}%) ` +
-                    `y se retira de <b>$${fmt(d1.precio)}</b> (${d1.distPct > 0 ? '+' : ''}${d1.distPct}%).`;
-          } else if(a1){
-            texto = `La liquidez se concentra hacia <b>$${fmt(a1.precio)}</b> (${a1.distPct > 0 ? '+' : ''}${a1.distPct}%). ` +
-                    `El precio tiende a buscar esos niveles.`;
-          } else if(d1){
-            texto = `Se retira liquidez de <b>$${fmt(d1.precio)}</b> (${d1.distPct > 0 ? '+' : ''}${d1.distPct}%): ` +
-                    `ese nivel pierde defensa.`;
-          } else {
-            texto = 'La liquidez se mantiene estable en las últimas 24 horas.';
-          }
-          rc.innerHTML = `
-            <span style="font-size:16px;line-height:1;flex-shrink:0;color:${
-              !hay ? 'var(--sub)' : haciaArriba ? '#F23645' : '#089981'};">${
-              !hay ? '◆' : haciaArriba ? '↑' : '↓'}</span>
-            <span style="font-size:12px;line-height:1.45;flex:1;">${texto}</span>`;
-        }
-        // La leyenda de colores, aparte
-        const lc = document.getElementById('liqCalorLeg');
-        // La muestra del precio es una LÍNEA, igual que en el gráfico. Antes era una caja
-        // blanca que no se parecía a lo que dibuja.
-        if(lc) lc.innerHTML = [
-          ['rgba(14,60,120,.9)','Poca','caja'],['rgba(30,195,140,.9)','Media','caja'],
-          ['rgba(255,130,40,.95)','Mucha','caja'],['#fff','Precio','linea'],
-        ].map(([c2,t,forma]) => `<span style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
-          <i style="width:${forma==='linea'?'16px':'10px'};height:${forma==='linea'?'2px':'10px'};
-            border-radius:${forma==='linea'?'1px':'2px'};display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
-
-        // ═══ EL ESTADO, SIN FRASES ═══
-        // Dos indicadores: cuántos niveles se arman y cuántos se disuelven, con su distancia.
-        const chip = (n2, txt, col3) => n2 === 0 ? '' :
-          `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 9px;
-            border:1px solid ${col3}44;border-radius:99px;color:${col3};font-size:10.5px;">
-            ${txt}</span>`;
-        const a0 = mc.armandose[0], d0 = mc.disolviendose[0];
-        nota.innerHTML =
-          chip(mc.armandose.length, `▲ ${mc.armandose.length}${a0 ? ` · ${a0.distPct > 0 ? '+' : ''}${a0.distPct}%` : ''}`, 'rgb(255,196,60)') +
-          chip(mc.disolviendose.length, `▽ ${mc.disolviendose.length}${d0 ? ` · ${d0.distPct > 0 ? '+' : ''}${d0.distPct}%` : ''}`, 'rgb(139,152,168)') +
-          chip((mc.divergencias||[]).length, `◎ ${(mc.divergencias||[]).length}${mc.divergencias?.[0] ? ` · ${mc.divergencias[0].distPct > 0 ? '+' : ''}${mc.divergencias[0].distPct}%` : ''}`, 'rgb(180,120,255)') +
-          (mc.conLiquidacionesReales ? `<span style="display:inline-flex;align-items:center;gap:4px;
-            padding:3px 8px;border:1px solid rgba(255,59,92,.35);border-radius:99px;
-            color:rgb(255,90,110);font-size:10px;">💥 real</span>` : '') +
-          `<span style="flex:1;"></span>
-           <span style="display:flex;align-items:center;gap:3px;opacity:.55;">
-             ${[0.15,0.35,0.55,0.75,0.95].map(v2 => {
-               const cc = v2 < 0.34 ? 'rgb(16,84,150)' : v2 < 0.52 ? 'rgb(0,168,190)'
-                        : v2 < 0.70 ? 'rgb(40,205,120)' : v2 < 0.85 ? 'rgb(232,196,50)' : 'rgb(255,128,40)';
-               return `<span style="width:11px;height:5px;background:${cc};border-radius:1px;"></span>`;
-             }).join('')}
-           </span>`;
-      }catch(e){ cvC.style.display='none'; nota.style.display='none'; }
-    })();
-
-    // ═══ MAPA DE OBSTÁCULOS ═══
-    // Muestra el camino: qué hay entre el precio y el objetivo. Con el stop y el TP dibujados,
-    // porque un muro solo importa según de qué lado del objetivo esté.
+    // ═══ MIS DOS INDICADORES, SOBRE VELAS ═══
+    // Misma información que antes, pero dibujada sobre un gráfico de velas en vez de en
+    // formatos inventados. Las zonas van como bandas, que es como se marcan los niveles
+    // en cualquier plataforma de trading.
     (async () => {
       const wrap = document.getElementById('liqHeatWrap');
       try{
         const E = TheHatonEngine;
-        // El libro se pasa al mapa: los niveles con órdenes reales se marcan distinto
-        const libroMapa = await E.fetchLibroOrdenes(data.displayName,
-          data.source==='Bitunix'?'Bitunix':'Binance').catch(()=>null);
-        const m = E.mapaObstaculos(data.candles, data.price, { alcancePct: 8, libro: libroMapa });
-        if(!m){ wrap.style.display='none'; return; }
+        const velas = data.candles.slice(-90);
+        if(velas.length < 30){ wrap.style.display='none'; return; }
         wrap.style.display = '';
+        const precio = data.price;
 
-        // El perfil de volumen: el POC es donde más se negoció, y el precio suele volver ahí
-        const perfil = (()=>{ try{ return E.computeLiquidityProfile(data.candles, data.price, 200); }catch(e){ return null; } })();
-
-        const cv = document.getElementById('liqHeatCanvas');
-        const dpr = window.devicePixelRatio || 1;
-        const W = cv.clientWidth || cv.parentElement?.clientWidth || 320;
-        const H = 280;
-        cv.width = W*dpr; cv.height = H*dpr;
-        const ctx = cv.getContext('2d');
-        ctx.setTransform(dpr,0,0,dpr,0,0);
-        ctx.clearRect(0,0,W,H);
-
-        const alcance = 8, padY = 18;
-        const yDe = (pct) => H/2 - (Math.max(-alcance, Math.min(alcance, pct))/alcance) * (H/2 - padY);
-        // ═══ EL EJE DE PRECIOS ES UNA COLUMNA PROPIA ═══
-        // Los números viven en su franja a la derecha y las barras nunca llegan ahí.
-        // Es lo que elimina de raíz la superposición entre precios y barras.
-        const anchoEje = 78;
-        const anchoBarras = W - anchoEje - 10;
-        const cx = 0;
-        const anchoMax = anchoBarras;
-        const pctDe = (precio) => (precio - data.price) / data.price * 100;
-
-        // Las variables del estado táctil viven afuera del dibujo, porque se redibuja
-        // cada vez que se toca un nivel distinto.
-        const zonasTactiles = [];
-        const todos = [...m.arriba, ...m.abajo];
-        let seleccionado = null;
-
-        function dibujarTodo(){
-          ctx.clearRect(0, 0, W, H);
-          // ═══ FONDO PLANO ═══
-          const yPfondo = yDe(0);
-          ctx.fillStyle = 'rgba(242,54,69,.04)'; ctx.fillRect(0, 0, anchoBarras, yPfondo);
-          ctx.fillStyle = 'rgba(8,153,129,.04)'; ctx.fillRect(0, yPfondo, anchoBarras, H - yPfondo);
-          // La columna del eje, con su propio fondo y una línea que la separa
-          ctx.fillStyle = '#0d1014'; ctx.fillRect(anchoBarras + 4, 0, W - anchoBarras - 4, H);
-          ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.moveTo(anchoBarras + 4, 0); ctx.lineTo(anchoBarras + 4, H); ctx.stroke();
-          // Rótulos con contraste WCAG: 8.7:1 y 10.3:1 contra el fondo (antes 2.4:1)
-          ctx.font = '600 10px Manrope, sans-serif'; ctx.textAlign = 'left';
-          ctx.fillStyle = '#ff8a95'; ctx.fillText('SI SUBE ↑', 5, 15);
-          ctx.fillStyle = '#4fd1a5'; ctx.fillText('SI BAJA ↓', 5, H - 8);
-
-          // Retícula de referencia, apenas perceptible
-          ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 0.5;
-          for(const pct of [6, 4, 2, -2, -4, -6]){
-            const yy = yDe(pct);
-            ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(W, yy); ctx.stroke();
+        // ── BASE COMÚN: escala, rejilla y velas ──
+        // Los dos gráficos comparten esto para que se vean como el mismo instrumento.
+        const base = (cv, H, extra = []) => {
+          const dpr = window.devicePixelRatio || 1;
+          const W = cv.clientWidth || cv.parentElement?.clientWidth || 320;
+          cv.width = W*dpr; cv.height = H*dpr;
+          const ctx = cv.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+          const padT=14, padB=20, padR=66, padL=6;
+          const todos = [...velas.map(v=>v.h), ...velas.map(v=>v.l), ...extra.filter(x=>x!=null)];
+          const max = Math.max(...todos)*1.004, min = Math.min(...todos)*0.996;
+          const yDe = v => padT + (max-v)/(max-min)*(H-padT-padB);
+          const anchoG = W-padR-padL, wV = anchoG/velas.length;
+          const xDe = i => padL + i*wV + wV/2;
+          ctx.fillStyle='#0a0c0f'; ctx.fillRect(0,0,W,H);
+          ctx.strokeStyle='rgba(255,255,255,.04)'; ctx.lineWidth=1;
+          ctx.font='500 9.5px "JetBrains Mono", monospace'; ctx.textAlign='left';
+          for(let k=0;k<=5;k++){
+            const y = padT+(H-padT-padB)*k/5;
+            ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(W-padR,y); ctx.stroke();
+            ctx.fillStyle='rgba(168,180,192,.55)';
+            ctx.fillText(fmt(max-(max-min)*k/5), W-padR+7, y+3.5);
           }
-          // ── EL ÁREA DE VALOR, DE FONDO ──
-          // Donde se negoció la mayor parte del volumen. El precio se mueve lento adentro
-          // y rápido afuera, así que saber si estás dentro o fuera cambia la expectativa.
-          if(perfil?.vah && perfil?.val){
-            const y1 = yDe(pctDe(perfil.vah)), y2 = yDe(pctDe(perfil.val));
-            ctx.fillStyle = 'rgba(255,255,255,.028)';
-            ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
-            ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
-            ctx.fillText('ÁREA DE VALOR', 4, Math.min(y1,y2) + 11);
-          }
+          return {ctx,W,H,padT,padB,padR,padL,yDe,anchoG,wV,xDe,max,min};
+        };
+        const pintarVelas = g => {
+          velas.forEach((v,i)=>{
+            const x=g.xDe(i), sube=v.c>=v.o, col=sube?'#089981':'#F23645';
+            g.ctx.strokeStyle=col; g.ctx.lineWidth=1; g.ctx.globalAlpha=.9;
+            g.ctx.beginPath(); g.ctx.moveTo(x,g.yDe(v.h)); g.ctx.lineTo(x,g.yDe(v.l)); g.ctx.stroke();
+            const yo=g.yDe(v.o), yc=g.yDe(v.c);
+            g.ctx.fillStyle=col;
+            g.ctx.fillRect(x-g.wV*0.3, Math.min(yo,yc), g.wV*0.6, Math.max(1.4,Math.abs(yc-yo)));
+            g.ctx.globalAlpha=1;
+          });
+        };
+        const lineaPrecio = g => {
+          const y=g.yDe(precio);
+          g.ctx.strokeStyle='rgba(255,255,255,.75)'; g.ctx.lineWidth=1; g.ctx.setLineDash([3,3]);
+          g.ctx.beginPath(); g.ctx.moveTo(g.padL,y); g.ctx.lineTo(g.W-g.padR,y); g.ctx.stroke();
+          g.ctx.setLineDash([]);
+          g.ctx.fillStyle='#eef3f8'; g.ctx.fillRect(g.W-g.padR+2, y-9, g.padR-4, 18);
+          g.ctx.font='700 10px "JetBrains Mono", monospace'; g.ctx.textAlign='left';
+          g.ctx.fillStyle='#0a0c0f'; g.ctx.fillText(fmt(precio), g.W-g.padR+6, y+3.5);
+        };
 
-          // ── ZONAS LIBRES ──
-          const zona = (desde, hasta, col) => {
-            const y1 = yDe(hasta), y2 = yDe(desde);
-            const g = ctx.createLinearGradient(0, Math.min(y1,y2), 0, Math.max(y1,y2));
-            g.addColorStop(0, col.replace('X','.14')); g.addColorStop(1, col.replace('X','.02'));
-            ctx.fillStyle = g;
-            ctx.fillRect(0, Math.min(y1,y2), W, Math.abs(y2-y1));
-          };
-          zona(0, Math.min(alcance, m.libreArriba), 'rgba(16,185,129,X)');
-          zona(-Math.min(alcance, m.libreAbajo), 0, 'rgba(16,185,129,X)');
+        // ══════════ 1. CAMINO ══════════
+        const m = E.mapaObstaculos(data.candles, precio, { alcancePct: 8 });
+        if(m){
+          const niveles = [...(m.arriba||[]), ...(m.abajo||[])].slice(0,6);
+          const g = base(document.getElementById('liqHeatCanvas'), 380,
+            niveles.flatMap(n => [n.zonaHasta, n.zonaDesde]));
 
-          // ── STOP Y OBJETIVO ──
-          // Sin esto el mapa muestra obstáculos sin referencia: no se sabe si están
-          // antes o después del TP, que es lo único que decide si importan.
-          const marcarNivel = (precio, etiqueta, col, punteado) => {
-            if(precio == null) return null;
-            const pct = pctDe(precio);
-            if(Math.abs(pct) > alcance) return null;
-            const y = yDe(pct);
-            ctx.strokeStyle = col; ctx.lineWidth = 1;
-            if(punteado) ctx.setLineDash([3,3]);
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.font = '700 9px Manrope, sans-serif'; ctx.fillStyle = col;
-            ctx.fillText(etiqueta, 4, y - 4);
-            return y;
-          };
-          // Se toman del setup si existe; si no, del análisis de la moneda
-          // Solo vale si es de ESTA moneda: si analizaste BTC y ahora mirás la liquidez de
-          // otra, el stop de BTC no tiene nada que ver.
-          const sa = window._setupActual;
-          const setupLiq = (sa && sa.symbol === data.displayName) ? sa : null;
-          marcarNivel(setupLiq?.stop, 'STOP', 'rgba(239,68,68,.75)', true);
-          marcarNivel(setupLiq?.t1, 'OBJETIVO', 'rgba(16,185,129,.75)', true);
-          if(perfil?.poc){
-            const yPoc = yDe(pctDe(perfil.poc));
-            if(yPoc > padY && yPoc < H-padY){
-              ctx.strokeStyle = 'rgba(0,217,255,.35)'; ctx.lineWidth = 1;
-              ctx.setLineDash([1,4]);
-              ctx.beginPath(); ctx.moveTo(0, yPoc); ctx.lineTo(W, yPoc); ctx.stroke();
-              ctx.setLineDash([]);
-              ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(0,217,255,.55)';
-              ctx.fillText('POC', 4, yPoc + 10);
-            }
-          }
-
-          // ── LAS BARRAS ──
-          zonasTactiles.length = 0;
-          const maxCosto = Math.max(...todos.map(n=>n.costo), 1);
-          for(const n of todos){
-            const y = yDe(n.distPct);
-            if(y < padY-4 || y > H-padY+4) continue;
+          for(const n of niveles){
+            const esMuro = n.calidad === 'MURO';
             const arriba = n.distPct > 0;
-            // Solo dos colores: rojo arriba, verde abajo. La fuerza la da la opacidad,
-            // no una categoría con su propio color.
-            const col = arriba ? '#F23645' : '#089981';
-            const fuerzaRel = Math.min(1, (n.costo || 1) / (maxCosto || 1));
-            // Un nivel ya perforado se dibuja más tenue: está debilitado
-            const alpha = n.perforaciones > 0 ? '77' : 'ee';
-            const w = anchoMax * (0.18 + 0.82 * (n.costo / maxCosto));
-            const h = n.calidad === 'MURO' ? 11 : n.calidad === 'sólido' ? 7 : 4;
-  
-            const elegido = seleccionado && Math.abs(seleccionado.precio - n.precio) < 1e-12;
-            // ═══ LA ZONA, NO LA LÍNEA ═══
-            // La liquidez ocupa una franja de precios, no un punto. Dibujar la zona real
-            // muestra dónde puede reaccionar el precio, que es más honesto que una línea fina.
-            const yTop = yDe((n.zonaHasta - data.price) / data.price * 100);
-            const yBot = yDe((n.zonaDesde - data.price) / data.price * 100);
-            const altoZona = Math.max(elegido ? 7 : 4, Math.abs(yBot - yTop));
-            const yZona = Math.min(yTop, yBot);
-
-            // ═══ BARRA PLANA ═══
-            // Rectángulo de 6px de radio, color sólido, sin glow ni degradados.
-            // El seleccionado se marca con borde, no con resplandor.
-            const alt2 = 17;
-            ctx.globalAlpha = elegido ? 0.95 : (0.28 + fuerzaRel * 0.44);
-            ctx.fillStyle = col;
-            ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, 6); else ctx.rect(cx, yZona, w, alt2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-            if(elegido){
-              ctx.strokeStyle = col; ctx.lineWidth = 1.5;
-              ctx.beginPath();
-              if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, 6); else ctx.rect(cx, yZona, w, alt2);
-              ctx.stroke();
-            }
-
-            // Un borde fino marca los límites exactos de la zona
-            if(altoZona > 5){
-              ctx.strokeStyle = col + (elegido ? '99' : '44'); ctx.lineWidth = 0.6;
-              ctx.beginPath();
-              ctx.moveTo(cx, yZona + 0.3); ctx.lineTo(cx + w*0.86, yZona + 0.3);
-              ctx.moveTo(cx, yZona + altoZona - 0.3); ctx.lineTo(cx + w*0.86, yZona + altoZona - 0.3);
-              ctx.stroke();
-            }
-
-            // La tendencia: una flechita si el nivel se está reforzando o debilitando
-            if(n.tendencia === 'reforzando' || n.tendencia === 'debilitando'){
-              const sube = n.tendencia === 'reforzando';
-              ctx.font = '9px Manrope, sans-serif';
-              ctx.fillStyle = sube ? col + 'cc' : 'rgba(139,152,168,.6)';
-              ctx.fillText(sube ? '▲' : '▽', cx + w + (n.origen?.includes('libro') ? 12 : 4), yZona + altoZona/2 + 3);
-            }
-            // El seleccionado lleva una línea que cruza todo el ancho: se ve cuál es
-            if(elegido){
-              ctx.strokeStyle = col + '66'; ctx.lineWidth = 1;
-              ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-            }
-
-            // ═══ EL ORIGEN SE VE ═══
-            // Un swing es un nivel deducido de lo que pasó. El libro son órdenes puestas ahora.
-            // Una zona de liquidación son cierres forzados que van a ocurrir sí o sí.
-            // No son lo mismo y el mapa lo marca sin escribirlo.
-            if(n.zonaLiquidacion){
-              // Línea punteada que atraviesa: liquidez garantizada
-              ctx.strokeStyle = col + '55'; ctx.lineWidth = 1; ctx.setLineDash([2,3]);
-              ctx.beginPath(); ctx.moveTo(cx + w, y); ctx.lineTo(W - 34, y); ctx.stroke();
-              ctx.setLineDash([]);
-            }
-            if(n.origen?.includes('libro')){
-              // Un punto lleno al final: hay órdenes reales acá
-              ctx.fillStyle = col;
-              ctx.beginPath(); ctx.arc(cx + w + 5, y, 2.5, 0, Math.PI*2); ctx.fill();
-            }
-
-            // Cada barra queda registrada con una banda táctil generosa (24px) para que
-            // se pueda tocar con el dedo sin apuntar exacto
-            zonasTactiles.push({ y, alto: 24, nivel: n });
-
-            // ═══ EL PRECIO VA EN EL EJE, NO SOBRE LA BARRA ═══
-            // Monoespaciada y alineado a la derecha: los dígitos quedan en columna y se
-            // comparan de un vistazo. Y nunca se superpone con la barra.
-            ctx.font = elegido ? '600 11px "JetBrains Mono", monospace' : '400 10.5px "JetBrains Mono", monospace';
-            ctx.textAlign = 'right';
-            ctx.fillStyle = elegido ? col : 'rgba(168,180,192,.85)';
-            ctx.fillText(fmt(n.precio), W - 8, y + 3.5);
-            if(elegido){
-              ctx.font = '400 9px "JetBrains Mono", monospace';
-              ctx.fillStyle = 'rgba(168,180,192,.7)';
-              ctx.fillText(`${n.distPct > 0 ? '+' : ''}${n.distPct}%`, W - 8, y + 15);
-            }
-            // Dentro de la barra: solo los toques, si hay lugar
-            ctx.font = '500 10px "JetBrains Mono", monospace'; ctx.textAlign = 'left';
-            ctx.fillStyle = 'rgba(255,255,255,.9)';
-            if(w > 76) ctx.fillText(`${n.toques || 1}×`, 10, y + 3.5);
-            ctx.textAlign = 'left';
+            const rgb = esMuro ? '245,165,36' : (arriba ? '242,54,69' : '8,153,129');
+            const y1 = g.yDe(n.zonaHasta || n.precio*1.002);
+            const y2 = g.yDe(n.zonaDesde || n.precio*0.998);
+            g.ctx.fillStyle = `rgba(${rgb},${esMuro ? .20 : .13})`;
+            g.ctx.fillRect(g.padL, Math.min(y1,y2), g.anchoG, Math.abs(y2-y1));
+            g.ctx.strokeStyle = `rgba(${rgb},${esMuro ? .7 : .4})`;
+            g.ctx.lineWidth = esMuro ? 1.5 : 1;
+            g.ctx.setLineDash(esMuro ? [] : [4,3]);
+            g.ctx.beginPath();
+            g.ctx.moveTo(g.padL,y1); g.ctx.lineTo(g.W-g.padR,y1);
+            g.ctx.moveTo(g.padL,y2); g.ctx.lineTo(g.W-g.padR,y2);
+            g.ctx.stroke(); g.ctx.setLineDash([]);
+            g.ctx.font = esMuro ? '700 9.5px Manrope, sans-serif' : '500 9.5px Manrope, sans-serif';
+            g.ctx.fillStyle = `rgba(${rgb},.95)`; g.ctx.textAlign='left';
+            g.ctx.fillText(`${esMuro ? 'MURO' : arriba ? 'resistencia' : 'soporte'} · ${n.toques || 1} toques`,
+              g.padL+7, (y1+y2)/2+3.5);
           }
+          pintarVelas(g); lineaPrecio(g);
 
-          // ── EL PRECIO ──
-          // ═══ EL PRECIO SIN SUPERPONERSE ═══
-          // La línea se corta ANTES del badge en vez de atravesarlo. Ese cruce era lo que
-          // hacía ver el gráfico desordenado.
-          const yP = yDe(0);
-          const etPrecio = '$' + fmt(data.price);
-          ctx.font = '700 12px Manrope, sans-serif';
-          const wEtP = ctx.measureText(etPrecio).width;
-          const xBadge = anchoBarras + 4;
-          ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1;
-          ctx.setLineDash([4,3]);
-          ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(anchoBarras, yP); ctx.stroke();
-          ctx.setLineDash([]);
-          // Badge sólido, sin sombra
-          // El badge llena la columna del eje: el precio actual queda fijado ahí,
-          // alineado con los demás precios y sin cruzar las barras.
-          ctx.fillStyle = '#eef3f8';
-          ctx.fillRect(xBadge, yP-11, W - xBadge, 22);
-          ctx.font = '700 11px "JetBrains Mono", monospace';
-          ctx.fillStyle = '#0a0c0f'; ctx.textAlign = 'right';
-          ctx.fillText(fmt(data.price), W - 8, yP+4);
-          ctx.textAlign = 'left';
-          ctx.font = '800 11px Manrope, sans-serif'; ctx.textAlign = 'right';
-          ctx.fillText('$' + fmt(data.price), cx - 8, yP + 3.5);
-          ctx.textAlign = 'left';
+          const r1 = document.getElementById('liqCaminoResp');
+          const pArr = (m.arriba||[])[0], pAbj = (m.abajo||[])[0];
+          const masEspacio = m.libreAbajo > m.libreArriba ? 'abajo' : 'arriba';
+          r1.style.background = 'rgba(8,153,129,.11)';
+          r1.style.border = '1px solid rgba(8,153,129,.28)';
+          r1.innerHTML = `<span style="font-size:15px;flex-shrink:0;">${masEspacio==='abajo'?'▼':'▲'}</span>
+            <span>Más espacio hacia <b style="font-family:'JetBrains Mono',monospace;">${masEspacio}</b>. Lo primero que se cruza:
+            ${pArr ? `<b style="font-family:'JetBrains Mono',monospace;">${fmt(pArr.precio)}</b> (+${pArr.distPct}%)` : 'nada'} arriba,
+            ${pAbj ? `<b style="font-family:'JetBrains Mono',monospace;">${fmt(pAbj.precio)}</b> (${pAbj.distPct}%)` : 'nada'} abajo.</span>`;
 
-          // ── ESCALA ──
-          ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.45)';
-          for(const pct of [alcance, alcance/2, -alcance/2, -alcance]){
-            ctx.fillText(`${pct>0?'+':''}${pct}%`, W - 28, yDe(pct) + 3);
-          }
-
-        }
-        dibujarTodo();
-
-        // ═══ TOCAR PARA VER EL DETALLE ═══
-        // El mapa muestra dónde está cada cosa; tocando se ve POR QUÉ ese nivel importa,
-        // sin llenar el gráfico de texto.
-        const det = document.getElementById('liqHeatDetalle');
-        const mostrarDetalle = (n) => {
-          if(!n){ det.style.display = 'none'; return; }
-          const arriba = n.distPct > 0;
-          const col = arriba ? 'var(--teal)' : 'var(--rose)';
-          // ═══ SIN FRASES: iconos, barras y números ═══
-          // El origen como icono, la fuerza como barra, la tendencia como flecha.
-          const icoOrigen = n.zonaLiquidacion ? '💥' : n.origen?.includes('libro') ? '📖' : '📊';
-          const nivelFuerza = n.calidad === 'MURO' ? 3 : n.calidad === 'sólido' ? 2 : n.calidad === 'débil' ? 1 : 0;
-          const puntos = Array.from({length:3}, (_, i) =>
-            `<span style="display:inline-block;width:6px;height:6px;border-radius:99px;margin-right:3px;
-              background:${i < nivelFuerza ? col : 'rgba(255,255,255,.12)'};"></span>`).join('');
-          const t = n.diasEstimados == null ? null
-            : n.diasEstimados < 1 ? `${Math.round(n.diasEstimados*24)}h` : `${n.diasEstimados}d`;
-          const flecha = n.tendencia === 'reforzando'
-            ? `<span style="color:${col};">▲</span>`
-            : n.tendencia === 'debilitando' ? `<span style="color:var(--sub);">▽</span>` : '';
-
-          det.innerHTML = `
-            <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap;">
-              <span style="font-size:14px;">${icoOrigen}</span>
-              <span style="color:${col};font-family:var(--display);font-weight:800;font-size:15px;">$${fmt(n.precio)}</span>
-              <span style="color:${col};font-size:12px;font-weight:700;">${arriba?'+':''}${n.distPct}%</span>
-              <span style="flex:1;"></span>
-              <span>${puntos}</span>
-              ${flecha}
-            </div>
-            <div style="display:flex;align-items:center;gap:14px;margin-top:8px;font-size:10.5px;color:var(--sub);">
-              ${n.zonaDesde && n.anchoZonaPct > 0.25 ? `<span style="display:flex;align-items:center;gap:5px;">
-                <span style="display:inline-block;width:24px;height:7px;background:${col};opacity:.35;border-radius:2px;"></span>
-                ${n.anchoZonaPct}%</span>` : ''}
-              ${n.toques > 1 ? `<span>${'▏'.repeat(Math.min(6, n.toques))} ${n.toques}</span>` : ''}
-              ${t ? `<span>◷ ${t}</span>` : ''}
-              ${n.usdLibro ? `<span>$${(n.usdLibro/1000).toFixed(0)}K</span>` : ''}
-              ${n.perforaciones > 0 ? `<span style="opacity:.6;">✕${n.perforaciones}</span>` : ''}
-            </div>`;
-          det.style.display = '';
-        };
-
-        // El toque y el mouse buscan la barra más cercana verticalmente
-        const buscarEn = (clientY) => {
-          const r = cv.getBoundingClientRect();
-          const y = (clientY - r.top) * (H / r.height);
-          let mejor = null, dist = 99;
-          for(const z of zonasTactiles){
-            const d2 = Math.abs(z.y - y);
-            if(d2 < z.alto/2 && d2 < dist){ dist = d2; mejor = z.nivel; }
-          }
-          return mejor;
-        };
-        // Al tocar: se marca el nivel elegido y se redibuja para que se vea cuál es
-        const elegir = (n) => {
-          if(!n) return;
-          seleccionado = n;
-          dibujarTodo();
-          mostrarDetalle(n);
-        };
-        cv.style.cursor = 'pointer';
-        cv.onclick = (ev) => elegir(buscarEn(ev.clientY));
-        cv.ontouchstart = (ev) => {
-          const t2 = ev.touches?.[0];
-          if(t2){ ev.preventDefault(); elegir(buscarEn(t2.clientY)); }
-        };
-        // Arranca con el obstáculo más importante marcado, para que no quede vacío
-        const masFuerte = [...todos].sort((a,b)=>b.costo-a.costo)[0];
-        if(masFuerte) elegir(masFuerte);
-
-        // ═══ LA RESPUESTA DEL CAMINO ═══
-        const rcam = document.getElementById('liqCaminoResp');
-        if(rcam){
-          const masLibre = m.libreAbajo > m.libreArriba * 1.3 ? 'abajo'
-                         : m.libreArriba > m.libreAbajo * 1.3 ? 'arriba' : null;
-          const muros = [...(m.arriba||[]), ...(m.abajo||[])]
-            .filter(n => n.calidad === 'MURO')
-            .sort((a,b) => Math.abs(a.distPct) - Math.abs(b.distPct));
-          const m1 = muros[0];
-          rcam.style.background = masLibre ? 'rgba(16,185,129,.09)' : 'rgba(255,176,32,.09)';
-          rcam.style.border = `1px solid ${masLibre ? 'rgba(16,185,129,.25)' : 'rgba(255,176,32,.25)'}`;
-          rcam.innerHTML = `
-            <span style="font-size:17px;line-height:1;">${masLibre === 'abajo' ? '▼' : masLibre === 'arriba' ? '▲' : '◆'}</span>
-            <span style="font-size:12.5px;line-height:1.45;flex:1;">${
-              masLibre
-                ? `Hay más espacio <b>hacia ${masLibre}</b>: el precio puede moverse <b>${masLibre === 'abajo' ? m.libreAbajo : m.libreArriba}%</b> sin encontrar nada.`
-                : 'Espacio parejo en las dos direcciones.'
-            }${m1 ? ` El primer muro está a <b>${Math.abs(m1.distPct)}%</b> ${m1.distPct > 0 ? 'arriba' : 'abajo'}.` : ''}</span>`;
+          document.getElementById('liqHeatLeyenda').innerHTML = [
+            ['rgba(242,54,69,.35)','Resistencia','z'],['rgba(8,153,129,.35)','Soporte','z'],
+            ['#F5A524','Muro','l'],
+          ].map(([c2,t,f2]) => `<span style="display:flex;align-items:center;gap:5px;">
+            <i style="width:${f2==='z'?'12px':'14px'};height:${f2==='z'?'11px':'3px'};border-radius:2px;
+              display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
         }
 
-        // ── LEYENDA: dos números ──
-        // La leyenda es de colores: los números ya están en la respuesta de arriba
-        // Leyenda simplificada: dos colores y una nota sobre la opacidad, en vez de
-        // cuatro categorías que competían entre sí.
-        document.getElementById('liqHeatLeyenda').innerHTML = [
-          ['#F23645','Resistencia'],['#089981','Soporte'],
-          ['rgba(255,255,255,.22)','más opaco = más fuerte'],
-        ].map(([c2,t]) => `<span style="display:flex;align-items:center;gap:4px;">
-          <i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
+        // ══════════ 2. EVOLUCIÓN DE LA LIQUIDEZ ══════════
+        const mc = E.mapaCalorTemporal(data.candles, { columnas: 30, filas: 34, rangoPct: 6 });
+        if(mc){
+          const g = base(document.getElementById('liqCalorCanvas'), 380);
+
+          // El perfil de volumen a la derecha: la forma estándar de mostrar liquidez por precio
+          const filas = 40, altoF = (g.H-g.padT-g.padB)/filas;
+          const perfil = new Array(filas).fill(0);
+          const idxDe = p2 => { const k = Math.floor((g.max-p2)/(g.max-g.min)*filas); return k<0||k>=filas?-1:k; };
+          for(const v of velas){
+            const a=idxDe(v.h), b=idxDe(v.l);
+            if(a<0&&b<0) continue;
+            const lo=Math.max(0,Math.min(a,b)), hi=Math.min(filas-1,Math.max(a,b));
+            const rep=(v.v||1)/Math.max(1,hi-lo+1);
+            for(let i=lo;i<=hi;i++) perfil[i]+=rep;
+          }
+          const maxP = Math.max(...perfil,1), anchoPerf = 58;
+          for(let i=0;i<filas;i++){
+            if(perfil[i]<=0) continue;
+            const y=g.padT+i*altoF, w=anchoPerf*(perfil[i]/maxP);
+            g.ctx.fillStyle='rgba(255,255,255,.14)';
+            g.ctx.fillRect(g.W-g.padR-w, y+0.5, w, altoF-1);
+          }
+
+          // Las zonas que cambian, como bandas. El degradado indica la dirección:
+          // más intenso a la derecha si se acumula, a la izquierda si se retira.
+          const banda = (p2, rgb, txt, creciendo) => {
+            const alto = (g.max-g.min)*0.012;
+            const y1 = g.yDe(p2+alto), y2 = g.yDe(p2-alto);
+            const gr = g.ctx.createLinearGradient(g.padL,0,g.W-g.padR,0);
+            if(creciendo){ gr.addColorStop(0,`rgba(${rgb},.03)`); gr.addColorStop(1,`rgba(${rgb},.34)`); }
+            else { gr.addColorStop(0,`rgba(${rgb},.30)`); gr.addColorStop(1,`rgba(${rgb},.03)`); }
+            g.ctx.fillStyle=gr; g.ctx.fillRect(g.padL, Math.min(y1,y2), g.anchoG, Math.abs(y2-y1));
+            g.ctx.strokeStyle=`rgba(${rgb},.55)`; g.ctx.lineWidth=1; g.ctx.setLineDash([3,3]);
+            g.ctx.beginPath(); g.ctx.moveTo(g.padL,(y1+y2)/2); g.ctx.lineTo(g.W-g.padR,(y1+y2)/2);
+            g.ctx.stroke(); g.ctx.setLineDash([]);
+            g.ctx.font='700 9.5px Manrope, sans-serif'; g.ctx.fillStyle=`rgba(${rgb},.95)`;
+            g.ctx.textAlign='left'; g.ctx.fillText(txt, g.padL+7, (y1+y2)/2+3.5);
+          };
+          const a1 = mc.armandose?.[0], d1 = mc.disolviendose?.[0];
+          if(a1) banda(a1.precio, '245,165,36', '▲ se acumula liquidez acá', true);
+          if(d1) banda(d1.precio, '150,165,180', '▽ se está retirando', false);
+
+          pintarVelas(g); lineaPrecio(g);
+
+          const r2 = document.getElementById('liqCalorResp');
+          r2.style.background = 'rgba(245,165,36,.11)';
+          r2.style.border = '1px solid rgba(245,165,36,.28)';
+          const N = v => `<b style="font-family:'JetBrains Mono',monospace;">${v}</b>`;
+          r2.innerHTML = `<span style="font-size:15px;flex-shrink:0;">${a1 ? '↑' : d1 ? '↓' : '◆'}</span>
+            <span>${
+              a1 && d1 ? `La liquidez se acumula en ${N(fmt(a1.precio))} (${a1.distPct>0?'+':''}${a1.distPct}%) y se retira de ${N(fmt(d1.precio))} (${d1.distPct>0?'+':''}${d1.distPct}%). El precio tiende a buscar donde se acumula.`
+              : a1 ? `La liquidez se acumula en ${N(fmt(a1.precio))} (${a1.distPct>0?'+':''}${a1.distPct}%). El precio tiende a buscar esos niveles.`
+              : d1 ? `Se retira liquidez de ${N(fmt(d1.precio))} (${d1.distPct>0?'+':''}${d1.distPct}%): ese nivel pierde defensa.`
+              : 'La liquidez se mantiene estable en las últimas 24 horas.'
+            }</span>`;
+
+          document.getElementById('liqCalorLeg').innerHTML = [
+            ['rgba(245,165,36,.4)','Se acumula','z'],['rgba(120,135,150,.3)','Se retira','z'],
+            ['rgba(255,255,255,.5)','Volumen por precio','l'],
+          ].map(([c2,t,f2]) => `<span style="display:flex;align-items:center;gap:5px;">
+            <i style="width:${f2==='z'?'12px':'14px'};height:${f2==='z'?'11px':'3px'};border-radius:2px;
+              display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
+        }
       }catch(e){ wrap.style.display='none'; }
     })();
 
@@ -5171,6 +4688,7 @@ async function loadTheHaton(){
   try{
     const res = await fetch(THEHATON_STATE_URL + '?t=' + Date.now());
     if(res.ok) state = await res.json();
+    window._estadoBot = state;   // lo usa el panel de salud
   }catch(e){ /* seguimos con el panel base */ }
 
   const acc = state?.account || { id:1, capital:100, initialCapital:100, peakCapital:100, theses:[], closedTrades:[], expiredTheses:[] };
@@ -5193,6 +4711,43 @@ async function loadTheHaton(){
   document.getElementById('thWinRate').textContent = trades.length ? `${winRate}%` : '—';
   document.getElementById('thProfitFactor').textContent = profitFactor;
   document.getElementById('thDrawdown').textContent = `${drawdown}%`;
+
+    // ═══ SALUD DEL SISTEMA ═══
+    // Se arma del propio state.json: cuándo corrió el bot, qué hay abierto, qué se envió.
+    // Antes había que abrir el log de GitHub Actions para saber si seguía vivo.
+    (() => {
+      const sb = document.getElementById('thSaludBody');
+      if(!sb) return;
+      const st = state || {};
+      const ultima = st.lastRunAt || st.updatedAt || st.lastCheck;
+      const horasDesde = ultima ? (Date.now() - new Date(ultima).getTime()) / 3600e3 : null;
+
+      const fila = (k, v, col) => `<div style="display:flex;justify-content:space-between;
+        padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04);">
+        <span>${k}</span><span style="color:${col || 'var(--text)'};font-weight:600;">${v}</span></div>`;
+
+      // El workflow corre cada 30 minutos: más de 3 horas sin correr es un problema
+      const estadoBot = horasDesde == null ? ['sin dato de última corrida', 'var(--sub)']
+        : horasDesde < 1.5 ? ['funcionando', 'var(--teal)']
+        : horasDesde < 4 ? [`última corrida hace ${horasDesde.toFixed(1)}h`, 'var(--amber)']
+        : [`⚠️ sin correr hace ${horasDesde.toFixed(0)}h`, 'var(--rose)'];
+
+      sb.innerHTML =
+        fila('Estado del bot', estadoBot[0], estadoBot[1]) +
+        fila('Operaciones abiertas', active.length, active.length ? 'var(--teal)' : 'var(--sub)') +
+        fila('En observación', watching.length) +
+        fila('Cerradas en total', trades.length) +
+        fila('Listo para medir',
+          trades.length >= 20 ? 'sí — ya hay muestra suficiente'
+            : trades.length ? `faltan ${20 - trades.length} operaciones`
+            : 'todavía no hay operaciones cerradas',
+          trades.length >= 20 ? 'var(--teal)' : 'var(--amber)') +
+        (st.ultimoInformeBTC ? fila('Último informe semanal', st.ultimoInformeBTC) : '') +
+        (st.ultimoScalpBTC ? fila('Último scalp diario', st.ultimoScalpBTC) : '') +
+        (st.ultimaAgenda ? fila('Última agenda mensual', st.ultimaAgenda) : '') +
+        (st.alertasOnChain ? fila('Alertas on-chain enviadas', Object.keys(st.alertasOnChain).length) : '');
+    })();
+
   document.getElementById('thDrawdown').style.color = drawdown>15 ? 'var(--rose)' : 'var(--text)';
   document.getElementById('thAccountId').textContent = '#' + acc.id;
 
