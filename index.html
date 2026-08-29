@@ -18,7 +18,7 @@
 <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg:#000000; --panel:#0d0d0d; --panel2:#131313; --border:rgba(255,255,255,0.08);
@@ -3272,9 +3272,13 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
         const alcance = 8, padY = 18;
         const yDe = (pct) => H/2 - (Math.max(-alcance, Math.min(alcance, pct))/alcance) * (H/2 - padY);
-        const cx = W * 0.38;
-        // El área de barras termina antes del badge del precio: nunca se superponen
-        const anchoMax = W - cx - 96;
+        // ═══ EL EJE DE PRECIOS ES UNA COLUMNA PROPIA ═══
+        // Los números viven en su franja a la derecha y las barras nunca llegan ahí.
+        // Es lo que elimina de raíz la superposición entre precios y barras.
+        const anchoEje = 78;
+        const anchoBarras = W - anchoEje - 10;
+        const cx = 0;
+        const anchoMax = anchoBarras;
         const pctDe = (precio) => (precio - data.price) / data.price * 100;
 
         // Las variables del estado táctil viven afuera del dibujo, porque se redibuja
@@ -3286,10 +3290,13 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         function dibujarTodo(){
           ctx.clearRect(0, 0, W, H);
           // ═══ FONDO PLANO ═══
-          // Tinte sutil en cada mitad, sin degradados pesados: estilo fintech limpio.
           const yPfondo = yDe(0);
-          ctx.fillStyle = 'rgba(242,54,69,.045)'; ctx.fillRect(0, 0, W, yPfondo);
-          ctx.fillStyle = 'rgba(8,153,129,.045)'; ctx.fillRect(0, yPfondo, W, H - yPfondo);
+          ctx.fillStyle = 'rgba(242,54,69,.04)'; ctx.fillRect(0, 0, anchoBarras, yPfondo);
+          ctx.fillStyle = 'rgba(8,153,129,.04)'; ctx.fillRect(0, yPfondo, anchoBarras, H - yPfondo);
+          // La columna del eje, con su propio fondo y una línea que la separa
+          ctx.fillStyle = '#0d1014'; ctx.fillRect(anchoBarras + 4, 0, W - anchoBarras - 4, H);
+          ctx.strokeStyle = 'rgba(255,255,255,.07)'; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(anchoBarras + 4, 0); ctx.lineTo(anchoBarras + 4, H); ctx.stroke();
           // Rótulos con contraste WCAG: 8.7:1 y 10.3:1 contra el fondo (antes 2.4:1)
           ctx.font = '600 10px Manrope, sans-serif'; ctx.textAlign = 'left';
           ctx.fillStyle = '#ff8a95'; ctx.fillText('SI SUBE ↑', 5, 15);
@@ -3365,7 +3372,10 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             const y = yDe(n.distPct);
             if(y < padY-4 || y > H-padY+4) continue;
             const arriba = n.distPct > 0;
-            const col = arriba ? '#ef4444' : '#10b981';
+            // Solo dos colores: rojo arriba, verde abajo. La fuerza la da la opacidad,
+            // no una categoría con su propio color.
+            const col = arriba ? '#F23645' : '#089981';
+            const fuerzaRel = Math.min(1, (n.costo || 1) / (maxCosto || 1));
             // Un nivel ya perforado se dibuja más tenue: está debilitado
             const alpha = n.perforaciones > 0 ? '77' : 'ee';
             const w = anchoMax * (0.18 + 0.82 * (n.costo / maxCosto));
@@ -3383,8 +3393,8 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             // ═══ BARRA PLANA ═══
             // Rectángulo de 6px de radio, color sólido, sin glow ni degradados.
             // El seleccionado se marca con borde, no con resplandor.
-            const alt2 = Math.max(altoZona, n.calidad === 'MURO' ? 22 : n.calidad === 'sólido' ? 18 : 14);
-            ctx.globalAlpha = elegido ? 0.95 : 0.68;
+            const alt2 = 17;
+            ctx.globalAlpha = elegido ? 0.95 : (0.28 + fuerzaRel * 0.44);
             ctx.fillStyle = col;
             ctx.beginPath();
             if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, 6); else ctx.rect(cx, yZona, w, alt2);
@@ -3439,26 +3449,22 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             // se pueda tocar con el dedo sin apuntar exacto
             zonasTactiles.push({ y, alto: 24, nivel: n });
 
-            ctx.font = '600 10px Manrope, sans-serif';
+            // ═══ EL PRECIO VA EN EL EJE, NO SOBRE LA BARRA ═══
+            // Monoespaciada y alineado a la derecha: los dígitos quedan en columna y se
+            // comparan de un vistazo. Y nunca se superpone con la barra.
+            ctx.font = elegido ? '600 11px "JetBrains Mono", monospace' : '400 10.5px "JetBrains Mono", monospace';
             ctx.textAlign = 'right';
-            const et = '$' + fmt(n.precio);
-            const anchoEt = ctx.measureText(et).width;
-            // El elegido lleva una pastilla detrás para que se lea sobre cualquier color
+            ctx.fillStyle = elegido ? col : 'rgba(168,180,192,.85)';
+            ctx.fillText(fmt(n.precio), W - 8, y + 3.5);
             if(elegido){
-              ctx.fillStyle = col + '22';
-              ctx.beginPath();
-              if(ctx.roundRect) ctx.roundRect(cx - 12 - anchoEt, y - 8, anchoEt + 9, 16, 3);
-              else ctx.rect(cx - 12 - anchoEt, y - 8, anchoEt + 9, 16);
-              ctx.fill();
+              ctx.font = '400 9px "JetBrains Mono", monospace';
+              ctx.fillStyle = 'rgba(168,180,192,.7)';
+              ctx.fillText(`${n.distPct > 0 ? '+' : ''}${n.distPct}%`, W - 8, y + 15);
             }
-            ctx.fillStyle = col + (n.perforaciones > 0 ? '88' : elegido ? 'ff' : 'dd');
-            ctx.fillText(et, cx - 8, y + 3.5);
-            // El tiempo estimado: traduce la distancia en algo útil
-            if(n.diasEstimados != null && n.costo >= 2){
-              const t = n.diasEstimados < 1 ? `${Math.round(n.diasEstimados*24)}h` : `${n.diasEstimados}d`;
-              ctx.font = '9px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.55)';
-              ctx.fillText(t, cx - 8 - ctx.measureText('$' + fmt(n.precio)).width - 46, y + 3.5);
-            }
+            // Dentro de la barra: solo los toques, si hay lugar
+            ctx.font = '500 10px "JetBrains Mono", monospace'; ctx.textAlign = 'left';
+            ctx.fillStyle = 'rgba(255,255,255,.9)';
+            if(w > 76) ctx.fillText(`${n.toques || 1}×`, 10, y + 3.5);
             ctx.textAlign = 'left';
           }
 
@@ -3470,19 +3476,20 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           const etPrecio = '$' + fmt(data.price);
           ctx.font = '700 12px Manrope, sans-serif';
           const wEtP = ctx.measureText(etPrecio).width;
-          const xBadge = W - 34 - wEtP - 20;
+          const xBadge = anchoBarras + 4;
           ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1;
           ctx.setLineDash([4,3]);
-          ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(xBadge - 8, yP); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(anchoBarras, yP); ctx.stroke();
           ctx.setLineDash([]);
           // Badge sólido, sin sombra
+          // El badge llena la columna del eje: el precio actual queda fijado ahí,
+          // alineado con los demás precios y sin cruzar las barras.
           ctx.fillStyle = '#eef3f8';
-          ctx.beginPath();
-          if(ctx.roundRect) ctx.roundRect(xBadge, yP-11, wEtP+16, 22, 5);
-          else ctx.rect(xBadge, yP-11, wEtP+16, 22);
-          ctx.fill();
-          ctx.fillStyle = '#0a0c0f'; ctx.textAlign = 'left';
-          ctx.fillText(etPrecio, xBadge+8, yP+4);
+          ctx.fillRect(xBadge, yP-11, W - xBadge, 22);
+          ctx.font = '700 11px "JetBrains Mono", monospace';
+          ctx.fillStyle = '#0a0c0f'; ctx.textAlign = 'right';
+          ctx.fillText(fmt(data.price), W - 8, yP+4);
+          ctx.textAlign = 'left';
           ctx.font = '800 11px Manrope, sans-serif'; ctx.textAlign = 'right';
           ctx.fillText('$' + fmt(data.price), cx - 8, yP + 3.5);
           ctx.textAlign = 'left';
@@ -3588,9 +3595,11 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
         // ── LEYENDA: dos números ──
         // La leyenda es de colores: los números ya están en la respuesta de arriba
+        // Leyenda simplificada: dos colores y una nota sobre la opacidad, en vez de
+        // cuatro categorías que competían entre sí.
         document.getElementById('liqHeatLeyenda').innerHTML = [
-          ['#ffb020','Muro'],['#ef4444','Resistencia'],['#10b981','Soporte'],
-          ['rgba(16,185,129,.25)','Sin obstáculos'],
+          ['#F23645','Resistencia'],['#089981','Soporte'],
+          ['rgba(255,255,255,.22)','más opaco = más fuerte'],
         ].map(([c2,t]) => `<span style="display:flex;align-items:center;gap:4px;">
           <i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
       }catch(e){ wrap.style.display='none'; }
