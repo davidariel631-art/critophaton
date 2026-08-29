@@ -2976,7 +2976,9 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           // Con 64×70 cada celda medía 5×3 píxeles: imposible de distinguir, todo se veía
           // como una mancha. Con 30×32 cada celda mide 11×8, que ya se lee.
           // Y el rango baja a 6%: concentra el detalle donde el precio realmente se mueve.
-          columnas: 30, filas: 32, rangoPct: 6,
+          // Menos celdas y más grandes: pasan de 13×11 a 16×13 píxeles, que ya se
+          // distinguen como piezas en vez de verse como una mancha continua.
+          columnas: 22, filas: 24, rangoPct: 6,
           // Las liquidaciones reales del stream, si el feed está activo. Con ellas el mapa
           // deja de estimar dónde hay stops y muestra dónde reventaron de verdad.
           liquidacionesReales: (window._liqReales || []).filter(x =>
@@ -3000,22 +3002,23 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
         // La escala de calor: de azul profundo a blanco incandescente. Es la que usan los
         // mapas de liquidez profesionales porque el ojo distingue bien los saltos.
+        // Escala más contrastada: se agrega un verde lima entre el turquesa y el amarillo
+        // para que los saltos de densidad se distingan a simple vista.
         const calor = (d) => {
-          if(d < 0.02) return null;
-          const t = Math.pow(d, 0.62);
-          if(t < 0.16) return `rgba(12,32,64,${0.35 + t*2})`;
-          if(t < 0.34) return `rgba(16,84,150,${0.5 + t})`;
-          if(t < 0.52) return `rgba(0,168,190,${0.6 + t*0.6})`;
-          if(t < 0.70) return `rgba(40,205,120,${0.7 + t*0.4})`;
-          if(t < 0.85) return `rgba(232,196,50,${0.8 + t*0.25})`;
-          if(t < 0.94) return `rgba(255,128,40,${0.88 + t*0.15})`;
-          return `rgba(255,236,210,${0.92 + t*0.1})`;
+          if(d < 0.10) return null;
+          const t = Math.pow(d, 0.6);
+          if(t < 0.24) return `rgba(30,58,110,${0.5 + t*1.4})`;
+          if(t < 0.44) return `rgba(0,120,185,${0.65 + t*0.7})`;
+          if(t < 0.62) return `rgba(0,190,180,${0.75 + t*0.4})`;
+          if(t < 0.78) return `rgba(120,215,90,${0.82 + t*0.25})`;
+          if(t < 0.90) return `rgba(250,200,50,${0.88 + t*0.15})`;
+          return `rgba(255,150,50,${0.94 + t*0.08})`;
         };
 
         // Las celdas
         // Cada celda con una separación de 1px y esquinas redondeadas: eso es lo que
         // convierte una mancha continua en un mapa donde se distinguen las zonas.
-        const sep = 1;
+        const sep = 1.6;
         for(let col = 0; col < mc.columnas; col++){
           for(let fil = 0; fil < mc.filas; fil++){
             const d = mc.rejilla[col][fil];
@@ -3025,7 +3028,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             const x = col*wCol, y = H - (fil+1)*hFila;
             const w2 = Math.max(1, wCol - sep), h2 = Math.max(1, hFila - sep);
             ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(x, y, w2, h2, Math.min(2, h2/3));
+            if(ctx.roundRect) ctx.roundRect(x, y, w2, h2, Math.min(3, h2/3));
             else ctx.rect(x, y, w2, h2);
             ctx.fill();
           }
@@ -3065,8 +3068,20 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             k === 0 ? ctx.moveTo(x, yP2(r.precio)) : ctx.lineTo(x, yP2(r.precio));
           });
           // Más fina y tenue: es una referencia, no el protagonista
-          ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.lineWidth = 0.9;
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 7;
+          ctx.strokeStyle = 'rgba(255,255,255,.96)'; ctx.lineWidth = 2.2;
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
           ctx.stroke();
+          ctx.restore();
+          // El punto final con resplandor: marca dónde está el precio ahora
+          const ptX = (mc.recorrido.at(-1).col + 0.5) * wCol;
+          const ptY = yP2(mc.recorrido.at(-1).precio);
+          ctx.save();
+          ctx.shadowColor = 'rgba(255,255,255,.7)'; ctx.shadowBlur = 10;
+          ctx.fillStyle = '#fff';
+          ctx.beginPath(); ctx.arc(ptX, ptY, 4, 0, Math.PI*2); ctx.fill();
+          ctx.restore();
         }
 
         // El precio actual
@@ -3263,16 +3278,19 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
         function dibujarTodo(){
           ctx.clearRect(0, 0, W, H);
-          // Fondo con caída de luz: da profundidad sin distraer
-          const fondo = ctx.createLinearGradient(0, 0, 0, H);
-          fondo.addColorStop(0, 'rgba(255,255,255,.022)');
-          fondo.addColorStop(0.5, 'rgba(0,0,0,0)');
-          fondo.addColorStop(1, 'rgba(255,255,255,.022)');
-          ctx.fillStyle = fondo; ctx.fillRect(0, 0, W, H);
-          // Rótulos de dirección: quitan toda ambigüedad sobre qué es arriba y qué es abajo
+          // ═══ FONDO CON TEMPERATURA ═══
+          // Rojo degradando desde arriba, verde desde abajo. El color se percibe antes que
+          // cualquier etiqueta: se ve de un golpe qué mitad es cada cosa.
+          const yPfondo = yDe(0);
+          let gf = ctx.createLinearGradient(0, 0, 0, yPfondo);
+          gf.addColorStop(0, 'rgba(60,14,20,.55)'); gf.addColorStop(1, 'rgba(10,11,13,1)');
+          ctx.fillStyle = gf; ctx.fillRect(0, 0, W, yPfondo);
+          gf = ctx.createLinearGradient(0, yPfondo, 0, H);
+          gf.addColorStop(0, 'rgba(10,11,13,1)'); gf.addColorStop(1, 'rgba(6,42,32,.55)');
+          ctx.fillStyle = gf; ctx.fillRect(0, yPfondo, W, H - yPfondo);
           ctx.font = '700 9px Manrope, sans-serif'; ctx.textAlign = 'left';
-          ctx.fillStyle = 'rgba(239,68,68,.5)'; ctx.fillText('SI SUBE ↑', 4, 12);
-          ctx.fillStyle = 'rgba(16,185,129,.5)'; ctx.fillText('SI BAJA ↓', 4, H - 5);
+          ctx.fillStyle = 'rgba(239,68,68,.6)'; ctx.fillText('SI SUBE ↑', 5, 13);
+          ctx.fillStyle = 'rgba(16,185,129,.6)'; ctx.fillText('SI BAJA ↓', 5, H - 6);
 
           // Retícula de referencia, apenas perceptible
           ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 0.5;
@@ -3359,14 +3377,37 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             const altoZona = Math.max(elegido ? 7 : 4, Math.abs(yBot - yTop));
             const yZona = Math.min(yTop, yBot);
 
-            const g = ctx.createLinearGradient(cx, 0, cx + w, 0);
-            g.addColorStop(0, col + (elegido ? 'ff' : alpha));
-            g.addColorStop(0.72, col + (elegido ? '77' : '44'));
-            g.addColorStop(1, col + '00');
+            // ═══ CÁPSULA CON VOLUMEN ═══
+            // Sombra de color debajo, degradado vertical y un reflejo arriba. Antes eran
+            // rectángulos planos que se confundían con el fondo.
+            const rgbBar = col.replace('#','');
+            const R = parseInt(rgbBar.slice(0,2),16), G2 = parseInt(rgbBar.slice(2,4),16), B = parseInt(rgbBar.slice(4,6),16);
+            const alt2 = Math.max(altoZona, elegido ? 16 : 12);
+            ctx.save();
+            ctx.shadowColor = `rgba(${R},${G2},${B},${elegido ? .55 : .28})`;
+            ctx.shadowBlur = elegido ? 16 : 9; ctx.shadowOffsetY = 1;
+            const g = ctx.createLinearGradient(cx, yZona, cx, yZona + alt2);
+            g.addColorStop(0, `rgba(${R},${G2},${B},${elegido ? 1 : .85})`);
+            g.addColorStop(1, `rgba(${R},${G2},${B},${elegido ? .7 : .5})`);
             ctx.fillStyle = g;
             ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, altoZona, Math.min(3, altoZona/2));
-            else ctx.rect(cx, yZona, w, altoZona);
+            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, alt2/2);
+            else ctx.rect(cx, yZona, w, alt2);
+            ctx.fill();
+            ctx.restore();
+            // Desvanecido hacia la derecha
+            const fade = ctx.createLinearGradient(cx + w*0.45, 0, cx + w, 0);
+            fade.addColorStop(0, 'rgba(0,0,0,0)');
+            fade.addColorStop(1, 'rgba(8,10,12,.75)');
+            ctx.fillStyle = fade;
+            ctx.beginPath();
+            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, alt2/2); else ctx.rect(cx, yZona, w, alt2);
+            ctx.fill();
+            // Reflejo superior
+            ctx.fillStyle = 'rgba(255,255,255,.22)';
+            ctx.beginPath();
+            if(ctx.roundRect) ctx.roundRect(cx+2, yZona+1.5, Math.max(0,w-4), 1.5, 1);
+            else ctx.rect(cx+2, yZona+1.5, Math.max(0,w-4), 1.5);
             ctx.fill();
 
             // Un borde fino marca los límites exactos de la zona
