@@ -867,18 +867,29 @@
         </div>
         <div id="liqMultiPanel" style="display:none;margin-top:12px;"></div>
         <div id="liqLibroPanel" style="display:none;margin-top:12px;"></div>
-        <!-- El mapa de calor: se mira, no se lee -->
-        <div id="liqHeatWrap" style="display:none;margin-top:12px;">
-          <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:7px;">🔥 MAPA DE CALOR · EVOLUCIÓN</div>
-          <canvas id="liqCalorCanvas" style="width:100%;height:290px;display:block;border-radius:8px;"></canvas>
-          <div id="liqCalorNota" style="display:flex;align-items:center;gap:10px;margin:8px 0 16px;
-            font-size:10.5px;color:var(--sub);min-height:22px;"></div>
-          <div style="font-size:11px;color:var(--sub);letter-spacing:.5px;margin-bottom:7px;">🧱 CAMINO</div>
-          <canvas id="liqHeatCanvas" style="width:100%;height:260px;display:block;border-radius:10px;"></canvas>
+        <!-- ═══ MIS DOS INDICADORES ═══
+             Cada uno responde una pregunta concreta, escrita arriba. El gráfico es el
+             respaldo de esa frase, no el trabajo que tiene que hacer quien lo mira. -->
+        <div id="liqHeatWrap" style="display:none;margin-top:16px;">
+          <div style="font-family:var(--display);font-size:14px;font-weight:800;">🔥 Evolución de la liquidez</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:2px;">¿Se está armando o disolviendo liquidez, y dónde?</div>
+          <div id="liqCalorResp" style="display:flex;align-items:center;gap:9px;padding:11px 13px;
+            border-radius:10px;margin:11px 0 12px;"></div>
+          <canvas id="liqCalorCanvas" style="width:100%;height:320px;display:block;border-radius:8px;cursor:crosshair;"></canvas>
+          <div id="liqCalorNota" style="background:var(--panel2);border:1px solid var(--border);
+            border-radius:10px;padding:11px 13px;margin-top:10px;min-height:22px;"></div>
+          <div style="font-size:10px;color:var(--sub);text-align:center;margin-top:7px;opacity:.6;">tocá cualquier altura para ver ese precio</div>
+          <div id="liqCalorLeg" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px;font-size:10px;color:var(--sub);"></div>
+
+          <div style="margin-top:22px;font-family:var(--display);font-size:14px;font-weight:800;">🧱 Camino</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:2px;">¿Qué se va a encontrar el precio si sube o si baja?</div>
+          <div id="liqCaminoResp" style="display:flex;align-items:center;gap:9px;padding:11px 13px;
+            border-radius:10px;margin:11px 0 12px;"></div>
+          <canvas id="liqHeatCanvas" style="width:100%;height:330px;display:block;border-radius:8px;cursor:pointer;"></canvas>
           <div id="liqHeatDetalle" style="display:none;background:var(--panel2);border:1px solid var(--border);
-            border-radius:9px;padding:11px 13px;margin-top:9px;"></div>
-          <div id="liqHeatLeyenda" style="display:flex;justify-content:space-between;align-items:center;
-            margin-top:7px;font-size:11px;color:var(--sub);"></div>
+            border-radius:10px;padding:11px 13px;margin-top:10px;"></div>
+          <div style="font-size:10px;color:var(--sub);text-align:center;margin-top:7px;opacity:.6;">tocá una barra para ver el detalle</div>
+          <div id="liqHeatLeyenda" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px;font-size:10px;color:var(--sub);"></div>
         </div>
 
       </div>
@@ -3119,8 +3130,8 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         }
         // Eje del tiempo
         ctx.font = '8.5px Manrope, sans-serif'; ctx.fillStyle = 'rgba(139,152,168,.4)';
-        ctx.fillText('ANTES', 3, H - 4);
-        ctx.textAlign = 'right'; ctx.fillText('AHORA', anchoMapa - 3, H - 4); ctx.textAlign = 'left';
+        ctx.fillText('hace 24h', 3, H - 4);
+        ctx.textAlign = 'right'; ctx.fillText('ahora', anchoMapa - 3, H - 4); ctx.textAlign = 'left';
 
         // ═══ TOCAR PARA VER QUÉ PASÓ EN ESE PRECIO ═══
         cvC.style.cursor = 'crosshair';
@@ -3158,6 +3169,35 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         };
         cvC.onclick = (ev) => verFila(ev.clientY);
         cvC.ontouchstart = (ev) => { const t3 = ev.touches?.[0]; if(t3){ ev.preventDefault(); verFila(t3.clientY); } };
+        // ═══ LA RESPUESTA, ARRIBA DE TODO ═══
+        // Antes había que interpretar el mapa para sacar la conclusión. Ahora la conclusión
+        // está escrita y el mapa la respalda.
+        const rc = document.getElementById('liqCalorResp');
+        if(rc){
+          const a1 = mc.armandose?.[0], d1 = mc.disolviendose?.[0];
+          const hay = a1 || d1;
+          rc.style.background = hay ? 'rgba(255,176,32,.09)' : 'rgba(255,255,255,.04)';
+          rc.style.border = `1px solid ${hay ? 'rgba(255,176,32,.25)' : 'var(--border)'}`;
+          const partes = [];
+          if(a1) partes.push(`se está <b>armando</b> liquidez a <b>${a1.distPct > 0 ? '+' : ''}${a1.distPct}%</b>`);
+          if(d1) partes.push(`<b>disolviendo</b> a <b>${d1.distPct > 0 ? '+' : ''}${d1.distPct}%</b>`);
+          rc.innerHTML = `
+            <span style="font-size:17px;line-height:1;">${a1 ? '▲' : d1 ? '▽' : '◆'}</span>
+            <span style="font-size:12.5px;line-height:1.45;flex:1;">${
+              partes.length
+                ? partes.join(' y ').replace(/^./, m => m.toUpperCase()) +
+                  '. El precio tiende a ir hacia donde se acumula.'
+                : 'La liquidez se mantiene estable en las últimas 24 horas.'
+            }</span>`;
+        }
+        // La leyenda de colores, aparte
+        const lc = document.getElementById('liqCalorLeg');
+        if(lc) lc.innerHTML = [
+          ['rgba(14,60,120,.9)','Poca'],['rgba(30,195,140,.9)','Media'],
+          ['rgba(255,130,40,.95)','Mucha'],['#fff','Precio'],
+        ].map(([c2,t]) => `<span style="display:flex;align-items:center;gap:4px;">
+          <i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
+
         // ═══ EL ESTADO, SIN FRASES ═══
         // Dos indicadores: cuántos niveles se arman y cuántos se disuelven, con su distancia.
         const chip = (n2, txt, col3) => n2 === 0 ? '' :
@@ -3229,6 +3269,11 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           fondo.addColorStop(0.5, 'rgba(0,0,0,0)');
           fondo.addColorStop(1, 'rgba(255,255,255,.022)');
           ctx.fillStyle = fondo; ctx.fillRect(0, 0, W, H);
+          // Rótulos de dirección: quitan toda ambigüedad sobre qué es arriba y qué es abajo
+          ctx.font = '700 9px Manrope, sans-serif'; ctx.textAlign = 'left';
+          ctx.fillStyle = 'rgba(239,68,68,.5)'; ctx.fillText('SI SUBE ↑', 4, 12);
+          ctx.fillStyle = 'rgba(16,185,129,.5)'; ctx.fillText('SI BAJA ↓', 4, H - 5);
+
           // Retícula de referencia, apenas perceptible
           ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 0.5;
           for(const pct of [6, 4, 2, -2, -4, -6]){
@@ -3488,16 +3533,33 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const masFuerte = [...todos].sort((a,b)=>b.costo-a.costo)[0];
         if(masFuerte) elegir(masFuerte);
 
+        // ═══ LA RESPUESTA DEL CAMINO ═══
+        const rcam = document.getElementById('liqCaminoResp');
+        if(rcam){
+          const masLibre = m.libreAbajo > m.libreArriba * 1.3 ? 'abajo'
+                         : m.libreArriba > m.libreAbajo * 1.3 ? 'arriba' : null;
+          const muros = [...(m.arriba||[]), ...(m.abajo||[])]
+            .filter(n => n.calidad === 'MURO')
+            .sort((a,b) => Math.abs(a.distPct) - Math.abs(b.distPct));
+          const m1 = muros[0];
+          rcam.style.background = masLibre ? 'rgba(16,185,129,.09)' : 'rgba(255,176,32,.09)';
+          rcam.style.border = `1px solid ${masLibre ? 'rgba(16,185,129,.25)' : 'rgba(255,176,32,.25)'}`;
+          rcam.innerHTML = `
+            <span style="font-size:17px;line-height:1;">${masLibre === 'abajo' ? '▼' : masLibre === 'arriba' ? '▲' : '◆'}</span>
+            <span style="font-size:12.5px;line-height:1.45;flex:1;">${
+              masLibre
+                ? `Hay más espacio <b>hacia ${masLibre}</b>: el precio puede moverse <b>${masLibre === 'abajo' ? m.libreAbajo : m.libreArriba}%</b> sin encontrar nada.`
+                : 'Espacio parejo en las dos direcciones.'
+            }${m1 ? ` El primer muro está a <b>${Math.abs(m1.distPct)}%</b> ${m1.distPct > 0 ? 'arriba' : 'abajo'}.` : ''}</span>`;
+        }
+
         // ── LEYENDA: dos números ──
-        const col2 = m.ladoLibre === 'parejo' ? 'var(--sub)' : 'var(--teal)';
-        document.getElementById('liqHeatLeyenda').innerHTML = `
-          <span style="display:flex;gap:14px;align-items:center;">
-            <span style="color:var(--rose);font-size:12.5px;font-weight:700;">▲ ${m.libreArriba}%</span>
-            <span style="color:var(--teal);font-size:12.5px;font-weight:700;">▼ ${m.libreAbajo}%</span>
-          </span>
-          <span style="color:${col2};font-size:11px;">
-            ${m.ladoLibre === 'parejo' ? 'espacio parejo' : `más espacio ${m.ladoLibre}`}
-          </span>`;
+        // La leyenda es de colores: los números ya están en la respuesta de arriba
+        document.getElementById('liqHeatLeyenda').innerHTML = [
+          ['#ffb020','Muro'],['#ef4444','Resistencia'],['#10b981','Soporte'],
+          ['rgba(16,185,129,.25)','Sin obstáculos'],
+        ].map(([c2,t]) => `<span style="display:flex;align-items:center;gap:4px;">
+          <i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
       }catch(e){ wrap.style.display='none'; }
     })();
 
