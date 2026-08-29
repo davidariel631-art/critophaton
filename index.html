@@ -3033,51 +3033,149 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           g.ctx.fillStyle='#0a0c0f'; g.ctx.fillText(fmt(precio), g.W-g.padR+6, y+3.5);
         };
 
-        // ══════════ 1. CAMINO ══════════
+        // ══════════ 1. PATRONES SOBRE EL GRÁFICO ══════════
+        // El motor detecta triángulos, acumulaciones, equal highs/lows, order blocks y
+        // barridos de liquidez — pero nunca se dibujaban. Un analista mira justamente eso.
+        const st = result.structure || {};
+        const tri = (()=>{ try{ return E.detectTrianguloCompresion(data.candles); }catch(e){ return null; } })();
         const m = E.mapaObstaculos(data.candles, precio, { alcancePct: 8 });
-        if(m){
-          const niveles = [...(m.arriba||[]), ...(m.abajo||[])].slice(0,6);
-          const g = base(document.getElementById('liqHeatCanvas'), 380,
-            niveles.flatMap(n => [n.zonaHasta, n.zonaDesde]));
+        {
+          const extra = [];
+          if(tri){ extra.push(tri.techo, tri.piso); }
+          if(st.eqHighs) extra.push(st.eqHighs);
+          if(st.eqLows) extra.push(st.eqLows);
+          const nivelesM = [...((m?.arriba)||[]), ...((m?.abajo)||[])].slice(0,4);
+          nivelesM.forEach(n => extra.push(n.zonaHasta, n.zonaDesde));
+          const g = base(document.getElementById('liqHeatCanvas'), 400, extra);
 
-          for(const n of niveles){
+          // ── EL TRIÁNGULO ──
+          // Dos líneas que convergen, con el interior sombreado.
+          if(tri && tri.techo && tri.piso){
+            const iIni = Math.max(0, velas.length - 50);
+            const x0 = g.xDe(iIni), x1 = g.xDe(velas.length-1);
+            // Los bordes al inicio salen del rango de esa zona
+            const zona = velas.slice(iIni, iIni+10);
+            const tIni = Math.max(...zona.map(v=>v.h)), pIni = Math.min(...zona.map(v=>v.l));
+            const yT0=g.yDe(tIni), yT1=g.yDe(tri.techo), yP0=g.yDe(pIni), yP1=g.yDe(tri.piso);
+            g.ctx.beginPath();
+            g.ctx.moveTo(x0,yT0); g.ctx.lineTo(x1,yT1); g.ctx.lineTo(x1,yP1); g.ctx.lineTo(x0,yP0);
+            g.ctx.closePath();
+            const gt=g.ctx.createLinearGradient(x0,0,x1,0);
+            gt.addColorStop(0,'rgba(0,217,255,.03)'); gt.addColorStop(1,'rgba(0,217,255,.13)');
+            g.ctx.fillStyle=gt; g.ctx.fill();
+            g.ctx.strokeStyle='rgba(0,217,255,.7)'; g.ctx.lineWidth=1.5;
+            g.ctx.beginPath(); g.ctx.moveTo(x0,yT0); g.ctx.lineTo(x1,yT1); g.ctx.stroke();
+            g.ctx.beginPath(); g.ctx.moveTo(x0,yP0); g.ctx.lineTo(x1,yP1); g.ctx.stroke();
+            g.ctx.font='700 9.5px Manrope, sans-serif'; g.ctx.fillStyle='rgba(0,217,255,.95)';
+            g.ctx.textAlign='left';
+            g.ctx.fillText(`TRIÁNGULO ${tri.tipo} · ${tri.compresionPct?.toFixed(0) || ''}% comprimido`, x0+5, yT0-7);
+          }
+
+          // ── EQUAL HIGHS / EQUAL LOWS ──
+          // Dos o más máximos al mismo precio son liquidez esperando: ahí hay stops.
+          const eq = (nivel, cuenta, arriba) => {
+            if(!nivel || !cuenta || cuenta < 2) return;
+            const y = g.yDe(nivel);
+            if(y < g.padT || y > g.H - g.padB) return;
+            g.ctx.strokeStyle = arriba ? 'rgba(242,54,69,.75)' : 'rgba(8,153,129,.75)';
+            g.ctx.lineWidth = 1.5; g.ctx.setLineDash([7,3]);
+            g.ctx.beginPath(); g.ctx.moveTo(g.padL,y); g.ctx.lineTo(g.W-g.padR,y); g.ctx.stroke();
+            g.ctx.setLineDash([]);
+            g.ctx.font='700 9px Manrope, sans-serif';
+            g.ctx.fillStyle = arriba ? 'rgba(242,54,69,.95)' : 'rgba(8,153,129,.95)';
+            g.ctx.textAlign='left';
+            g.ctx.fillText(`${cuenta} ${arriba ? 'máximos' : 'mínimos'} iguales · hay stops acá`, g.padL+6, y-5);
+          };
+          eq(st.eqHighs, st.eqHighsCount, true);
+          eq(st.eqLows, st.eqLowsCount, false);
+
+          // ── ACUMULACIÓN / DISTRIBUCIÓN ──
+          // Son las trampas: rompe a la baja y recupera (acumulación) o al revés.
+          // La acumulación es un RANGO, no una línea: va de rangeLow a rangeHigh.
+          const trampa = (t, esAcum) => {
+            if(!t?.patternDetected || !t.rangeHigh || !t.rangeLow) return;
+            const y1 = g.yDe(t.rangeHigh), y2 = g.yDe(t.rangeLow);
+            if(y2 < g.padT || y1 > g.H - g.padB) return;
+            const rgb = esAcum ? '8,153,129' : '242,54,69';
+            g.ctx.fillStyle = `rgba(${rgb},.13)`;
+            g.ctx.fillRect(g.padL, y1, g.anchoG, y2-y1);
+            g.ctx.strokeStyle = `rgba(${rgb},.5)`; g.ctx.lineWidth=1; g.ctx.setLineDash([5,3]);
+            g.ctx.strokeRect(g.padL, y1, g.anchoG, y2-y1);
+            g.ctx.setLineDash([]);
+            g.ctx.font='700 9.5px Manrope, sans-serif'; g.ctx.fillStyle=`rgba(${rgb},.95)`;
+            g.ctx.textAlign='left';
+            g.ctx.fillText(esAcum ? '⬆ ACUMULACIÓN' : '⬇ DISTRIBUCIÓN', g.padL+6, y1+13);
+          };
+          trampa(st.accBearTrap, true);
+          trampa(st.distBullTrap, false);
+
+          // ── LAS ZONAS DEL CAMINO ──
+          for(const n of nivelesM){
             const esMuro = n.calidad === 'MURO';
             const arriba = n.distPct > 0;
             const rgb = esMuro ? '245,165,36' : (arriba ? '242,54,69' : '8,153,129');
             const y1 = g.yDe(n.zonaHasta || n.precio*1.002);
             const y2 = g.yDe(n.zonaDesde || n.precio*0.998);
-            g.ctx.fillStyle = `rgba(${rgb},${esMuro ? .20 : .13})`;
+            g.ctx.fillStyle = `rgba(${rgb},${esMuro ? .18 : .10})`;
             g.ctx.fillRect(g.padL, Math.min(y1,y2), g.anchoG, Math.abs(y2-y1));
-            g.ctx.strokeStyle = `rgba(${rgb},${esMuro ? .7 : .4})`;
+            g.ctx.strokeStyle = `rgba(${rgb},${esMuro ? .65 : .35})`;
             g.ctx.lineWidth = esMuro ? 1.5 : 1;
             g.ctx.setLineDash(esMuro ? [] : [4,3]);
             g.ctx.beginPath();
             g.ctx.moveTo(g.padL,y1); g.ctx.lineTo(g.W-g.padR,y1);
             g.ctx.moveTo(g.padL,y2); g.ctx.lineTo(g.W-g.padR,y2);
             g.ctx.stroke(); g.ctx.setLineDash([]);
-            g.ctx.font = esMuro ? '700 9.5px Manrope, sans-serif' : '500 9.5px Manrope, sans-serif';
-            g.ctx.fillStyle = `rgba(${rgb},.95)`; g.ctx.textAlign='left';
-            g.ctx.fillText(`${esMuro ? 'MURO' : arriba ? 'resistencia' : 'soporte'} · ${n.toques || 1} toques`,
-              g.padL+7, (y1+y2)/2+3.5);
+            g.ctx.font = esMuro ? '700 9.5px Manrope, sans-serif' : '500 9px Manrope, sans-serif';
+            g.ctx.fillStyle = `rgba(${rgb},.9)`; g.ctx.textAlign='right';
+            g.ctx.fillText(`${esMuro ? 'MURO' : ''} ${n.toques || 1} toques`.trim(), g.W-g.padR-6, (y1+y2)/2+3.5);
+            g.ctx.textAlign='left';
           }
+
+          // ── ORDER BLOCKS ──
+          // La última vela contraria antes de un impulso: ahí entró dinero institucional.
+          // El order block puede venir con distintos nombres de campo según cómo se armó
+          const ob = (o, esAlcista) => {
+            const alto = o?.alto ?? o?.high ?? o?.top;
+            const bajo = o?.bajo ?? o?.low ?? o?.bottom;
+            if(!alto || !bajo) return;
+            const y1 = g.yDe(alto), y2 = g.yDe(bajo);
+            if(y2 < g.padT || y1 > g.H - g.padB) return;
+            const rgb = esAlcista ? '8,153,129' : '242,54,69';
+            g.ctx.fillStyle = `rgba(${rgb},.20)`;
+            g.ctx.fillRect(g.W - g.padR - g.anchoG*0.42, y1, g.anchoG*0.42, y2-y1);
+            g.ctx.strokeStyle = `rgba(${rgb},.6)`; g.ctx.lineWidth=1;
+            g.ctx.strokeRect(g.W - g.padR - g.anchoG*0.42, y1, g.anchoG*0.42, y2-y1);
+            g.ctx.font='600 8.5px Manrope, sans-serif'; g.ctx.fillStyle=`rgba(${rgb},.95)`;
+            g.ctx.textAlign='left';
+            g.ctx.fillText('OB', g.W - g.padR - g.anchoG*0.42 + 4, y1+11);
+          };
+          ob(st.bullishOB, true); ob(st.bearishOB, false);
+
           pintarVelas(g); lineaPrecio(g);
 
+          // ── LA RESPUESTA ──
           const r1 = document.getElementById('liqCaminoResp');
-          const pArr = (m.arriba||[])[0], pAbj = (m.abajo||[])[0];
-          const masEspacio = m.libreAbajo > m.libreArriba ? 'abajo' : 'arriba';
-          r1.style.background = 'rgba(8,153,129,.11)';
-          r1.style.border = '1px solid rgba(8,153,129,.28)';
-          r1.innerHTML = `<span style="font-size:15px;flex-shrink:0;">${masEspacio==='abajo'?'▼':'▲'}</span>
-            <span>Más espacio hacia <b style="font-family:'JetBrains Mono',monospace;">${masEspacio}</b>. Lo primero que se cruza:
-            ${pArr ? `<b style="font-family:'JetBrains Mono',monospace;">${fmt(pArr.precio)}</b> (+${pArr.distPct}%)` : 'nada'} arriba,
-            ${pAbj ? `<b style="font-family:'JetBrains Mono',monospace;">${fmt(pAbj.precio)}</b> (${pAbj.distPct}%)` : 'nada'} abajo.</span>`;
+          const hallados = [];
+          if(tri) hallados.push(`un triángulo ${tri.tipo}`);
+          if(st.eqHighsCount >= 2) hallados.push(`${st.eqHighsCount} máximos iguales`);
+          if(st.eqLowsCount >= 2) hallados.push(`${st.eqLowsCount} mínimos iguales`);
+          if(st.accBearTrap?.patternDetected) hallados.push('una acumulación');
+          if(st.distBullTrap?.patternDetected) hallados.push('una distribución');
+          if(st.liquiditySweep?.sweptUp) hallados.push('un barrido de máximos');
+          if(st.liquiditySweep?.sweptDown) hallados.push('un barrido de mínimos');
+          const hay = hallados.length > 0;
+          r1.style.background = hay ? 'rgba(0,217,255,.10)' : 'rgba(255,255,255,.04)';
+          r1.style.border = `1px solid ${hay ? 'rgba(0,217,255,.28)' : 'var(--border)'}`;
+          r1.innerHTML = `<span style="font-size:15px;flex-shrink:0;">${hay ? '◆' : '○'}</span>
+            <span>${hay
+              ? `En el gráfico hay ${hallados.join(', ')}. Están marcados abajo.`
+              : 'Sin patrones claros en este marco: el precio se mueve sin estructura definida.'}</span>`;
 
           document.getElementById('liqHeatLeyenda').innerHTML = [
-            ['rgba(242,54,69,.35)','Resistencia','z'],['rgba(8,153,129,.35)','Soporte','z'],
-            ['#F5A524','Muro','l'],
-          ].map(([c2,t,f2]) => `<span style="display:flex;align-items:center;gap:5px;">
-            <i style="width:${f2==='z'?'12px':'14px'};height:${f2==='z'?'11px':'3px'};border-radius:2px;
-              display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
+            ['rgba(0,217,255,.6)','Triángulo'],['rgba(242,54,69,.6)','Niveles arriba'],
+            ['rgba(8,153,129,.6)','Niveles abajo'],['rgba(245,165,36,.7)','Muro'],
+          ].map(([c2,t]) => `<span style="display:flex;align-items:center;gap:5px;">
+            <i style="width:12px;height:11px;border-radius:2px;display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
         }
 
         // ══════════ 2. EVOLUCIÓN DE LA LIQUIDEZ ══════════
