@@ -2985,6 +2985,9 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const E = TheHatonEngine;
         const velas = data.candles.slice(-90);
         if(velas.length < 30){ wrap.style.display='none'; return; }
+        // La estructura se calcula acá: en la pestaña Liquidez no existe el `result` del
+        // análisis completo, que es de la pestaña Analizar.
+        const result = E.computeScore(data, null, [], {}, {}, null);
         wrap.style.display = '';
         const precio = data.price;
 
