@@ -25,12 +25,12 @@
 
 import fs from 'fs';
 import webpush from 'web-push';
-import { analizarTransferencias, construirEvidenciaOnChain } from '../wallet-intelligence.js';
+import { alertaMovimiento, analizarTransferencias, construirEvidenciaOnChain } from '../wallet-intelligence.js';
 import {
   fetchTokenData, fetchMacroTrend, fetchRelevantNews,
   fetchOpenInterestTrend, fetchFundingTrend, fetchCapitalFlowContext, fetchBTCReference, fetchUnlockRisk, fetchUsdStrength,
   confluenceScore15m, fetchFearGreedIndex, getFOMCWindow, getHighImpactMacroWindow, fetchTopTraderRatio, fetchSpotFuturesFlow, computeLiquidityProfile, rsi, stochasticOscillator, macd, adx,
-  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, horizontesSegunTamano, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, consultarMemoria, generarReporteResearch, mapaObstaculos, mapaCalorTemporal, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
+  computeScore, buildSetup, fmtPrecio, buildAnalystMode, computeGodPerformance, detectSFP, ema, detectVolumeSpike, detectDivergencia, detectTrianguloCompresion, analizarRupturaCompresion, detectIFVG, detectActividadAnomala, fetchOnChainPressure, fetchTransferenciasToken, fetchTransferenciasTokenCached, fetchOnChainPressureCached, fetchLibroOrdenes, calcularPresionFlujo, calendarioMacro, buscarContratoToken, estadoWalletIntelligence, calidadTendenciaCinta, entradaRetrocesoCinta, nivelesCintaATR, horizontesSegunTamano, sintetizarTesis, detallesQueImportan, decidirQueHacer, analizarPorPasos, consultarMemoria, generarReporteResearch, mapaObstaculos, mapaCalorTemporal, scalpDiario, estructuraMarcoGrande, informeEstructuraBTC, precioVsPosicionamiento, fetchRatiosApalancamiento, verificarDatosSanos, analizarCorrelacion, detectZonasOfertaDemanda, detectNivelesEstructurales, computeVolumeProbability, detectLiquidezPorHorizonte, detectMarketPhase, explicarAnalisis, buscarTesisParecidas, postMortem
 } from '../thehaton-engine.js';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2297,6 +2297,32 @@ async function confirmTheses(state, capitalFlow){
             // Las cantidades vienen en tokens: se pasan a dólares con el precio actual
             const conUsd = transfers.map(t => ({ ...t, valueUsd: t.cantidad * (data15.price||0) }));
             const analisis = analizarTransferencias(conUsd, redFinal, { minUsd: umbralWallet(data15.marketCap) });
+
+            // ═══ ALERTA POR MOVIMIENTO GRANDE ═══
+            // Si una transferencia sola es enorme para el tamaño de la moneda, va con su
+            // propio mensaje. No es una señal de dirección: es que algo se movió y conviene
+            // saberlo.
+            try{
+              for(const mov of (analisis?.movimientos || []).slice(0, 3)){
+                const al = alertaMovimiento(mov, {
+                  marketCap: data15.marketCap, volumen24h: data15.vol24h,
+                  precio24hPct: data15.change24h, simbolo: thesis.symbol,
+                  red: redFinal, contrato: contratoFinal,
+                });
+                if(!al) continue;
+                // Una alerta por transferencia, sin repetir
+                const claveAl = `onchain:${mov.hash || mov.desde + mov.hacia + mov.valueUsd}`;
+                if(!state.alertasOnChain) state.alertasOnChain = {};
+                if(state.alertasOnChain[claveAl]) continue;
+                await sendTelegram(al.texto, { permitirRepetido: true });
+                state.alertasOnChain[claveAl] = Date.now();
+                console.log(`  🛰 Alerta on-chain: ${thesis.symbol} ${al.tipo} ${al.pctMcap}% del mcap`);
+              }
+              // Limpieza: las de más de 7 días ya no hacen falta
+              for(const [k, t] of Object.entries(state.alertasOnChain || {})){
+                if(Date.now() - t > 7*24*3600e3) delete state.alertasOnChain[k];
+              }
+            }catch(e){ /* si falla la alerta, el análisis de wallets sigue igual */ }
             return construirEvidenciaOnChain(analisis, thesis.dir);
           }catch(e){ return null; }
         })();
@@ -3319,6 +3345,139 @@ async function main(){
         }
       }
     }catch(e){ console.log('  ⚠️ Reporte post-evento falló:', e.message); }
+
+    // ═══ AGENDA DEL MES — EL DÍA 1 ═══
+    // Una vez por mes se manda qué eventos vienen y cuántas reuniones de la Fed quedan.
+    // No cambia todos los días, así que mandarlo más seguido sería ruido.
+    try{
+      const hoyD = new Date();
+      const claveMes = hoyD.toISOString().slice(0,7);
+      if(hoyD.getUTCDate() <= 2 && state.ultimaAgenda !== claveMes){
+        const cal = calendarioMacro();
+        if(cal?.proximos?.length){
+          const delMes = cal.proximos.filter(e => e.fecha?.startsWith(claveMes));
+          const lista = (delMes.length ? delMes : cal.proximos.slice(0,4)).map(e => {
+            const d = Math.ceil((new Date(e.fecha + 'T12:00:00Z') - Date.now()) / 86400000);
+            const cuando = d <= 0 ? 'hoy' : d === 1 ? 'mañana' : `en ${d} días`;
+            return `${e.impacto === 'MUY ALTO' ? '🔴' : e.impacto === 'ALTO' ? '🟠' : '🟡'} ` +
+                   `<b>${e.nombre}</b>\n   ${e.fecha} · ${cuando}${e.exacta ? '' : ' (estimada)'}`;
+          }).join('\n');
+
+          const f = cal.fomc;
+          await sendTelegram(
+            `📅 <b>AGENDA — ${hoyD.toLocaleDateString('es', {month:'long', year:'numeric', timeZone:'UTC'}).toUpperCase()}</b>\n\n` +
+            lista + `\n\n` +
+            `<b>Reserva Federal ${claveMes.slice(0,4)}</b>\n` +
+            `${f.yaPasaron} de ${f.totalAnio} reuniones ya pasaron · quedan <b>${f.quedan}</b>\n` +
+            (f.proxima ? `Próxima: ${f.proxima} (en ${f.diasParaLaProxima} días)${f.esLaUltima ? ' — <b>la última del año</b>' : ''}\n` : '') +
+            `\n<i>Las fechas de la Fed son oficiales. Las de CPI y PMI son estimadas por el patrón habitual del mes.</i>`,
+            { permitirRepetido: true }
+          );
+          state.ultimaAgenda = claveMes;
+          console.log(`  📅 Agenda del mes enviada: ${delMes.length} eventos · ${f.quedan} FOMC restantes`);
+        }
+      }
+    }catch(e){ console.log('  ⚠️ Agenda del mes falló:', e.message); }
+
+    // ═══ INFORME ESTRUCTURAL DE BTC — LOS DOMINGOS ═══
+    // La vela semanal cierra el domingo a las 00:00 UTC. Se corre después de ese cierre,
+    // una vez por semana, porque es cuando hay información nueva: antes del cierre la vela
+    // todavía puede cambiar y cualquier lectura es provisoria.
+    try{
+      const ahora = new Date();
+      const esDomingo = ahora.getUTCDay() === 0;
+      const semanaActual = (() => {
+        const d = new Date(Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate()));
+        d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+        return d.toISOString().slice(0,10);
+      })();
+      if(esDomingo && state.ultimoInformeBTC !== semanaActual){
+        const [mn, sm, h4] = await Promise.all([
+          fetchTokenData('BTC', '1mo').catch(()=>null),
+          fetchTokenData('BTC', '1w').catch(()=>null),
+          fetchTokenData('BTC', '4h').catch(()=>null),
+        ]);
+        const eMen = mn?.candles?.length >= 20 ? estructuraMarcoGrande(mn.candles, 'mensual') : null;
+        const eSem = sm?.candles?.length >= 20 ? estructuraMarcoGrande(sm.candles, 'semanal') : null;
+        const e4h  = h4?.candles?.length >= 20 ? estructuraMarcoGrande(h4.candles, '4 horas') : null;
+        const inf = informeEstructuraBTC({ mensual: eMen, semanal: eSem, cuatroH: e4h, precio: sm?.price });
+
+        if(inf){
+          const bloque = (m) => !m ? '' :
+            `<b>${m.marco.toUpperCase()}</b> · ${m.estructura}\n` +
+            `Cierre $${fmtPrecio(m.cierre)} (${m.cambioPct >= 0 ? '+' : ''}${m.cambioPct}%) · ${m.caracterVela}\n` +
+            (m.evento ? `🔔 <b>${m.evento.tipo}</b> — ${m.evento.texto}\n` : '') +
+            `<i>${m.queRompe}</i>\n\n`;
+
+          const icono = inf.veredicto.includes('CAMBIO') ? '🔄'
+                      : inf.veredicto.includes('ALCISTA') ? '🟢'
+                      : inf.veredicto.includes('BAJISTA') ? '🔴' : '⚪';
+
+          await sendTelegram(
+            `${icono} <b>BTC · CIERRE SEMANAL</b>\n` +
+            `${inf.veredicto}\n\n` +
+            bloque(eMen) + bloque(eSem) + bloque(e4h) +
+            `<b>Lectura</b>\n${inf.texto}\n\n` +
+            `<i>Próximo informe el domingo que viene, después del cierre de la vela semanal.</i>`,
+            { permitirRepetido: true }
+          );
+          state.ultimoInformeBTC = semanaActual;
+          console.log(`  📅 Informe semanal de BTC enviado: ${inf.veredicto}`);
+        }
+      }
+    }catch(e){ console.log('  ⚠️ Informe semanal BTC falló:', e.message); }
+
+    // ═══ SCALP DIARIO — BTC Y ETH ═══
+    // Las dos monedas con más profundidad de libro del mercado. Ahí el apalancamiento alto
+    // no arruina la ejecución: en una moneda chica, 20x con un libro fino significa que la
+    // orden se llena mucho peor que el precio que se ve.
+    try{
+      const hoy = new Date().toISOString().slice(0,10);
+      if(state.ultimoScalpBTC !== hoy){
+        // Se revisan las dos y se manda la que tenga mejor calidad. Dos alertas el mismo
+        // día para operaciones parecidas es ruido; una buena vale más.
+        const candidatas = [];
+        for(const sym of ['BTC', 'ETH']){
+          const [c15, c1h] = await Promise.all([
+            fetchTokenData(sym, '15m').catch(()=>null),
+            fetchTokenData(sym, '1h').catch(()=>null),
+          ]);
+          if(!(c15?.candles?.length >= 96)) continue;
+          const sc = scalpDiario(c15.candles, c1h?.candles, { riesgoPct: 1 });
+          if(sc) candidatas.push({ sym, sc });
+        }
+
+        const buenas = candidatas.filter(x => x.sc.hayEntrada && x.sc.calidad >= 0.6 && x.sc.stopSeguro);
+        buenas.sort((a,b) => b.sc.calidad - a.sc.calidad);
+
+        if(buenas.length){
+          const { sym, sc } = buenas[0];
+          const otra = buenas[1];
+          await sendTelegram(
+            `⚡ <b>SCALP ${sym} · ${sc.dir}</b>\n` +
+            `<i>${sc.motivo}</i>\n\n` +
+            `Entrada     <b>$${fmtPrecio(sc.entrada)}</b>\n` +
+            `Stop        $${fmtPrecio(sc.stop)}  (−${sc.riesgoPct}%)\n` +
+            `Objetivo    $${fmtPrecio(sc.objetivo)}  (+${sc.gananciaPct}%)\n\n` +
+            `Apalancamiento <b>${sc.apalancamiento}x</b> · R:R ${sc.rr}\n` +
+            `Liquidación $${fmtPrecio(sc.liquidacion)} — el stop salta bastante antes\n\n` +
+            `EMA50 $${fmtPrecio(sc.ema50)} · el precio está ${sc.distEma50 >= 0 ? '+' : ''}${sc.distEma50}% de ella` +
+            `${sc.extendido ? ' (alejado: suele volver a buscarla)' : ''}\n` +
+            `RSI ${sc.rsi} · volumen ${sc.conVolumen ? 'por encima del promedio' : 'normal'} · tendencia 1h ${sc.tendencia}\n\n` +
+            `<i>El objetivo suele alcanzarse en unas ${sc.horasEstimadas}h. Con ${sc.apalancamiento}x, ` +
+            `el ${sc.riesgoPct}% en contra es el 1% del capital.</i>` +
+            (otra ? `\n\n<i>${otra.sym} también tiene entrada (${otra.sc.dir}, calidad ${(otra.sc.calidad*100).toFixed(0)}%), pero esta es la mejor de las dos.</i>` : ''),
+            { permitirRepetido: true }
+          );
+          console.log(`  ⚡ Scalp ${sym}: ${sc.dir} ${sc.apalancamiento}x · calidad ${(sc.calidad*100).toFixed(0)}%`);
+        } else {
+          for(const { sym, sc } of candidatas){
+            console.log(`  ⚡ Scalp ${sym}: sin entrada — ${(sc.motivo || '').slice(0,70)}`);
+          }
+        }
+        if(candidatas.length) state.ultimoScalpBTC = hoy;
+      }
+    }catch(e){ console.log('  ⚠️ Scalp diario falló:', e.message); }
 
     console.log('═══ ESTADO DE LAS FUENTES ═══');
     console.log(`  🐋 Wallet Intelligence: ${est.ok ? 'clave configurada, funcionando' : est.motivo}`);
