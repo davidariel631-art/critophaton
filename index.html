@@ -2978,7 +2978,8 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           // Y el rango baja a 6%: concentra el detalle donde el precio realmente se mueve.
           // Menos celdas y más grandes: pasan de 13×11 a 16×13 píxeles, que ya se
           // distinguen como piezas en vez de verse como una mancha continua.
-          columnas: 22, filas: 24, rangoPct: 6,
+          // Con la superficie continua se puede subir la resolución sin que se vea roto
+          columnas: 34, filas: 38, rangoPct: 6,
           // Las liquidaciones reales del stream, si el feed está activo. Con ellas el mapa
           // deja de estimar dónde hay stops y muestra dónde reventaron de verdad.
           liquidacionesReales: (window._liqReales || []).filter(x =>
@@ -3004,33 +3005,32 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         // mapas de liquidez profesionales porque el ojo distingue bien los saltos.
         // Escala más contrastada: se agrega un verde lima entre el turquesa y el amarillo
         // para que los saltos de densidad se distingan a simple vista.
+        // ═══ TODAS LAS CELDAS SE PINTAN ═══
+        // Antes las de poca densidad se devolvían como null y quedaban en negro: el 66% del
+        // mapa quedaba vacío y se veía roto. Ahora la escala arranca en un azul muy oscuro
+        // pero visible, así el mapa es una superficie continua donde la densidad se lee por
+        // el color, no por si hay celda o no.
         const calor = (d) => {
-          if(d < 0.10) return null;
-          const t = Math.pow(d, 0.6);
-          if(t < 0.24) return `rgba(30,58,110,${0.5 + t*1.4})`;
-          if(t < 0.44) return `rgba(0,120,185,${0.65 + t*0.7})`;
-          if(t < 0.62) return `rgba(0,190,180,${0.75 + t*0.4})`;
-          if(t < 0.78) return `rgba(120,215,90,${0.82 + t*0.25})`;
-          if(t < 0.90) return `rgba(250,200,50,${0.88 + t*0.15})`;
-          return `rgba(255,150,50,${0.94 + t*0.08})`;
+          const t = Math.pow(Math.max(0, Math.min(1, d)), 0.55);
+          if(t < 0.10) return `rgba(16,26,44,.92)`;
+          if(t < 0.22) return `rgba(22,44,84,${0.9 + t*0.1})`;
+          if(t < 0.36) return `rgba(24,74,132,${0.9 + t*0.1})`;
+          if(t < 0.50) return `rgba(0,120,180,${0.9 + t*0.1})`;
+          if(t < 0.64) return `rgba(0,180,175,${0.92 + t*0.08})`;
+          if(t < 0.77) return `rgba(105,205,105,${0.93 + t*0.07})`;
+          if(t < 0.88) return `rgba(240,195,60,${0.94 + t*0.06})`;
+          return `rgba(255,140,45,${0.96 + t*0.04})`;
         };
 
         // Las celdas
         // Cada celda con una separación de 1px y esquinas redondeadas: eso es lo que
         // convierte una mancha continua en un mapa donde se distinguen las zonas.
-        const sep = 1.6;
+        // Sin separación: las celdas se tocan y forman una superficie pareja.
+        // El +0.5 de solape evita las líneas finas que deja el antialiasing.
         for(let col = 0; col < mc.columnas; col++){
           for(let fil = 0; fil < mc.filas; fil++){
-            const d = mc.rejilla[col][fil];
-            const c2 = calor(d);
-            if(!c2) continue;
-            ctx.fillStyle = c2;
-            const x = col*wCol, y = H - (fil+1)*hFila;
-            const w2 = Math.max(1, wCol - sep), h2 = Math.max(1, hFila - sep);
-            ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(x, y, w2, h2, Math.min(3, h2/3));
-            else ctx.rect(x, y, w2, h2);
-            ctx.fill();
+            ctx.fillStyle = calor(mc.rejilla[col][fil]);
+            ctx.fillRect(col*wCol, H - (fil+1)*hFila, wCol + 0.5, hFila + 0.5);
           }
         }
 

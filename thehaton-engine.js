@@ -5004,10 +5004,20 @@ export function mapaCalorTemporal(candles, opciones = {}){
   const filas = opciones.filas ?? 56;            // niveles de precio
   const ventana = opciones.ventana ?? 60;        // velas que ve cada columna hacia atrás
   const precio = candles.at(-1).c;
-  const rangoPct = opciones.rangoPct ?? 9;
 
-  const min = precio * (1 - rangoPct/100);
-  const max = precio * (1 + rangoPct/100);
+  // ═══ EL RANGO SE AJUSTA A DÓNDE ESTUVO EL PRECIO ═══
+  // Un rango fijo de ±6% deja franjas enteras vacías cuando el precio se movió menos que
+  // eso: el mapa aparece con la mitad de arriba en negro. Se toma el recorrido real y se
+  // le da un margen, así toda la altura del mapa tiene datos.
+  const recientes = candles.slice(-Math.min(candles.length, ventana * 2));
+  const altoReal = Math.max(...recientes.map(v => v.h));
+  const bajoReal = Math.min(...recientes.map(v => v.l));
+  const margen = (altoReal - bajoReal) * 0.12;
+  const topeSuperior = precio * (1 + (opciones.rangoPct ?? 9)/100);
+  const topeInferior = precio * (1 - (opciones.rangoPct ?? 9)/100);
+  // Nunca más ancho que el tope, nunca más angosto que ±1.5%
+  const max = Math.min(topeSuperior, Math.max(altoReal + margen, precio * 1.015));
+  const min = Math.max(topeInferior, Math.min(bajoReal - margen, precio * 0.985));
   const alto = (max - min) / filas;
   const idxDe = (p) => (p < min || p >= max) ? -1 : Math.min(filas-1, Math.floor((p - min)/alto));
 
@@ -5099,14 +5109,15 @@ export function mapaCalorTemporal(candles, opciones = {}){
     // La liquidez no salta de una franja a otra: se difunde. Sin esto el mapa se ve como
     // una grilla de píxeles sueltos; con esto se ve continuo, como los mapas reales.
     const suave = new Array(filas).fill(0);
-    const kernel = [0.06, 0.24, 0.40, 0.24, 0.06];
+    // Kernel más ancho: difunde mejor y elimina los saltos bruscos entre celdas vecinas
+    const kernel = [0.05, 0.12, 0.20, 0.26, 0.20, 0.12, 0.05];
     for(let i = 0; i < filas; i++){
       let acum = 0, peso = 0;
-      for(let k = -2; k <= 2; k++){
+      for(let k = -3; k <= 3; k++){
         const j = i + k;
         if(j < 0 || j >= filas) continue;
-        acum += columna[j] * kernel[k+2];
-        peso += kernel[k+2];
+        acum += columna[j] * kernel[k+3];
+        peso += kernel[k+3];
       }
       suave[i] = peso > 0 ? acum / peso : columna[i];
     }
@@ -5123,8 +5134,14 @@ export function mapaCalorTemporal(candles, opciones = {}){
   // El percentil 99 como techo: una celda excepcional no debería apagar todo lo demás
   // El techo en el percentil 97 y el piso en el 55: por debajo de la mediana es fondo,
   // no información. Sin ese corte el mapa queda saturado y todo parece un muro.
+  // El piso baja al percentil 15: antes con 0.55 se descartaba más de la mitad de los
+  // datos y el mapa quedaba con zonas enteras en cero. Ahora casi todo el rango aporta
+  // color, y la diferencia entre poca y mucha liquidez se ve por el tono.
   const p99 = todosValores[Math.floor(todosValores.length * 0.97)] || 1;
-  const p20 = todosValores[Math.floor(todosValores.length * 0.55)] || 0;
+  // El piso en el percentil 2: prácticamente todos los datos aportan color. La escala
+  // de color se encarga de que poca liquidez se vea oscura y mucha se vea brillante,
+  // sin necesidad de dejar celdas vacías.
+  const p20 = todosValores[Math.floor(todosValores.length * 0.02)] || 0;
   const logMax = Math.log1p(p99 - p20);
   const norm = rejilla.map(colm => colm.map(x => {
     if(x <= p20) return 0;
