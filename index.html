@@ -3036,12 +3036,14 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           g.ctx.fillStyle='#0a0c0f'; g.ctx.fillText(fmt(precio), g.W-g.padR+6, y+3.5);
         };
 
-        // ══════════ 1. PATRONES SOBRE EL GRÁFICO ══════════
-        // El motor detecta triángulos, acumulaciones, equal highs/lows, order blocks y
-        // barridos de liquidez — pero nunca se dibujaban. Un analista mira justamente eso.
+        // ══════════ 1. ZONAS SOBRE EL GRÁFICO ══════════
+        // El gráfico queda limpio: solo velas y rectángulos de color en los niveles donde
+        // el precio va a reaccionar. Nada de texto explicativo encima — eso va en la
+        // tarjeta de abajo, donde se lee cómodo.
         const st = result.structure || {};
         const tri = (()=>{ try{ return E.detectTrianguloCompresion(data.candles); }catch(e){ return null; } })();
         const m = E.mapaObstaculos(data.candles, precio, { alcancePct: 8 });
+        const hallazgos = [];   // se llena mientras se dibuja, y alimenta las tarjetas
         {
           const extra = [];
           if(tri){ extra.push(tri.techo, tri.piso); }
@@ -3051,63 +3053,82 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           nivelesM.forEach(n => extra.push(n.zonaHasta, n.zonaDesde));
           const g = base(document.getElementById('liqHeatCanvas'), 400, extra);
 
-          // ── EL TRIÁNGULO ──
-          // Dos líneas que convergen, con el interior sombreado.
-          if(tri && tri.techo && tri.piso){
+          // Un ícono chico en el borde izquierdo marca qué es cada zona, sin texto
+          const icono = (y, ico, rgb) => {
+            if(y < g.padT+6 || y > g.H-g.padB-6) return;
+            g.ctx.fillStyle = `rgba(${rgb},.9)`;
+            g.ctx.beginPath();
+            if(g.ctx.roundRect) g.ctx.roundRect(g.padL, y-8, 17, 16, 3);
+            else g.ctx.rect(g.padL, y-8, 17, 16);
+            g.ctx.fill();
+            g.ctx.font = '10px Manrope, sans-serif'; g.ctx.textAlign='center';
+            g.ctx.fillText(ico, g.padL+8.5, y+4);
+            g.ctx.textAlign='left';
+          };
+
+          // ── ZONA: una banda de color, sin etiqueta ──
+          const zona = (desde, hasta, rgb, alpha, borde) => {
+            const y1 = g.yDe(hasta), y2 = g.yDe(desde);
+            if(y2 < g.padT || y1 > g.H-g.padB) return null;
+            g.ctx.fillStyle = `rgba(${rgb},${alpha})`;
+            g.ctx.fillRect(g.padL, y1, g.anchoG, y2-y1);
+            if(borde){
+              g.ctx.strokeStyle = `rgba(${rgb},.5)`; g.ctx.lineWidth = 1;
+              g.ctx.setLineDash([4,3]);
+              g.ctx.beginPath();
+              g.ctx.moveTo(g.padL,y1); g.ctx.lineTo(g.W-g.padR,y1);
+              g.ctx.moveTo(g.padL,y2); g.ctx.lineTo(g.W-g.padR,y2);
+              g.ctx.stroke(); g.ctx.setLineDash([]);
+            }
+            return (y1+y2)/2;
+          };
+
+          // ── EL TRIÁNGULO: solo las dos líneas convergentes ──
+          if(tri?.techo && tri?.piso){
             const iIni = Math.max(0, velas.length - 50);
             const x0 = g.xDe(iIni), x1 = g.xDe(velas.length-1);
-            // Los bordes al inicio salen del rango de esa zona
-            const zona = velas.slice(iIni, iIni+10);
-            const tIni = Math.max(...zona.map(v=>v.h)), pIni = Math.min(...zona.map(v=>v.l));
-            const yT0=g.yDe(tIni), yT1=g.yDe(tri.techo), yP0=g.yDe(pIni), yP1=g.yDe(tri.piso);
+            const z = velas.slice(iIni, iIni+10);
+            const yT0=g.yDe(Math.max(...z.map(v=>v.h))), yT1=g.yDe(tri.techo);
+            const yP0=g.yDe(Math.min(...z.map(v=>v.l))), yP1=g.yDe(tri.piso);
             g.ctx.beginPath();
             g.ctx.moveTo(x0,yT0); g.ctx.lineTo(x1,yT1); g.ctx.lineTo(x1,yP1); g.ctx.lineTo(x0,yP0);
             g.ctx.closePath();
             const gt=g.ctx.createLinearGradient(x0,0,x1,0);
-            gt.addColorStop(0,'rgba(0,217,255,.03)'); gt.addColorStop(1,'rgba(0,217,255,.13)');
+            gt.addColorStop(0,'rgba(0,217,255,.02)'); gt.addColorStop(1,'rgba(0,217,255,.11)');
             g.ctx.fillStyle=gt; g.ctx.fill();
-            g.ctx.strokeStyle='rgba(0,217,255,.7)'; g.ctx.lineWidth=1.5;
+            g.ctx.strokeStyle='rgba(0,217,255,.6)'; g.ctx.lineWidth=1.3;
             g.ctx.beginPath(); g.ctx.moveTo(x0,yT0); g.ctx.lineTo(x1,yT1); g.ctx.stroke();
             g.ctx.beginPath(); g.ctx.moveTo(x0,yP0); g.ctx.lineTo(x1,yP1); g.ctx.stroke();
-            g.ctx.font='700 9.5px Manrope, sans-serif'; g.ctx.fillStyle='rgba(0,217,255,.95)';
-            g.ctx.textAlign='left';
-            g.ctx.fillText(`TRIÁNGULO ${tri.tipo} · ${tri.compresionPct?.toFixed(0) || ''}% comprimido`, x0+5, yT0-7);
+            hallazgos.push({ico:'📐', txt:`Triángulo ${tri.tipo}`,
+              det:`El rango se comprimió un ${tri.compresionPct?.toFixed(0) || '—'}%. La salida suele ser rápida y del tamaño del rango.`,
+              col:'0,217,255'});
           }
 
-          // ── EQUAL HIGHS / EQUAL LOWS ──
-          // Dos o más máximos al mismo precio son liquidez esperando: ahí hay stops.
+          // ── EQUAL HIGHS / LOWS: banda fina con ícono ──
           const eq = (nivel, cuenta, arriba) => {
             if(!nivel || !cuenta || cuenta < 2) return;
-            const y = g.yDe(nivel);
-            if(y < g.padT || y > g.H - g.padB) return;
-            g.ctx.strokeStyle = arriba ? 'rgba(242,54,69,.75)' : 'rgba(8,153,129,.75)';
-            g.ctx.lineWidth = 1.5; g.ctx.setLineDash([7,3]);
-            g.ctx.beginPath(); g.ctx.moveTo(g.padL,y); g.ctx.lineTo(g.W-g.padR,y); g.ctx.stroke();
-            g.ctx.setLineDash([]);
-            g.ctx.font='700 9px Manrope, sans-serif';
-            g.ctx.fillStyle = arriba ? 'rgba(242,54,69,.95)' : 'rgba(8,153,129,.95)';
-            g.ctx.textAlign='left';
-            g.ctx.fillText(`${cuenta} ${arriba ? 'máximos' : 'mínimos'} iguales · hay stops acá`, g.padL+6, y-5);
+            const ancho = (g.max-g.min)*0.004;
+            const y = zona(nivel-ancho, nivel+ancho, arriba?'242,54,69':'8,153,129', .22, false);
+            if(y == null) return;
+            icono(y, '⚡', arriba?'242,54,69':'8,153,129');
+            hallazgos.push({ico:'⚡', txt:`${cuenta} ${arriba?'máximos':'mínimos'} iguales`,
+              det:`En $${fmt(nivel)} hay stops acumulados. El precio suele ir a buscarlos antes de definir.`,
+              col: arriba?'242,54,69':'8,153,129'});
           };
           eq(st.eqHighs, st.eqHighsCount, true);
           eq(st.eqLows, st.eqLowsCount, false);
 
-          // ── ACUMULACIÓN / DISTRIBUCIÓN ──
-          // Son las trampas: rompe a la baja y recupera (acumulación) o al revés.
-          // La acumulación es un RANGO, no una línea: va de rangeLow a rangeHigh.
+          // ── ACUMULACIÓN / DISTRIBUCIÓN: el rango pintado ──
           const trampa = (t, esAcum) => {
             if(!t?.patternDetected || !t.rangeHigh || !t.rangeLow) return;
-            const y1 = g.yDe(t.rangeHigh), y2 = g.yDe(t.rangeLow);
-            if(y2 < g.padT || y1 > g.H - g.padB) return;
-            const rgb = esAcum ? '8,153,129' : '242,54,69';
-            g.ctx.fillStyle = `rgba(${rgb},.13)`;
-            g.ctx.fillRect(g.padL, y1, g.anchoG, y2-y1);
-            g.ctx.strokeStyle = `rgba(${rgb},.5)`; g.ctx.lineWidth=1; g.ctx.setLineDash([5,3]);
-            g.ctx.strokeRect(g.padL, y1, g.anchoG, y2-y1);
-            g.ctx.setLineDash([]);
-            g.ctx.font='700 9.5px Manrope, sans-serif'; g.ctx.fillStyle=`rgba(${rgb},.95)`;
-            g.ctx.textAlign='left';
-            g.ctx.fillText(esAcum ? '⬆ ACUMULACIÓN' : '⬇ DISTRIBUCIÓN', g.padL+6, y1+13);
+            const y = zona(t.rangeLow, t.rangeHigh, esAcum?'8,153,129':'242,54,69', .12, true);
+            if(y == null) return;
+            icono(y, esAcum?'🛒':'🛑', esAcum?'8,153,129':'242,54,69');
+            hallazgos.push({ico: esAcum?'🛒':'🛑', txt: esAcum?'Acumulación':'Distribución',
+              det: esAcum
+                ? `Entre $${fmt(t.rangeLow)} y $${fmt(t.rangeHigh)} el precio rompió a la baja y recuperó: es una trampa bajista.`
+                : `Entre $${fmt(t.rangeLow)} y $${fmt(t.rangeHigh)} el precio rompió al alza y cedió: es una trampa alcista.`,
+              col: esAcum?'8,153,129':'242,54,69'});
           };
           trampa(st.accBearTrap, true);
           trampa(st.distBullTrap, false);
@@ -3117,140 +3138,86 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             const esMuro = n.calidad === 'MURO';
             const arriba = n.distPct > 0;
             const rgb = esMuro ? '245,165,36' : (arriba ? '242,54,69' : '8,153,129');
-            const y1 = g.yDe(n.zonaHasta || n.precio*1.002);
-            const y2 = g.yDe(n.zonaDesde || n.precio*0.998);
-            g.ctx.fillStyle = `rgba(${rgb},${esMuro ? .18 : .10})`;
-            g.ctx.fillRect(g.padL, Math.min(y1,y2), g.anchoG, Math.abs(y2-y1));
-            g.ctx.strokeStyle = `rgba(${rgb},${esMuro ? .65 : .35})`;
-            g.ctx.lineWidth = esMuro ? 1.5 : 1;
-            g.ctx.setLineDash(esMuro ? [] : [4,3]);
-            g.ctx.beginPath();
-            g.ctx.moveTo(g.padL,y1); g.ctx.lineTo(g.W-g.padR,y1);
-            g.ctx.moveTo(g.padL,y2); g.ctx.lineTo(g.W-g.padR,y2);
-            g.ctx.stroke(); g.ctx.setLineDash([]);
-            g.ctx.font = esMuro ? '700 9.5px Manrope, sans-serif' : '500 9px Manrope, sans-serif';
-            g.ctx.fillStyle = `rgba(${rgb},.9)`; g.ctx.textAlign='right';
-            g.ctx.fillText(`${esMuro ? 'MURO' : ''} ${n.toques || 1} toques`.trim(), g.W-g.padR-6, (y1+y2)/2+3.5);
-            g.ctx.textAlign='left';
-          }
-
-          // ── FIBONACCI ──
-          // Los retrocesos del último impulso. El 0.618 es donde más entradas hay:
-          // es el nivel que más se mira en todo el mercado.
-          if(st.fib?.swingHigh && st.fib?.swingLow){
-            const niveles = [['l382', .382, 'rgba(168,180,192,.45)'],
-                             ['l5', .5, 'rgba(168,180,192,.55)'],
-                             ['l618', .618, 'rgba(245,165,36,.8)'],
-                             ['l786', .786, 'rgba(168,180,192,.45)']];
-            for(const [k, r, col] of niveles){
-              const val = st.fib[k];
-              if(!val) continue;
-              const y = g.yDe(val);
-              if(y < g.padT || y > g.H - g.padB) continue;
-              const esClave = k === 'l618';
-              g.ctx.strokeStyle = col; g.ctx.lineWidth = esClave ? 1.3 : 0.8;
-              g.ctx.setLineDash(esClave ? [] : [2,4]);
-              // Se dibujan solo en la mitad derecha, para no tapar las velas viejas
-              g.ctx.beginPath();
-              g.ctx.moveTo(g.padL + g.anchoG*0.5, y); g.ctx.lineTo(g.W-g.padR, y);
-              g.ctx.stroke(); g.ctx.setLineDash([]);
-              g.ctx.font = esClave ? '700 8.5px Manrope, sans-serif' : '500 8px Manrope, sans-serif';
-              g.ctx.fillStyle = col; g.ctx.textAlign='left';
-              g.ctx.fillText(`${(r*100).toFixed(1)}%${esClave ? ' ← el que más se mira' : ''}`,
-                g.padL + g.anchoG*0.5 + 4, y - 3);
+            const y = zona(n.zonaDesde || n.precio*0.998, n.zonaHasta || n.precio*1.002,
+                           rgb, esMuro ? .20 : .11, esMuro);
+            if(y == null) continue;
+            if(esMuro){
+              icono(y, '🧱', rgb);
+              hallazgos.push({ico:'🧱', txt:`Muro en $${fmt(n.precio)}`,
+                det:`${arriba?'+':''}${n.distPct}% · ${n.toques||1} toques. ${n.porque || 'Cuesta cruzarlo.'}`,
+                col: rgb});
             }
           }
 
-          // ── BOS / CHoCH ──
-          // El evento estructural: dónde se rompió lo que venía funcionando.
+          // ── BOS / CHoCH: una línea, sin etiqueta ──
           const ev = st.events || {};
           if(ev.bos || ev.choch){
             const nivel = ev.bos ? (ev.lastSwingHigh || ev.lastSwingLow) : (ev.lastSwingLow || ev.lastSwingHigh);
             if(nivel){
               const y = g.yDe(nivel);
-              if(y > g.padT && y < g.H - g.padB){
+              if(y > g.padT && y < g.H-g.padB){
                 const esChoch = !!ev.choch;
                 const rgb = esChoch ? '255,140,45' : '0,217,255';
-                g.ctx.strokeStyle = `rgba(${rgb},.85)`; g.ctx.lineWidth = 2;
-                g.ctx.beginPath(); g.ctx.moveTo(g.padL, y); g.ctx.lineTo(g.W-g.padR, y); g.ctx.stroke();
-                g.ctx.font = '700 9.5px Manrope, sans-serif';
-                const txt = esChoch ? 'CHoCH — cambió el carácter' : 'BOS — la estructura sigue';
-                const w = g.ctx.measureText(txt).width;
-                g.ctx.fillStyle = `rgba(${rgb},.95)`;
-                g.ctx.fillRect(g.padL, y-13, w+10, 13);
-                g.ctx.fillStyle = '#0a0c0f'; g.ctx.textAlign='left';
-                g.ctx.fillText(txt, g.padL+5, y-3.5);
+                g.ctx.strokeStyle = `rgba(${rgb},.8)`; g.ctx.lineWidth = 2;
+                g.ctx.beginPath(); g.ctx.moveTo(g.padL,y); g.ctx.lineTo(g.W-g.padR,y); g.ctx.stroke();
+                icono(y, esChoch?'🔄':'🎯', rgb);
+                hallazgos.push({ico: esChoch?'🔄':'🎯',
+                  txt: esChoch?'Cambio de carácter':'Ruptura de estructura',
+                  det: esChoch
+                    ? `El precio perdió $${fmt(nivel)}, que sostenía la estructura. Lo que venía funcionando dejó de hacerlo.`
+                    : `El precio superó $${fmt(nivel)}: la estructura vigente se confirma.`,
+                  col: rgb});
               }
             }
           }
 
-          // ── DOBLE TECHO / PISO ──
-          if(st.doubleTopBottom?.detected || st.doubleTopBottom?.tipo){
-            const d = st.doubleTopBottom;
-            const nivel = d.nivel || d.precio || d.level;
-            if(nivel){
-              const y = g.yDe(nivel);
-              if(y > g.padT && y < g.H - g.padB){
-                const esTecho = /techo|top/i.test(d.tipo || d.type || '');
-                const rgb = esTecho ? '242,54,69' : '8,153,129';
-                g.ctx.strokeStyle = `rgba(${rgb},.7)`; g.ctx.lineWidth = 1.5;
-                g.ctx.setLineDash([9,3]);
-                g.ctx.beginPath(); g.ctx.moveTo(g.padL, y); g.ctx.lineTo(g.W-g.padR, y);
-                g.ctx.stroke(); g.ctx.setLineDash([]);
-                g.ctx.font='700 9px Manrope, sans-serif'; g.ctx.fillStyle=`rgba(${rgb},.95)`;
-                g.ctx.textAlign='right';
-                g.ctx.fillText(esTecho ? 'DOBLE TECHO' : 'DOBLE PISO', g.W-g.padR-6, y-5);
-                g.ctx.textAlign='left';
-              }
-            }
-          }
-
-          // ── ORDER BLOCKS ──
-          // La última vela contraria antes de un impulso: ahí entró dinero institucional.
-          // El order block puede venir con distintos nombres de campo según cómo se armó
+          // ── ORDER BLOCKS: rectángulo a la derecha ──
           const ob = (o, esAlcista) => {
             const alto = o?.alto ?? o?.high ?? o?.top;
             const bajo = o?.bajo ?? o?.low ?? o?.bottom;
             if(!alto || !bajo) return;
             const y1 = g.yDe(alto), y2 = g.yDe(bajo);
-            if(y2 < g.padT || y1 > g.H - g.padB) return;
+            if(y2 < g.padT || y1 > g.H-g.padB) return;
             const rgb = esAlcista ? '8,153,129' : '242,54,69';
-            g.ctx.fillStyle = `rgba(${rgb},.20)`;
-            g.ctx.fillRect(g.W - g.padR - g.anchoG*0.42, y1, g.anchoG*0.42, y2-y1);
-            g.ctx.strokeStyle = `rgba(${rgb},.6)`; g.ctx.lineWidth=1;
-            g.ctx.strokeRect(g.W - g.padR - g.anchoG*0.42, y1, g.anchoG*0.42, y2-y1);
-            g.ctx.font='600 8.5px Manrope, sans-serif'; g.ctx.fillStyle=`rgba(${rgb},.95)`;
-            g.ctx.textAlign='left';
-            g.ctx.fillText('OB', g.W - g.padR - g.anchoG*0.42 + 4, y1+11);
+            const x = g.W - g.padR - g.anchoG*0.38;
+            g.ctx.fillStyle = `rgba(${rgb},.18)`;
+            g.ctx.fillRect(x, y1, g.anchoG*0.38, y2-y1);
+            g.ctx.strokeStyle = `rgba(${rgb},.5)`; g.ctx.lineWidth=1;
+            g.ctx.strokeRect(x, y1, g.anchoG*0.38, y2-y1);
+            hallazgos.push({ico:'🎯', txt:`Order block ${esAlcista?'alcista':'bajista'}`,
+              det:`Entre $${fmt(bajo)} y $${fmt(alto)}. Es la última vela contraria antes del impulso: ahí entró dinero grande.`,
+              col: rgb});
           };
           ob(st.bullishOB, true); ob(st.bearishOB, false);
 
           pintarVelas(g); lineaPrecio(g);
 
-          // ── LA RESPUESTA ──
+          // ── LAS TARJETAS: acá va toda la explicación ──
           const r1 = document.getElementById('liqCaminoResp');
-          const hallados = [];
-          if(tri) hallados.push(`un triángulo ${tri.tipo}`);
-          if(st.eqHighsCount >= 2) hallados.push(`${st.eqHighsCount} máximos iguales`);
-          if(st.eqLowsCount >= 2) hallados.push(`${st.eqLowsCount} mínimos iguales`);
-          if(st.accBearTrap?.patternDetected) hallados.push('una acumulación');
-          if(st.distBullTrap?.patternDetected) hallados.push('una distribución');
-          if(ev.choch) hallados.push('un cambio de carácter (CHoCH)');
-          else if(ev.bos) hallados.push('una ruptura de estructura (BOS)');
-          if(st.doubleTopBottom?.detected || st.doubleTopBottom?.tipo) hallados.push('un doble techo/piso');
-          if(st.liquiditySweep?.sweptUp) hallados.push('un barrido de máximos');
-          if(st.liquiditySweep?.sweptDown) hallados.push('un barrido de mínimos');
-          const hay = hallados.length > 0;
-          r1.style.background = hay ? 'rgba(0,217,255,.10)' : 'rgba(255,255,255,.04)';
-          r1.style.border = `1px solid ${hay ? 'rgba(0,217,255,.28)' : 'var(--border)'}`;
-          r1.innerHTML = `<span style="font-size:15px;flex-shrink:0;">${hay ? '◆' : '○'}</span>
-            <span>${hay
-              ? `En el gráfico hay ${hallados.join(', ')}. Están marcados abajo.`
-              : 'Sin patrones claros en este marco: el precio se mueve sin estructura definida.'}</span>`;
+          if(hallazgos.length){
+            r1.style.background = 'transparent'; r1.style.border = 'none';
+            r1.style.padding = '0'; r1.style.display = 'block';
+            r1.innerHTML = hallazgos.map(h2 => `
+              <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 11px;
+                background:rgba(${h2.col},.08);border-left:2px solid rgba(${h2.col},.6);
+                border-radius:0 7px 7px 0;margin-bottom:6px;">
+                <span style="font-size:14px;flex-shrink:0;line-height:1.3;">${h2.ico}</span>
+                <span style="flex:1;">
+                  <b style="color:rgb(${h2.col});font-size:12px;">${h2.txt}</b>
+                  <div style="font-size:11.5px;color:#a8b4c0;line-height:1.45;margin-top:2px;">${h2.det}</div>
+                </span>
+              </div>`).join('');
+          } else {
+            r1.style.background = 'rgba(255,255,255,.04)';
+            r1.style.border = '1px solid var(--border)';
+            r1.style.display = 'flex';
+            r1.innerHTML = `<span style="font-size:15px;">○</span>
+              <span>Sin patrones claros en este marco: el precio se mueve sin estructura definida.</span>`;
+          }
 
           document.getElementById('liqHeatLeyenda').innerHTML = [
-            ['rgba(0,217,255,.6)','Triángulo'],['rgba(242,54,69,.6)','Niveles arriba'],
-            ['rgba(8,153,129,.6)','Niveles abajo'],['rgba(245,165,36,.7)','Muro'],
+            ['rgba(242,54,69,.4)','Resistencia'],['rgba(8,153,129,.4)','Soporte'],
+            ['rgba(245,165,36,.5)','Muro'],['rgba(0,217,255,.4)','Compresión'],
           ].map(([c2,t]) => `<span style="display:flex;align-items:center;gap:5px;">
             <i style="width:12px;height:11px;border-radius:2px;display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
         }
@@ -3281,22 +3248,40 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
           // Las zonas que cambian, como bandas. El degradado indica la dirección:
           // más intenso a la derecha si se acumula, a la izquierda si se retira.
-          const banda = (p2, rgb, txt, creciendo) => {
+          // La banda, sin texto encima: solo el degradado que indica la dirección
+          // (más intenso a la derecha si crece, a la izquierda si se retira) y un ícono.
+          const hallazgos2 = [];
+          const banda = (p2, rgb, ico, creciendo) => {
             const alto = (g.max-g.min)*0.012;
             const y1 = g.yDe(p2+alto), y2 = g.yDe(p2-alto);
+            if(y2 < g.padT || y1 > g.H-g.padB) return;
             const gr = g.ctx.createLinearGradient(g.padL,0,g.W-g.padR,0);
-            if(creciendo){ gr.addColorStop(0,`rgba(${rgb},.03)`); gr.addColorStop(1,`rgba(${rgb},.34)`); }
-            else { gr.addColorStop(0,`rgba(${rgb},.30)`); gr.addColorStop(1,`rgba(${rgb},.03)`); }
+            if(creciendo){ gr.addColorStop(0,`rgba(${rgb},.03)`); gr.addColorStop(1,`rgba(${rgb},.32)`); }
+            else { gr.addColorStop(0,`rgba(${rgb},.28)`); gr.addColorStop(1,`rgba(${rgb},.03)`); }
             g.ctx.fillStyle=gr; g.ctx.fillRect(g.padL, Math.min(y1,y2), g.anchoG, Math.abs(y2-y1));
-            g.ctx.strokeStyle=`rgba(${rgb},.55)`; g.ctx.lineWidth=1; g.ctx.setLineDash([3,3]);
-            g.ctx.beginPath(); g.ctx.moveTo(g.padL,(y1+y2)/2); g.ctx.lineTo(g.W-g.padR,(y1+y2)/2);
-            g.ctx.stroke(); g.ctx.setLineDash([]);
-            g.ctx.font='700 9.5px Manrope, sans-serif'; g.ctx.fillStyle=`rgba(${rgb},.95)`;
-            g.ctx.textAlign='left'; g.ctx.fillText(txt, g.padL+7, (y1+y2)/2+3.5);
+            const ym = (y1+y2)/2;
+            // El ícono en el borde, como una pestaña
+            g.ctx.fillStyle = `rgba(${rgb},.9)`;
+            g.ctx.beginPath();
+            if(g.ctx.roundRect) g.ctx.roundRect(g.padL, ym-8, 17, 16, 3);
+            else g.ctx.rect(g.padL, ym-8, 17, 16);
+            g.ctx.fill();
+            g.ctx.font='10px Manrope, sans-serif'; g.ctx.textAlign='center';
+            g.ctx.fillText(ico, g.padL+8.5, ym+4); g.ctx.textAlign='left';
           };
           const a1 = mc.armandose?.[0], d1 = mc.disolviendose?.[0];
-          if(a1) banda(a1.precio, '245,165,36', '▲ se acumula liquidez acá', true);
-          if(d1) banda(d1.precio, '150,165,180', '▽ se está retirando', false);
+          if(a1){
+            banda(a1.precio, '245,165,36', '🧲', true);
+            hallazgos2.push({ico:'🧲', txt:`Se acumula liquidez en $${fmt(a1.precio)}`,
+              det:`${a1.distPct>0?'+':''}${a1.distPct}% del precio actual. La densidad viene creciendo: el precio tiende a ir a buscar donde se acumula.`,
+              col:'245,165,36'});
+          }
+          if(d1){
+            banda(d1.precio, '150,165,180', '💨', false);
+            hallazgos2.push({ico:'💨', txt:`Se retira liquidez de $${fmt(d1.precio)}`,
+              det:`${d1.distPct>0?'+':''}${d1.distPct}% del precio actual. Ese nivel está perdiendo defensa: cada vez es más fácil de cruzar.`,
+              col:'150,165,180'});
+          }
 
           // ── DÓNDE ALGUIEN ESPERA ──
           // La divergencia es lo más valioso del mapa temporal: la liquidez crece en un
@@ -3309,13 +3294,17 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             g.ctx.setLineDash([6,3]);
             g.ctx.beginPath(); g.ctx.moveTo(g.padL, y); g.ctx.lineTo(g.W-g.padR, y);
             g.ctx.stroke(); g.ctx.setLineDash([]);
-            g.ctx.font = '700 9px Manrope, sans-serif';
-            const txt = '◎ alguien espera acá';
-            const w = g.ctx.measureText(txt).width;
+            // Ícono en el borde, sin texto sobre las velas
             g.ctx.fillStyle = 'rgba(180,120,255,.9)';
-            g.ctx.fillRect(g.W-g.padR-w-10, y-13, w+10, 13);
-            g.ctx.fillStyle = '#0a0c0f'; g.ctx.textAlign='left';
-            g.ctx.fillText(txt, g.W-g.padR-w-5, y-3.5);
+            g.ctx.beginPath();
+            if(g.ctx.roundRect) g.ctx.roundRect(g.padL, y-8, 17, 16, 3);
+            else g.ctx.rect(g.padL, y-8, 17, 16);
+            g.ctx.fill();
+            g.ctx.font='10px Manrope, sans-serif'; g.ctx.textAlign='center';
+            g.ctx.fillText('🛒', g.padL+8.5, y+4); g.ctx.textAlign='left';
+            hallazgos2.push({ico:'🛒', txt:`Órdenes esperando en $${fmt(dv.precio)}`,
+              det:`${dv.distPct>0?'+':''}${dv.distPct}% del precio. La liquidez creció ahí aunque el precio ya se alejó: alguien está esperando ese nivel.`,
+              col:'180,120,255'});
           }
 
           // ── LIQUIDACIONES ACUMULADAS ──
@@ -3331,24 +3320,34 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
           pintarVelas(g); lineaPrecio(g);
 
+          // Las explicaciones van en tarjetas debajo del gráfico, no encima de las velas
           const r2 = document.getElementById('liqCalorResp');
-          r2.style.background = 'rgba(245,165,36,.11)';
-          r2.style.border = '1px solid rgba(245,165,36,.28)';
-          const N = v => `<b style="font-family:'JetBrains Mono',monospace;">${v}</b>`;
-          const dv1 = (mc.divergencias || [])[0];
-          r2.innerHTML = `<span style="font-size:15px;flex-shrink:0;">${a1 ? '↑' : d1 ? '↓' : '◆'}</span>
-            <span>${
-              a1 && d1 ? `La liquidez se acumula en ${N(fmt(a1.precio))} (${a1.distPct>0?'+':''}${a1.distPct}%) y se retira de ${N(fmt(d1.precio))} (${d1.distPct>0?'+':''}${d1.distPct}%). El precio tiende a buscar donde se acumula.`
-              : a1 ? `La liquidez se acumula en ${N(fmt(a1.precio))} (${a1.distPct>0?'+':''}${a1.distPct}%). El precio tiende a buscar esos niveles.`
-              : d1 ? `Se retira liquidez de ${N(fmt(d1.precio))} (${d1.distPct>0?'+':''}${d1.distPct}%): ese nivel pierde defensa.`
-              : 'La liquidez se mantiene estable en las últimas 24 horas.'
-            }${dv1 ? ` Además, se acumulan órdenes en ${N(fmt(dv1.precio))} (${dv1.distPct>0?'+':''}${dv1.distPct}%) aunque el precio ya se alejó de ahí: alguien está esperando ese nivel.` : ''}</span>`;
+          if(hallazgos2.length){
+            r2.style.background='transparent'; r2.style.border='none';
+            r2.style.padding='0'; r2.style.display='block';
+            r2.innerHTML = hallazgos2.map(h2 => `
+              <div style="display:flex;gap:10px;align-items:flex-start;padding:9px 11px;
+                background:rgba(${h2.col},.08);border-left:2px solid rgba(${h2.col},.6);
+                border-radius:0 7px 7px 0;margin-bottom:6px;">
+                <span style="font-size:14px;flex-shrink:0;line-height:1.3;">${h2.ico}</span>
+                <span style="flex:1;">
+                  <b style="color:rgb(${h2.col});font-size:12px;">${h2.txt}</b>
+                  <div style="font-size:11.5px;color:#a8b4c0;line-height:1.45;margin-top:2px;">${h2.det}</div>
+                </span>
+              </div>`).join('');
+          } else {
+            r2.style.background='rgba(255,255,255,.04)';
+            r2.style.border='1px solid var(--border)';
+            r2.style.display='flex';
+            r2.innerHTML = `<span style="font-size:15px;">○</span>
+              <span>La liquidez se mantiene estable en las últimas 24 horas.</span>`;
+          }
 
           document.getElementById('liqCalorLeg').innerHTML = [
             ['rgba(245,165,36,.4)','Se acumula','z'],['rgba(120,135,150,.3)','Se retira','z'],
-            ['rgba(180,120,255,.8)','Alguien espera','l'],
-            ['rgba(255,140,45,.6)','Liquidaciones','l'],
-            ['rgba(255,255,255,.5)','Volumen','l'],
+            ['rgba(180,120,255,.6)','Órdenes esperando','z'],
+            ['rgba(255,140,45,.5)','Liquidaciones','z'],
+            ['rgba(255,255,255,.4)','Volumen','z'],
           ].map(([c2,t,f2]) => `<span style="display:flex;align-items:center;gap:5px;">
             <i style="width:${f2==='z'?'12px':'14px'};height:${f2==='z'?'11px':'3px'};border-radius:2px;
               display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
