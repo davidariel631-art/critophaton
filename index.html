@@ -1132,6 +1132,9 @@
     .then(m => Object.assign(window, m))
     .catch(() => console.warn('wallet-intelligence.js no disponible: el panel de wallets no se mostrará.'));
   window.TheHatonEngine = TheHatonEngine;
+// El formateador del motor se expone globalmente: lo usan los 76 lugares del archivo
+// que llaman a fmt(). Sin esto, cada uno tira ReferenceError.
+window.fmt = TheHatonEngine.fmt || TheHatonEngine.fmtPrecio;
 
   // Memoria compartida: la misma que actualiza el bot (única fuente de verdad para toda la plataforma)
   const SHARED_STATE_URL = 'https://raw.githubusercontent.com/davidariel631-art/critophaton/main/telegram-bot/state.json';
@@ -3010,17 +3013,23 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         // mapa quedaba vacío y se veía roto. Ahora la escala arranca en un azul muy oscuro
         // pero visible, así el mapa es una superficie continua donde la densidad se lee por
         // el color, no por si hay celda o no.
+        // ═══ ESCALA CONTINUA ═══
+        // Interpolación entre paradas de color en vez de saltos discretos: el degradado
+        // es suave y no se ven bandas. Todas las celdas se pintan.
+        const paradas = [[0,26,42,66],[.22,26,58,92],[.42,13,143,168],[.60,10,175,150],
+                         [.76,120,190,80],[.88,220,175,55],[1,245,140,45]];
         const calor = (d) => {
-          const t = Math.pow(Math.max(0, Math.min(1, d)), 0.55);
-          if(t < 0.10) return `rgba(16,26,44,.92)`;
-          if(t < 0.22) return `rgba(22,44,84,${0.9 + t*0.1})`;
-          if(t < 0.36) return `rgba(24,74,132,${0.9 + t*0.1})`;
-          if(t < 0.50) return `rgba(0,120,180,${0.9 + t*0.1})`;
-          if(t < 0.64) return `rgba(0,180,175,${0.92 + t*0.08})`;
-          if(t < 0.77) return `rgba(105,205,105,${0.93 + t*0.07})`;
-          if(t < 0.88) return `rgba(240,195,60,${0.94 + t*0.06})`;
-          return `rgba(255,140,45,${0.96 + t*0.04})`;
+          const t = Math.max(0, Math.min(1, Math.pow(d, 0.62)));
+          for(let i = 1; i < paradas.length; i++){
+            if(t <= paradas[i][0]){
+              const a = paradas[i-1], b = paradas[i];
+              const f = (t - a[0]) / (b[0] - a[0] || 1);
+              return `rgb(${Math.round(a[1]+(b[1]-a[1])*f)},${Math.round(a[2]+(b[2]-a[2])*f)},${Math.round(a[3]+(b[3]-a[3])*f)})`;
+            }
+          }
+          return 'rgb(245,140,45)';
         };
+
 
         // Las celdas
         // Cada celda con una separación de 1px y esquinas redondeadas: eso es lo que
@@ -3068,20 +3077,17 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             k === 0 ? ctx.moveTo(x, yP2(r.precio)) : ctx.lineTo(x, yP2(r.precio));
           });
           // Más fina y tenue: es una referencia, no el protagonista
-          ctx.save();
-          ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 7;
-          ctx.strokeStyle = 'rgba(255,255,255,.96)'; ctx.lineWidth = 2.2;
+          // Línea plana, sin sombra: estilo limpio
+          ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 2;
           ctx.lineJoin = 'round'; ctx.lineCap = 'round';
           ctx.stroke();
-          ctx.restore();
           // El punto final con resplandor: marca dónde está el precio ahora
           const ptX = (mc.recorrido.at(-1).col + 0.5) * wCol;
           const ptY = yP2(mc.recorrido.at(-1).precio);
-          ctx.save();
-          ctx.shadowColor = 'rgba(255,255,255,.7)'; ctx.shadowBlur = 10;
+          ctx.fillStyle = '#0a0c0f';
+          ctx.beginPath(); ctx.arc(Math.min(ptX, anchoMapa-6), ptY, 4.5, 0, Math.PI*2); ctx.fill();
           ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(ptX, ptY, 4, 0, Math.PI*2); ctx.fill();
-          ctx.restore();
+          ctx.beginPath(); ctx.arc(Math.min(ptX, anchoMapa-6), ptY, 3, 0, Math.PI*2); ctx.fill();
         }
 
         // El precio actual
@@ -3267,7 +3273,8 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const alcance = 8, padY = 18;
         const yDe = (pct) => H/2 - (Math.max(-alcance, Math.min(alcance, pct))/alcance) * (H/2 - padY);
         const cx = W * 0.38;
-        const anchoMax = W - cx - 58;
+        // El área de barras termina antes del badge del precio: nunca se superponen
+        const anchoMax = W - cx - 96;
         const pctDe = (precio) => (precio - data.price) / data.price * 100;
 
         // Las variables del estado táctil viven afuera del dibujo, porque se redibuja
@@ -3278,19 +3285,15 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
 
         function dibujarTodo(){
           ctx.clearRect(0, 0, W, H);
-          // ═══ FONDO CON TEMPERATURA ═══
-          // Rojo degradando desde arriba, verde desde abajo. El color se percibe antes que
-          // cualquier etiqueta: se ve de un golpe qué mitad es cada cosa.
+          // ═══ FONDO PLANO ═══
+          // Tinte sutil en cada mitad, sin degradados pesados: estilo fintech limpio.
           const yPfondo = yDe(0);
-          let gf = ctx.createLinearGradient(0, 0, 0, yPfondo);
-          gf.addColorStop(0, 'rgba(60,14,20,.55)'); gf.addColorStop(1, 'rgba(10,11,13,1)');
-          ctx.fillStyle = gf; ctx.fillRect(0, 0, W, yPfondo);
-          gf = ctx.createLinearGradient(0, yPfondo, 0, H);
-          gf.addColorStop(0, 'rgba(10,11,13,1)'); gf.addColorStop(1, 'rgba(6,42,32,.55)');
-          ctx.fillStyle = gf; ctx.fillRect(0, yPfondo, W, H - yPfondo);
-          ctx.font = '700 9px Manrope, sans-serif'; ctx.textAlign = 'left';
-          ctx.fillStyle = 'rgba(239,68,68,.6)'; ctx.fillText('SI SUBE ↑', 5, 13);
-          ctx.fillStyle = 'rgba(16,185,129,.6)'; ctx.fillText('SI BAJA ↓', 5, H - 6);
+          ctx.fillStyle = 'rgba(242,54,69,.045)'; ctx.fillRect(0, 0, W, yPfondo);
+          ctx.fillStyle = 'rgba(8,153,129,.045)'; ctx.fillRect(0, yPfondo, W, H - yPfondo);
+          // Rótulos con contraste WCAG: 8.7:1 y 10.3:1 contra el fondo (antes 2.4:1)
+          ctx.font = '600 10px Manrope, sans-serif'; ctx.textAlign = 'left';
+          ctx.fillStyle = '#ff8a95'; ctx.fillText('SI SUBE ↑', 5, 15);
+          ctx.fillStyle = '#4fd1a5'; ctx.fillText('SI BAJA ↓', 5, H - 8);
 
           // Retícula de referencia, apenas perceptible
           ctx.strokeStyle = 'rgba(255,255,255,.035)'; ctx.lineWidth = 0.5;
@@ -3377,38 +3380,22 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
             const altoZona = Math.max(elegido ? 7 : 4, Math.abs(yBot - yTop));
             const yZona = Math.min(yTop, yBot);
 
-            // ═══ CÁPSULA CON VOLUMEN ═══
-            // Sombra de color debajo, degradado vertical y un reflejo arriba. Antes eran
-            // rectángulos planos que se confundían con el fondo.
-            const rgbBar = col.replace('#','');
-            const R = parseInt(rgbBar.slice(0,2),16), G2 = parseInt(rgbBar.slice(2,4),16), B = parseInt(rgbBar.slice(4,6),16);
-            const alt2 = Math.max(altoZona, elegido ? 16 : 12);
-            ctx.save();
-            ctx.shadowColor = `rgba(${R},${G2},${B},${elegido ? .55 : .28})`;
-            ctx.shadowBlur = elegido ? 16 : 9; ctx.shadowOffsetY = 1;
-            const g = ctx.createLinearGradient(cx, yZona, cx, yZona + alt2);
-            g.addColorStop(0, `rgba(${R},${G2},${B},${elegido ? 1 : .85})`);
-            g.addColorStop(1, `rgba(${R},${G2},${B},${elegido ? .7 : .5})`);
-            ctx.fillStyle = g;
+            // ═══ BARRA PLANA ═══
+            // Rectángulo de 6px de radio, color sólido, sin glow ni degradados.
+            // El seleccionado se marca con borde, no con resplandor.
+            const alt2 = Math.max(altoZona, n.calidad === 'MURO' ? 22 : n.calidad === 'sólido' ? 18 : 14);
+            ctx.globalAlpha = elegido ? 0.95 : 0.68;
+            ctx.fillStyle = col;
             ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, alt2/2);
-            else ctx.rect(cx, yZona, w, alt2);
+            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, 6); else ctx.rect(cx, yZona, w, alt2);
             ctx.fill();
-            ctx.restore();
-            // Desvanecido hacia la derecha
-            const fade = ctx.createLinearGradient(cx + w*0.45, 0, cx + w, 0);
-            fade.addColorStop(0, 'rgba(0,0,0,0)');
-            fade.addColorStop(1, 'rgba(8,10,12,.75)');
-            ctx.fillStyle = fade;
-            ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, alt2/2); else ctx.rect(cx, yZona, w, alt2);
-            ctx.fill();
-            // Reflejo superior
-            ctx.fillStyle = 'rgba(255,255,255,.22)';
-            ctx.beginPath();
-            if(ctx.roundRect) ctx.roundRect(cx+2, yZona+1.5, Math.max(0,w-4), 1.5, 1);
-            else ctx.rect(cx+2, yZona+1.5, Math.max(0,w-4), 1.5);
-            ctx.fill();
+            ctx.globalAlpha = 1;
+            if(elegido){
+              ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(cx, yZona, w, alt2, 6); else ctx.rect(cx, yZona, w, alt2);
+              ctx.stroke();
+            }
 
             // Un borde fino marca los límites exactos de la zona
             if(altoZona > 5){
@@ -3476,21 +3463,26 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           }
 
           // ── EL PRECIO ──
+          // ═══ EL PRECIO SIN SUPERPONERSE ═══
+          // La línea se corta ANTES del badge en vez de atravesarlo. Ese cruce era lo que
+          // hacía ver el gráfico desordenado.
           const yP = yDe(0);
-          // La línea del precio con halo: es la referencia de todo y tiene que destacarse
-          // sobre las zonas sin taparlas.
-          ctx.save();
-          ctx.shadowColor = 'rgba(255,255,255,.5)'; ctx.shadowBlur = 6;
-          ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1.2;
-          ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(W, yP); ctx.stroke();
-          ctx.restore();
-          // El punto del precio, con anillo
-          ctx.fillStyle = '#0d0d0d';
-          ctx.beginPath(); ctx.arc(cx, yP, 5, 0, Math.PI*2); ctx.fill();
-          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6;
-          ctx.beginPath(); ctx.arc(cx, yP, 4, 0, Math.PI*2); ctx.stroke();
-          ctx.fillStyle = '#fff';
-          ctx.beginPath(); ctx.arc(cx, yP, 1.6, 0, Math.PI*2); ctx.fill();
+          const etPrecio = '$' + fmt(data.price);
+          ctx.font = '700 12px Manrope, sans-serif';
+          const wEtP = ctx.measureText(etPrecio).width;
+          const xBadge = W - 34 - wEtP - 20;
+          ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1;
+          ctx.setLineDash([4,3]);
+          ctx.beginPath(); ctx.moveTo(0, yP); ctx.lineTo(xBadge - 8, yP); ctx.stroke();
+          ctx.setLineDash([]);
+          // Badge sólido, sin sombra
+          ctx.fillStyle = '#eef3f8';
+          ctx.beginPath();
+          if(ctx.roundRect) ctx.roundRect(xBadge, yP-11, wEtP+16, 22, 5);
+          else ctx.rect(xBadge, yP-11, wEtP+16, 22);
+          ctx.fill();
+          ctx.fillStyle = '#0a0c0f'; ctx.textAlign = 'left';
+          ctx.fillText(etPrecio, xBadge+8, yP+4);
           ctx.font = '800 11px Manrope, sans-serif'; ctx.textAlign = 'right';
           ctx.fillText('$' + fmt(data.price), cx - 8, yP + 3.5);
           ctx.textAlign = 'left';
