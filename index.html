@@ -872,20 +872,24 @@
              respaldo de esa frase, no el trabajo que tiene que hacer quien lo mira. -->
         <div id="liqHeatWrap" style="display:none;margin-top:16px;">
           <div style="font-family:var(--display);font-size:14px;font-weight:800;">🔥 Evolución de la liquidez</div>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px;">¿Se está armando o disolviendo liquidez, y dónde?</div>
+          <div style="font-size:11.5px;color:#a8b4c0;margin-top:3px;line-height:1.4;">¿Se está armando o disolviendo liquidez, y dónde?</div>
           <div id="liqCalorResp" style="display:flex;align-items:center;gap:9px;padding:11px 13px;
             border-radius:10px;margin:11px 0 12px;"></div>
-          <canvas id="liqCalorCanvas" style="width:100%;height:320px;display:block;border-radius:8px;cursor:crosshair;"></canvas>
+          <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#0a0c0f;">
+            <canvas id="liqCalorCanvas" style="width:100%;height:320px;display:block;cursor:crosshair;"></canvas>
+          </div>
           <div id="liqCalorNota" style="background:var(--panel2);border:1px solid var(--border);
             border-radius:10px;padding:11px 13px;margin-top:10px;min-height:22px;"></div>
           <div style="font-size:10px;color:var(--sub);text-align:center;margin-top:7px;opacity:.6;">tocá cualquier altura para ver ese precio</div>
           <div id="liqCalorLeg" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:11px;font-size:10px;color:var(--sub);"></div>
 
           <div style="margin-top:22px;font-family:var(--display);font-size:14px;font-weight:800;">🧱 Camino</div>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px;">¿Qué se va a encontrar el precio si sube o si baja?</div>
+          <div style="font-size:11.5px;color:#a8b4c0;margin-top:3px;line-height:1.4;">¿Qué se va a encontrar el precio si sube o si baja?</div>
           <div id="liqCaminoResp" style="display:flex;align-items:center;gap:9px;padding:11px 13px;
             border-radius:10px;margin:11px 0 12px;"></div>
-          <canvas id="liqHeatCanvas" style="width:100%;height:330px;display:block;border-radius:8px;cursor:pointer;"></canvas>
+          <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#0a0c0f;">
+            <canvas id="liqHeatCanvas" style="width:100%;height:330px;display:block;cursor:pointer;"></canvas>
+          </div>
           <div id="liqHeatDetalle" style="display:none;background:var(--panel2);border:1px solid var(--border);
             border-radius:10px;padding:11px 13px;margin-top:10px;"></div>
           <div style="font-size:10px;color:var(--sub);text-align:center;margin-top:7px;opacity:.6;">tocá una barra para ver el detalle</div>
@@ -3164,7 +3168,9 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
           const e = mc.evolucion[fil];
           if(!e) return;
           const dens = mc.rejilla.at(-1)[fil];
-          const col2 = e.distPct > 0 ? 'var(--rose)' : 'var(--teal)';
+          // Convención de trading: verde para arriba, rojo para abajo. Antes un nivel a
+          // +5.84% salía en rojo y se leía como pérdida.
+          const col2 = e.distPct > 0 ? 'var(--teal)' : 'var(--rose)';
           const est = e.estado === 'armándose' ? '<span style="color:var(--amber)">▲ armándose</span>'
                     : e.estado === 'disolviéndose' ? '<span style="color:var(--sub)">▽ disolviéndose</span>'
                     : e.estado === 'estable' ? 'estable' : 'sin actividad';
@@ -3197,27 +3203,46 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         if(rc){
           const a1 = mc.armandose?.[0], d1 = mc.disolviendose?.[0];
           const hay = a1 || d1;
-          rc.style.background = hay ? 'rgba(255,176,32,.09)' : 'rgba(255,255,255,.04)';
-          rc.style.border = `1px solid ${hay ? 'rgba(255,176,32,.25)' : 'var(--border)'}`;
-          const partes = [];
-          if(a1) partes.push(`se está <b>armando</b> liquidez a <b>${a1.distPct > 0 ? '+' : ''}${a1.distPct}%</b>`);
-          if(d1) partes.push(`<b>disolviendo</b> a <b>${d1.distPct > 0 ? '+' : ''}${d1.distPct}%</b>`);
+          // ═══ EL ÍCONO INDICA DÓNDE, NO QUÉ ═══
+          // Antes ▲ significaba "se está armando" pero se leía como "el precio sube".
+          // Con un nivel a −5.21% el ▲ contradecía al número. Ahora la flecha apunta a
+          // DÓNDE está el nivel, que es lo que el ojo espera.
+          const principal = a1 || d1;
+          const haciaArriba = principal && principal.distPct > 0;
+          const esArmar = !!a1;
+          rc.style.background = hay ? 'rgba(255,176,32,.10)' : 'rgba(255,255,255,.04)';
+          rc.style.border = `1px solid ${hay ? 'rgba(255,176,32,.28)' : 'var(--border)'}`;
+
+          // Redacción directa: qué pasa, cuánto y dónde
+          let texto;
+          if(a1 && d1){
+            texto = `Se acumula liquidez en <b>$${fmt(a1.precio)}</b> (${a1.distPct > 0 ? '+' : ''}${a1.distPct}%) ` +
+                    `y se retira de <b>$${fmt(d1.precio)}</b> (${d1.distPct > 0 ? '+' : ''}${d1.distPct}%).`;
+          } else if(a1){
+            texto = `La liquidez se concentra hacia <b>$${fmt(a1.precio)}</b> (${a1.distPct > 0 ? '+' : ''}${a1.distPct}%). ` +
+                    `El precio tiende a buscar esos niveles.`;
+          } else if(d1){
+            texto = `Se retira liquidez de <b>$${fmt(d1.precio)}</b> (${d1.distPct > 0 ? '+' : ''}${d1.distPct}%): ` +
+                    `ese nivel pierde defensa.`;
+          } else {
+            texto = 'La liquidez se mantiene estable en las últimas 24 horas.';
+          }
           rc.innerHTML = `
-            <span style="font-size:17px;line-height:1;">${a1 ? '▲' : d1 ? '▽' : '◆'}</span>
-            <span style="font-size:12.5px;line-height:1.45;flex:1;">${
-              partes.length
-                ? partes.join(' y ').replace(/^./, m => m.toUpperCase()) +
-                  '. El precio tiende a ir hacia donde se acumula.'
-                : 'La liquidez se mantiene estable en las últimas 24 horas.'
-            }</span>`;
+            <span style="font-size:16px;line-height:1;flex-shrink:0;color:${
+              !hay ? 'var(--sub)' : haciaArriba ? '#F23645' : '#089981'};">${
+              !hay ? '◆' : haciaArriba ? '↑' : '↓'}</span>
+            <span style="font-size:12px;line-height:1.45;flex:1;">${texto}</span>`;
         }
         // La leyenda de colores, aparte
         const lc = document.getElementById('liqCalorLeg');
+        // La muestra del precio es una LÍNEA, igual que en el gráfico. Antes era una caja
+        // blanca que no se parecía a lo que dibuja.
         if(lc) lc.innerHTML = [
-          ['rgba(14,60,120,.9)','Poca'],['rgba(30,195,140,.9)','Media'],
-          ['rgba(255,130,40,.95)','Mucha'],['#fff','Precio'],
-        ].map(([c2,t]) => `<span style="display:flex;align-items:center;gap:4px;">
-          <i style="width:9px;height:9px;border-radius:2px;display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
+          ['rgba(14,60,120,.9)','Poca','caja'],['rgba(30,195,140,.9)','Media','caja'],
+          ['rgba(255,130,40,.95)','Mucha','caja'],['#fff','Precio','linea'],
+        ].map(([c2,t,forma]) => `<span style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+          <i style="width:${forma==='linea'?'16px':'10px'};height:${forma==='linea'?'2px':'10px'};
+            border-radius:${forma==='linea'?'1px':'2px'};display:inline-block;background:${c2}"></i> ${t}</span>`).join('');
 
         // ═══ EL ESTADO, SIN FRASES ═══
         // Dos indicadores: cuántos niveles se arman y cuántos se disuelven, con su distancia.
@@ -3510,7 +3535,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         const mostrarDetalle = (n) => {
           if(!n){ det.style.display = 'none'; return; }
           const arriba = n.distPct > 0;
-          const col = arriba ? 'var(--rose)' : 'var(--teal)';
+          const col = arriba ? 'var(--teal)' : 'var(--rose)';
           // ═══ SIN FRASES: iconos, barras y números ═══
           // El origen como icono, la fuerza como barra, la tendencia como flecha.
           const icoOrigen = n.zonaLiquidacion ? '💥' : n.origen?.includes('libro') ? '📖' : '📊';
@@ -3658,7 +3683,7 @@ document.getElementById('liqGoBtn').addEventListener('click', async ()=>{
         };
         const fila = (n) => {
           const arriba = n.distPct > 0;
-          const col = arriba ? 'var(--rose)' : 'var(--teal)';
+          const col = arriba ? 'var(--teal)' : 'var(--rose)';
           const marcos = ['15m','1h','4h','1d','1mo'].map(t =>
             `<span style="display:inline-block;width:5px;height:5px;border-radius:99px;margin-right:2px;
               background:${n.tfs.includes(t) ? col : 'rgba(255,255,255,.12)'};"></span>`).join('');
