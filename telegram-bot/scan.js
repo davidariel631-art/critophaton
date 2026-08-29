@@ -3267,6 +3267,59 @@ async function main(){
   try{
     const est = estadoWalletIntelligence('eth');
     console.log('');
+    // ═══ CÓMO CERRÓ EL MERCADO DESPUÉS DEL DATO MACRO ═══
+    // El calendario avisaba antes del evento y se olvidaba. Pero lo que importa es cómo
+    // REACCIONÓ el mercado: la Fed puede subir tasas y el mercado subir igual. Este reporte
+    // sale una sola vez por evento, entre 2 y 14 horas después.
+    try{
+      const cal = calendarioMacro();
+      const ev = cal?.recienPasado;
+      if(ev){
+        const claveEv = `postmacro:${ev.fecha}:${ev.nombre}`;
+        if(!state.eventosReportados) state.eventosReportados = {};
+        if(!state.eventosReportados[claveEv]){
+          const btc = await fetchTokenData('BTC', '1h').catch(()=>null);
+          if(btc?.candles?.length >= 14){
+            // Se compara el precio de ahora contra el de justo antes del evento
+            const horasDesde = Math.abs(ev.horas);
+            const idxAntes = Math.max(0, btc.candles.length - 1 - Math.round(horasDesde));
+            const antes = btc.candles[idxAntes].c;
+            const ahora = btc.candles.at(-1).c;
+            const cambio = (ahora - antes) / antes * 100;
+            const maxDesde = Math.max(...btc.candles.slice(idxAntes).map(v => v.h));
+            const minDesde = Math.min(...btc.candles.slice(idxAntes).map(v => v.l));
+            const rango = (maxDesde - minDesde) / antes * 100;
+
+            const signo = cambio >= 0 ? '🟢' : '🔴';
+            const dir = cambio >= 0 ? 'POSITIVO' : 'NEGATIVO';
+            const lectura = Math.abs(cambio) < 0.4
+              ? 'El mercado casi no se movió: el dato salió en línea con lo esperado.'
+              : Math.abs(cambio) < 1.5
+              ? `Reacción moderada${cambio >= 0 ? ' al alza' : ' a la baja'}.`
+              : `Reacción fuerte${cambio >= 0 ? ' al alza' : ' a la baja'}: el dato sorprendió al mercado.`;
+            const volatil = rango > Math.abs(cambio) * 2.5
+              ? ` Hubo mucho vaivén (rango de ${rango.toFixed(1)}% contra un neto de ${Math.abs(cambio).toFixed(1)}%): el mercado tardó en decidirse.`
+              : '';
+
+            await sendTelegram(
+              `${signo} <b>CIERRE POST-${ev.nombre.toUpperCase()}</b>\n\n` +
+              `Resultado: <b>${dir}</b>\n` +
+              `BTC ${cambio >= 0 ? '+' : ''}${cambio.toFixed(2)}% en las ${horasDesde.toFixed(0)}h desde el dato\n` +
+              `Rango del período: ${rango.toFixed(1)}%\n\n` +
+              `<i>${lectura}${volatil}</i>`,
+              { permitirRepetido: true }
+            );
+            state.eventosReportados[claveEv] = Date.now();
+            // Se limpian los reportes de más de 60 días para que el estado no crezca
+            for(const [k, t] of Object.entries(state.eventosReportados)){
+              if(Date.now() - t > 60*24*3600e3) delete state.eventosReportados[k];
+            }
+            console.log(`  📅 Reporte post-evento enviado: ${ev.nombre} → ${dir}`);
+          }
+        }
+      }
+    }catch(e){ console.log('  ⚠️ Reporte post-evento falló:', e.message); }
+
     console.log('═══ ESTADO DE LAS FUENTES ═══');
     console.log(`  🐋 Wallet Intelligence: ${est.ok ? 'clave configurada, funcionando' : est.motivo}`);
     console.log(`  📖 Libro de órdenes: sin clave, siempre disponible`);
