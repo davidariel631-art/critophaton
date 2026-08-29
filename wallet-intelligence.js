@@ -411,3 +411,89 @@ export function construirEvidenciaOnChain(analisis, dirTesis, marketCapUsd, volu
 }
 
 export const _EXCHANGES_CONOCIDOS = EXCHANGES_CONOCIDOS;
+
+
+// ═══ ALERTA DE MOVIMIENTO GRANDE ═══
+// Cuando una transferencia es realmente grande para el tamaño de la moneda, merece su
+// propio mensaje: no como señal de compra o venta, sino como dato de que algo se movió.
+// El formato es deliberadamente sobrio — dice qué pasó y qué NO significa.
+export function alertaMovimiento(mov, contexto = {}){
+  if(!mov || !mov.valueUsd) return null;
+  const { marketCap, volumen24h, precio24hPct, simbolo, red, contrato } = contexto;
+
+  // ¿Es lo bastante grande para avisar? Se mide contra el tamaño de la moneda,
+  // no contra un número fijo.
+  const pctMcap = marketCap > 0 ? mov.valueUsd / marketCap * 100 : 0;
+  const pctVol = volumen24h > 0 ? mov.valueUsd / volumen24h * 100 : 0;
+  if(pctMcap < 1 && pctVol < 5) return null;      // ruido para esta moneda
+
+  const magnitud = pctMcap >= 5 ? 'EXTREMO' : pctMcap >= 2 ? 'MUY GRANDE'
+                 : pctMcap >= 1 ? 'GRANDE' : 'NOTABLE';
+
+  // El tipo de movimiento define el título y lo que significa
+  const oHot = mov.tipoOrigen === 'EXCHANGE_HOT', oCold = mov.tipoOrigen === 'EXCHANGE_COLD';
+  const dHot = mov.tipoDestino === 'EXCHANGE_HOT', dCold = mov.tipoDestino === 'EXCHANGE_COLD';
+  const oEx = /EXCHANGE/.test(mov.tipoOrigen || ''), dEx = /EXCHANGE/.test(mov.tipoDestino || '');
+
+  let titulo, lectura, advertencia;
+  if(oHot && dCold){
+    titulo = '🧊 DE CALIENTE A FRÍA';
+    lectura = 'El exchange está guardando fondos en almacenamiento. Baja el saldo disponible para vender en esa plataforma.';
+    advertencia = 'Custodia de rutina. No dice nada sobre la dirección del precio por sí solo.';
+  } else if(oCold && dHot){
+    titulo = '🔥 DE FRÍA A CALIENTE';
+    lectura = 'El exchange está trayendo fondos desde almacenamiento. Sube el saldo disponible para vender.';
+    advertencia = 'Puede ser preparación para retiros de usuarios o para operar. No es una señal de venta.';
+  } else if(!oEx && dEx){
+    titulo = '📥 ENTRADA A EXCHANGE';
+    lectura = 'Alguien movió fondos desde una billetera propia hacia un exchange. Ahí es donde se vende.';
+    advertencia = 'Entrar a un exchange no es vender. Puede ser para operar, prestar o simplemente custodiar.';
+  } else if(oEx && !dEx){
+    titulo = '📤 SALIDA DE EXCHANGE';
+    lectura = 'Alguien retiró fondos a una billetera propia. Ese saldo deja de estar disponible para venta inmediata.';
+    advertencia = 'Suele leerse como acumulación, pero también puede ser movimiento de custodia.';
+  } else if(oEx && dEx){
+    titulo = '🔁 ENTRE EXCHANGES';
+    lectura = 'Fondos moviéndose de una plataforma a otra. Cambia dónde está la liquidez, no cuánta hay.';
+    advertencia = 'Movimiento operativo. No implica dirección.';
+  } else {
+    titulo = '👤 ENTRE BILLETERAS';
+    lectura = 'Movimiento entre billeteras particulares, fuera de exchanges.';
+    advertencia = 'Sin exchange de por medio, no cambia la liquidez disponible para operar.';
+  }
+
+  const fmtUsd = u => u >= 1e6 ? `$${(u/1e6).toFixed(2)}M` : `$${(u/1000).toFixed(2)}K`;
+  const fmtTok = n => n >= 1e6 ? `${(n/1e6).toFixed(1)}M` : n.toLocaleString('en-US', {maximumFractionDigits:0});
+  const corto = d => d ? `${d.slice(0,5)}…${d.slice(-3)}` : '—';
+  const nombre = (n, d) => n && n !== 'DESCONOCIDA' ? `${n} (${corto(d)})` : corto(d);
+
+  const enlaces = [];
+  if(mov.hash && red === 'ethereum') enlaces.push(`<a href="https://etherscan.io/tx/${mov.hash}">Ver en Etherscan</a>`);
+  if(mov.hash && red === 'bsc') enlaces.push(`<a href="https://bscscan.com/tx/${mov.hash}">Ver en BscScan</a>`);
+  if(contrato) enlaces.push(`<a href="https://platform.arkhamintelligence.com/explorer/token/${contrato}">Ver en Arkham</a>`);
+
+  const texto =
+`${titulo}
+━━━━━━━━━━━━━━━━━━━━━━
+📌 <b>${simbolo || '—'}</b> · ${red || 'on-chain'}
+💰 <b>${fmtUsd(mov.valueUsd)}</b> (${fmtTok(mov.cantidad || 0)} tokens)
+➡️ ${nombre(mov.exchangeOrigen, mov.desde)} → ${nombre(mov.exchangeDestino, mov.hacia)}
+
+⚡ <b>${magnitud}</b>
+${pctMcap.toFixed(2)}% del market cap · ${pctVol.toFixed(1)}% del volumen diario
+${pctMcap >= 2 ? 'Muy grande. El mercado lo va a sentir si se mueve.' : 'Tamaño relevante para esta moneda.'}
+
+Market cap ${fmtUsd(marketCap || 0)}
+Volumen 24h ${fmtUsd(volumen24h || 0)}
+Precio 24h ${precio24hPct >= 0 ? '+' : ''}${(precio24hPct || 0).toFixed(2)}%
+
+<b>Lectura</b>
+› ${lectura}
+› ${advertencia}
+${enlaces.length ? '\n' + enlaces.join(' · ') : ''}
+━━━━━━━━━━━━━━━━━━━━━━
+<i>Solo datos on-chain. No es una señal ni una recomendación.</i>
+🛰 KRAX On-Chain`;
+
+  return { texto, magnitud, pctMcap: +pctMcap.toFixed(2), pctVol: +pctVol.toFixed(1), tipo: titulo };
+}

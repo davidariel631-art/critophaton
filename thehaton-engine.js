@@ -18,13 +18,14 @@ const FUTURES = 'https://fapi.binance.com';
 const GECKO = 'https://api.geckoterminal.com/api/v2';
 
 // MEXC futuros usa nombres de intervalo propios, distintos al spot
-const MEXC_FUT_TF = { '15m':'Min15', '1h':'Min60', '4h':'Hour4', '1d':'Day1', '1mo':'Month1' };
+const MEXC_FUT_TF = { '15m':'Min15', '1h':'Min60', '4h':'Hour4', '1d':'Day1', '1w':'Week1', '1mo':'Month1' };
 
 const TF_MAP = {
   '15m': {binance:'15m', okx:'15m', bybit:'15', mexc:'15m', gate:'15m', kucoin:'15min', kucoinSec:900,  gecko:{timeframe:'minute', aggregate:15}},
   '1h':  {binance:'1h',  okx:'1H',  bybit:'60', mexc:'60m', gate:'1h',  kucoin:'1hour', kucoinSec:3600, gecko:{timeframe:'hour',   aggregate:1}},
   '4h':  {binance:'4h',  okx:'4H',  bybit:'240', mexc:'4h', gate:'4h',  kucoin:'4hour', kucoinSec:14400, gecko:{timeframe:'hour',   aggregate:4}},
   '1d':  {binance:'1d',  okx:'1D',  bybit:'D',  mexc:'1d', gate:'1d',  kucoin:'1day',  kucoinSec:86400, gecko:{timeframe:'day',    aggregate:1}},
+  '1w':  {binance:'1w',  okx:'1W',  bybit:'W',  mexc:'1W', gate:'7d',  kucoin:'1week',  kucoinSec:604800,  gecko:{timeframe:'day',    aggregate:7}},
   '1mo': {binance:'1M',  okx:'1M',  bybit:'M',  mexc:'1M', gate:'30d', kucoin:'1month', kucoinSec:2592000, gecko:{timeframe:'day',    aggregate:30}},
 };
 
@@ -988,11 +989,33 @@ export function calendarioMacro(ahora = new Date()){
   // igual. Sin eso, el aviso previo queda a mitad de camino.
   const recienPasado = eventos.find(e => e.horas <= -2 && e.horas > -14 && e.impacto === 'MUY ALTO');
 
+  // ═══ CUÁNTAS REUNIONES QUEDAN ═══
+  // La Fed hace ocho por año. Saber cuántas faltan cambia la lectura: en diciembre, con
+  // una sola reunión por delante, esa reunión pesa mucho más que en enero con ocho.
+  const hoyISO = new Date().toISOString().slice(0,10);
+  const anioActual = hoyISO.slice(0,4);
+  const fomcDelAnio = TODAS_FOMC.filter(d => d.startsWith(anioActual));
+  const fomcRestantes = fomcDelAnio.filter(d => d >= hoyISO);
+  const proximoFomc = fomcRestantes[0] || TODAS_FOMC.find(d => d > hoyISO) || null;
+  const diasAlFomc = proximoFomc
+    ? Math.ceil((new Date(proximoFomc + 'T19:00:00Z') - Date.now()) / 86400000) : null;
+
   return {
     proximos: proximos.slice(0, 6),
     inminente: inminente || null,
     enCurso: enCurso || null,
     recienPasado: recienPasado || null,
+    // El estado del año: cuántas reuniones hubo, cuántas faltan y cuándo es la próxima
+    fomc: {
+      totalAnio: fomcDelAnio.length,
+      yaPasaron: fomcDelAnio.length - fomcRestantes.length,
+      quedan: fomcRestantes.length,
+      proxima: proximoFomc,
+      diasParaLaProxima: diasAlFomc,
+      todasDelAnio: fomcDelAnio,
+      // Cuando queda una sola, esa reunión define el cierre del año
+      esLaUltima: fomcRestantes.length === 1,
+    },
     // El aviso concreto: si hay algo grande en las próximas horas, conviene no abrir posiciones
     aviso: enCurso
       ? `🔴 ${enCurso.nombre} está saliendo AHORA. El mercado puede moverse de forma violenta e impredecible en los próximos minutos.`
@@ -6358,6 +6381,291 @@ export function consultarMemoria(reporte, situacionActual){
     resumen: malos.length
       ? `⚠️ Esta situación coincide con ${malos.length === 1 ? 'un patrón que históricamente rinde' : `${malos.length} patrones que históricamente rinden`} peor: ${malos.map(x=>x.texto).join(' ')}`
       : `✅ Esta situación coincide con ${buenos.length === 1 ? 'un patrón que históricamente rinde' : `${buenos.length} patrones que históricamente rinden`} mejor: ${buenos.map(x=>x.texto).join(' ')}`,
+  };
+}
+
+// ═══ ESTRUCTURA DE BTC EN MARCOS GRANDES ═══
+// Lo que mira alguien que analiza en serio, y en este orden: primero si la estructura
+// sigue haciendo máximos y mínimos crecientes, después DÓNDE cerró la vela respecto de
+// los niveles que importan, y recién al final los indicadores.
+//
+// La pregunta que responde: ¿cambió algo estructural, o es ruido dentro de la misma
+// estructura de siempre?
+export function estructuraMarcoGrande(candles, etiqueta){
+  if(!Array.isArray(candles) || candles.length < 20) return null;
+  const cerrada = candles.at(-1);          // la última vela ya cerrada
+  const previa = candles.at(-2);
+
+  // ── LOS SWINGS ──
+  // Se buscan con ventana amplia: en semanal, tres velas a cada lado son un mes y medio.
+  // Un pivote es un máximo (o mínimo) que supera a sus VECINOS, sin contarse a sí mismo.
+  // Comparar contra una ventana que lo incluye hacía que en tendencias limpias no
+  // apareciera ningún pivote: la condición era trivialmente falsa para los mínimos.
+  const swings = { altos: [], bajos: [] };
+  const V = 2;
+  for(let i = V; i < candles.length - V; i++){
+    const v = candles[i];
+    const vecinos = [...candles.slice(i-V, i), ...candles.slice(i+1, i+V+1)];
+    if(v.h > Math.max(...vecinos.map(x => x.h))) swings.altos.push({ i, p: v.h });
+    if(v.l < Math.min(...vecinos.map(x => x.l))) swings.bajos.push({ i, p: v.l });
+  }
+  // Si falta alguno de los dos, se usa el extremo del período como referencia:
+  // en una tendencia muy limpia puede no haber pivotes de un lado, y eso no significa
+  // que no haya estructura — significa que la tendencia no dio retrocesos.
+  if(swings.altos.length < 2){
+    const mitad = Math.floor(candles.length/2);
+    swings.altos = [
+      { i: 0, p: Math.max(...candles.slice(0, mitad).map(x => x.h)) },
+      { i: candles.length-1, p: Math.max(...candles.slice(mitad).map(x => x.h)) },
+    ];
+  }
+  if(swings.bajos.length < 2){
+    const mitad = Math.floor(candles.length/2);
+    swings.bajos = [
+      { i: 0, p: Math.min(...candles.slice(0, mitad).map(x => x.l)) },
+      { i: candles.length-1, p: Math.min(...candles.slice(mitad).map(x => x.l)) },
+    ];
+  }
+
+  const ua = swings.altos.slice(-2), ub = swings.bajos.slice(-2);
+  const maxCreciente = ua[1].p > ua[0].p;
+  const minCreciente = ub[1].p > ub[0].p;
+
+  let estructura, detalleEstructura;
+  if(maxCreciente && minCreciente){
+    estructura = 'ALCISTA';
+    detalleEstructura = 'máximos y mínimos crecientes';
+  } else if(!maxCreciente && !minCreciente){
+    estructura = 'BAJISTA';
+    detalleEstructura = 'máximos y mínimos decrecientes';
+  } else if(maxCreciente && !minCreciente){
+    estructura = 'EN EXPANSIÓN';
+    detalleEstructura = 'máximos más altos pero mínimos más bajos: el rango se abre';
+  } else {
+    estructura = 'EN COMPRESIÓN';
+    detalleEstructura = 'máximos más bajos y mínimos más altos: el rango se cierra';
+  }
+
+  // ── ¿LA ÚLTIMA VELA CAMBIÓ ALGO? ──
+  // Un cambio de estructura necesita que el CIERRE rompa el swing anterior, no la mecha.
+  const ultimoAltoPrevio = swings.altos.length >= 2 ? swings.altos.at(-2).p : null;
+  const ultimoBajoPrevio = swings.bajos.length >= 2 ? swings.bajos.at(-2).p : null;
+  let evento = null;
+  if(ultimoAltoPrevio && cerrada.c > ultimoAltoPrevio){
+    evento = { tipo: 'BOS alcista', nivel: ultimoAltoPrevio,
+      texto: `El cierre superó el máximo anterior de $${fmtPrecio(ultimoAltoPrevio)}: la estructura alcista se confirma.` };
+  } else if(ultimoBajoPrevio && cerrada.c < ultimoBajoPrevio){
+    evento = { tipo: 'BOS bajista', nivel: ultimoBajoPrevio,
+      texto: `El cierre perdió el mínimo anterior de $${fmtPrecio(ultimoBajoPrevio)}: la estructura bajista se confirma.` };
+  }
+  // El cambio de carácter: romper en contra de la estructura vigente
+  if(estructura === 'ALCISTA' && ultimoBajoPrevio && cerrada.c < ultimoBajoPrevio){
+    evento = { tipo: 'CHoCH bajista', nivel: ultimoBajoPrevio,
+      texto: `El cierre perdió $${fmtPrecio(ultimoBajoPrevio)}, que sostenía la estructura alcista. Es un cambio de carácter: lo que venía funcionando dejó de hacerlo.` };
+  } else if(estructura === 'BAJISTA' && ultimoAltoPrevio && cerrada.c > ultimoAltoPrevio){
+    evento = { tipo: 'CHoCH alcista', nivel: ultimoAltoPrevio,
+      texto: `El cierre superó $${fmtPrecio(ultimoAltoPrevio)}, que contenía la caída. Es un cambio de carácter.` };
+  }
+
+  // ── CÓMO CERRÓ LA VELA ──
+  // Dónde cerró dentro de su propio rango dice quién ganó la semana.
+  const rango = cerrada.h - cerrada.l;
+  const posCierre = rango > 0 ? (cerrada.c - cerrada.l) / rango : 0.5;
+  const cuerpo = Math.abs(cerrada.c - cerrada.o) / (rango || 1);
+  let caracterVela;
+  if(cuerpo < 0.25) caracterVela = posCierre > 0.6 ? 'indecisión con sesgo comprador'
+                                 : posCierre < 0.4 ? 'indecisión con sesgo vendedor' : 'indecisión total';
+  else if(cerrada.c > cerrada.o) caracterVela = posCierre > 0.75 ? 'compradores con control total' : 'compradores, pero cediendo al final';
+  else caracterVela = posCierre < 0.25 ? 'vendedores con control total' : 'vendedores, pero recuperando al final';
+
+  const cambioPct = previa ? (cerrada.c - previa.c) / previa.c * 100 : 0;
+
+  return {
+    marco: etiqueta,
+    estructura, detalleEstructura,
+    evento,
+    cierre: cerrada.c, apertura: cerrada.o, alto: cerrada.h, bajo: cerrada.l,
+    cambioPct: +cambioPct.toFixed(2),
+    posCierre: +posCierre.toFixed(2),
+    cuerpoPct: +(cuerpo * 100).toFixed(0),
+    caracterVela,
+    ultimoAlto: ua[1].p, ultimoBajo: ub[1].p,
+    // Los niveles que definen si la estructura aguanta
+    nivelClave: estructura === 'ALCISTA' ? ub[1].p : ua[1].p,
+    queRompe: estructura === 'ALCISTA'
+      ? `Si pierde $${fmtPrecio(ub[1].p)}, la estructura alcista se rompe.`
+      : estructura === 'BAJISTA'
+      ? `Si supera $${fmtPrecio(ua[1].p)}, la estructura bajista se rompe.`
+      : `El rango va de $${fmtPrecio(ub[1].p)} a $${fmtPrecio(ua[1].p)}.`,
+  };
+}
+
+// Junta los tres marcos y arma la lectura. La regla del analista: el marco grande manda,
+// el chico solo dice cuándo — nunca al revés.
+export function informeEstructuraBTC({ mensual, semanal, cuatroH, precio }){
+  const marcos = [mensual, semanal, cuatroH].filter(Boolean);
+  if(!marcos.length) return null;
+
+  const eventos = marcos.filter(m => m.evento).map(m => ({ marco: m.marco, ...m.evento }));
+  const alineados = marcos.length >= 2 &&
+    marcos.every(m => m.estructura === marcos[0].estructura);
+
+  // El veredicto sale del marco MÁS GRANDE que tenga estructura definida
+  const rector = [mensual, semanal, cuatroH].find(m => m && (m.estructura === 'ALCISTA' || m.estructura === 'BAJISTA'));
+
+  const partes = [];
+  if(alineados){
+    partes.push(`Los tres marcos están alineados en ${marcos[0].estructura.toLowerCase()}: cuando eso pasa, operar a favor es lo que más rinde y lo contrario es pelear contra todo.`);
+  } else if(rector){
+    const enContra = marcos.filter(m => m.estructura !== rector.estructura && (m.estructura === 'ALCISTA' || m.estructura === 'BAJISTA'));
+    if(enContra.length){
+      partes.push(`El ${rector.marco} manda y es ${rector.estructura.toLowerCase()}, pero el ${enContra[0].marco} va en contra. Cuando los marcos se contradicen, lo habitual es que el chico termine cediendo — pero mientras tanto el movimiento es errático.`);
+    } else {
+      // Si hay otros marcos con la MISMA estructura, eso refuerza; si están en rango, falta definición
+      const acompanan = marcos.filter(m => m !== rector && m.estructura === rector.estructura);
+      partes.push(acompanan.length
+        ? `El ${rector.marco} es ${rector.estructura.toLowerCase()} y el ${acompanan[0].marco} acompaña. Los demás marcos están en rango.`
+        : `El ${rector.marco} es ${rector.estructura.toLowerCase()} y los marcos menores están en rango: falta que definan.`);
+    }
+  } else {
+    partes.push('Ningún marco tiene estructura direccional definida: el mercado está en rango en todas las temporalidades.');
+  }
+
+  // Los eventos son lo más importante: son lo que CAMBIÓ
+  if(eventos.length){
+    for(const e of eventos){
+      partes.push(`En ${e.marco}: ${e.texto}`);
+    }
+  }
+
+  return {
+    marcos, eventos, alineados,
+    veredicto: alineados ? `ALINEADOS ${marcos[0].estructura}`
+             : eventos.some(e => /CHoCH/.test(e.tipo)) ? 'CAMBIO DE CARÁCTER'
+             : rector ? `${rector.marco.toUpperCase()} ${rector.estructura}` : 'SIN DIRECCIÓN',
+    texto: partes.join(' '),
+    hayNovedad: eventos.length > 0,
+  };
+}
+
+// ═══ SCALP DIARIO EN BTC ═══
+// Distinto del resto del sistema: acá no se busca la mejor moneda, se busca el mejor
+// MOMENTO del día en una sola. BTC tiene la liquidez más profunda del mercado, así que
+// tolera apalancamiento alto sin que el slippage se coma la operación.
+//
+// La lógica es de scalping, no de tesis: rango ajustado, objetivo cercano, y la entrada
+// se elige por dónde el precio suele reaccionar dentro del día.
+export function scalpDiario(candles15, candles1h, opciones = {}){
+  if(!Array.isArray(candles15) || candles15.length < 96) return null;
+  const precio = candles15.at(-1).c;
+  const atrSerie = atr(candles15, 14);
+  const atrVal = Array.isArray(atrSerie) ? atrSerie.at(-1) : atrSerie;
+  if(!Number.isFinite(atrVal) || atrVal <= 0) return null;
+  const atrPct = atrVal / precio * 100;
+
+  // ── DÓNDE ESTÁ EL PRECIO DENTRO DEL DÍA ──
+  // Un scalp entra en los bordes, no en el medio. Si está a mitad de rango, no hay ventaja.
+  const dia = candles15.slice(-96);
+  const alto = Math.max(...dia.map(v => v.h));
+  const bajo = Math.min(...dia.map(v => v.l));
+  const posicion = (precio - bajo) / (alto - bajo || 1);   // 0 = piso, 1 = techo
+
+  // ── LA TENDENCIA DE FONDO ──
+  // ═══ LA EMA50 COMO REFERENCIA ═══
+  // Es la media que más mira el mercado en intradía: funciona como imán y como frontera.
+  // Se usa en dos sentidos: para saber de qué lado está el precio (tendencia) y para
+  // medir cuán lejos está de ella (si se alejó mucho, suele volver).
+  const cierres15 = candles15.map(v => v.c);
+  const ema50_15 = ema(cierres15, 50).at(-1);
+  const distEma50 = ema50_15 > 0 ? (precio - ema50_15) / ema50_15 * 100 : 0;
+
+  // La tendencia se mide en 1h, no en 15m: en 15m cualquier caída al piso del rango pone
+  // la media corta abajo y bloquea justo el rebote que se busca.
+  const usa1h = Array.isArray(candles1h) && candles1h.length >= 50;
+  const serieT = usa1h ? candles1h.map(v => v.c) : cierres15;
+  const emaC = ema(serieT, Math.min(20, Math.floor(serieT.length/3))).at(-1);
+  const emaL = ema(serieT, Math.min(usa1h ? 50 : 200, Math.floor(serieT.length/1.5))).at(-1);
+  const tendencia = emaC > emaL * 1.002 ? 'alcista' : emaC < emaL * 0.998 ? 'bajista' : 'lateral';
+
+  // ── EL MOMENTO ──
+  // Un scalp long se busca en el piso del rango con tendencia a favor o neutra.
+  let dir = null, calidad = 0, motivo = '';
+  if(posicion <= 0.28 && tendencia !== 'bajista'){
+    dir = 'LONG'; calidad = 0.5 + (0.28 - posicion) * 1.8;
+    motivo = `El precio está en el ${Math.round(posicion*100)}% inferior del rango del día` +
+             (tendencia === 'alcista' ? ' con la tendencia a favor.' : ', en un día sin dirección clara.');
+  } else if(posicion >= 0.72 && tendencia !== 'alcista'){
+    dir = 'SHORT'; calidad = 0.5 + (posicion - 0.72) * 1.8;
+    motivo = `El precio está en el ${Math.round(posicion*100)}% superior del rango del día` +
+             (tendencia === 'bajista' ? ' con la tendencia a favor.' : ', en un día sin dirección clara.');
+  } else {
+    return {
+      hayEntrada: false, precio, posicionRango: +posicion.toFixed(2), tendencia, atrPct: +atrPct.toFixed(2),
+      ema50: ema50_15, distEma50: +distEma50.toFixed(2),
+      motivo: posicion > 0.28 && posicion < 0.72
+        ? `El precio está a mitad del rango del día (${Math.round(posicion*100)}%): sin ventaja en ninguna dirección. Un scalp entra en los bordes.`
+        : `El precio está en el borde ${posicion < 0.5 ? 'inferior' : 'superior'} pero la tendencia ${tendencia} va en contra: entrar acá es pelear contra el fondo.`,
+      esperar: posicion < 0.5
+        ? `que baje a $${fmtPrecio(bajo + (alto-bajo)*0.25)} o menos`
+        : `que suba a $${fmtPrecio(bajo + (alto-bajo)*0.75)} o más`,
+    };
+  }
+
+  // ── CONFIRMACIÓN DE MOMENTUM ──
+  const rsiVal = rsi(cierres15, 14).filter(x => x != null).at(-1);
+  const confirmaRsi = dir === 'LONG' ? rsiVal < 45 : rsiVal > 55;
+  if(confirmaRsi) calidad += 0.2;
+
+  // ── LA EMA50 ──
+  // Un long por debajo de la media con la tendencia a favor es comprar barato; por encima
+  // y ya extendido, es comprar caro. Y si el precio se alejó más de un 2% de la media,
+  // suele volver a buscarla: eso juega en contra de seguir el movimiento.
+  const ladoBueno = dir === 'LONG' ? distEma50 < 0.3 : distEma50 > -0.3;
+  if(ladoBueno) calidad += 0.15;
+  const extendido = Math.abs(distEma50) > 2;
+  if(extendido && !ladoBueno) calidad -= 0.25;   // lejos de la media y del lado malo
+
+  // El volumen de las últimas velas contra el promedio del día
+  const volProm = dia.reduce((s,v) => s + (v.v||0), 0) / dia.length;
+  const volAhora = candles15.slice(-4).reduce((s,v) => s + (v.v||0), 0) / 4;
+  const conVolumen = volAhora > volProm * 1.15;
+  if(conVolumen) calidad += 0.15;
+  calidad = Math.min(1, calidad);
+
+  // ── NIVELES: ajustados, es un scalp ──
+  // El stop va a 0.8 ATR: suficiente para no salir por ruido, corto para permitir tamaño.
+  const stop = dir === 'LONG' ? precio - atrVal * 0.8 : precio + atrVal * 0.8;
+  const riesgoPct = Math.abs(precio - stop) / precio * 100;
+  // Objetivo a 1.3 veces el riesgo: alcanzable dentro del día
+  const objetivo = dir === 'LONG' ? precio + atrVal * 1.04 : precio - atrVal * 1.04;
+
+  // ── APALANCAMIENTO ──
+  // Sale de cuánto riesgo se quiere por operación y de cuán lejos está el stop.
+  // Con 1% de riesgo y un stop a 0.4%, harían falta 25x. Se acota a 20x porque más
+  // allá el margen de mantenimiento y las mechas empiezan a liquidar antes del stop.
+  const riesgoPorOp = opciones.riesgoPct ?? 1;
+  const apalancamientoIdeal = riesgoPorOp / riesgoPct * 100;
+  const apalancamiento = Math.max(3, Math.min(20, Math.floor(apalancamientoIdeal)));
+  // El precio de liquidación con ese apalancamiento: tiene que quedar MÁS LEJOS que el stop
+  const distLiq = 100 / apalancamiento * 0.9;    // 90% del margen, por el mantenimiento
+  const liquidacion = dir === 'LONG' ? precio * (1 - distLiq/100) : precio * (1 + distLiq/100);
+  const stopSeguro = dir === 'LONG' ? stop > liquidacion : stop < liquidacion;
+
+  return {
+    hayEntrada: true, dir, precio,
+    entrada: precio, stop, objetivo,
+    riesgoPct: +riesgoPct.toFixed(2),
+    gananciaPct: +(Math.abs(objetivo - precio) / precio * 100).toFixed(2),
+    rr: +(Math.abs(objetivo - precio) / Math.abs(precio - stop)).toFixed(2),
+    apalancamiento, liquidacion, stopSeguro,
+    calidad: +calidad.toFixed(2),
+    posicionRango: +posicion.toFixed(2), tendencia, atrPct: +atrPct.toFixed(2),
+    rsi: rsiVal != null ? +rsiVal.toFixed(0) : null,
+    conVolumen, confirmaRsi,
+    ema50: ema50_15, distEma50: +distEma50.toFixed(2), ladoBueno, extendido,
+    motivo,
+    // Cuánto suele tardar un movimiento así, para saber si es cosa de horas o del día
+    horasEstimadas: +(Math.abs(objetivo - precio) / precio * 100 / (atrPct / 4)).toFixed(1),
   };
 }
 
