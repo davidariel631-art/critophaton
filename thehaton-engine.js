@@ -36,9 +36,24 @@ const CORS_PROXIES = [
   url => `https://api.cors.lol/url=${url}`,
 ];
 
+// ═══ TIMEOUT EN TODAS LAS LLAMADAS ═══
+// Sin esto, una API que se cuelga deja al bot esperando hasta que GitHub Actions lo mate
+// a los 6 minutos — y esa corrida se pierde entera. Con 12 segundos, una fuente lenta
+// se descarta y el resto sigue.
+const TIMEOUT_MS = 12000;
+async function fetchConTimeout(url, ms = TIMEOUT_MS){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try{
+    return await fetch(url, { signal: ctrl.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function fetchJSON(url){
   try{
-    const r = await fetch(url);
+    const r = await fetchConTimeout(url);
     if(!r.ok) throw new Error('HTTP '+r.status); // error de la API misma: reintentar por proxy no sirve
     return await r.json();
   }catch(e){
@@ -47,7 +62,7 @@ async function fetchJSON(url){
     // Prueba varios proxies gratuitos en cadena (uno solo no es confiable: se cae o tarda seguido)
     for(const buildProxyUrl of CORS_PROXIES){
       try{
-        const r2 = await fetch(buildProxyUrl(url));
+        const r2 = await fetchConTimeout(buildProxyUrl(url));
         if(!r2.ok) continue;
         return await r2.json();
       }catch(e2){ /* probamos el siguiente proxy */ }
@@ -3938,53 +3953,7 @@ function resumenCalidadDecisiones(closedTrades){
   };
 }
 
-// ═══ ¿HABRÍAN SIDO MEJORES LOS NIVELES POR VOLATILIDAD? ═══
-// El bot calcula stop y objetivos por ESTRUCTURA (soportes, resistencias, order blocks).
-// La estrategia de la cinta los calcula por VOLATILIDAD (múltiplos de ATR). Ninguno es
-// obviamente mejor: esto lo compara con las operaciones reales usando el MFE y el MAE.
-export function compararNivelesEstructuraVsATR(closedTrades){
-  const trades = (closedTrades||[]).filter(t =>
-    t.registro?.cinta?.nivelesATR && t.registro?.mfe != null && t.registro?.mae != null &&
-    t.registro?.gestion?.stopPct > 0);
-  if(trades.length < 10) return { listo:false,
-    nota:`Hacen falta al menos 10 operaciones con los dos sistemas de niveles registrados. Hay ${trades.length}.` };
 
-  let ganaEstructura = 0, ganaATR = 0, empate = 0;
-  const detalle = [];
-  for(const t of trades){
-    const alt = t.registro.cinta.nivelesATR;
-    const stopReal = t.registro.gestion.stopPct;
-    const stopAlt = alt.stopPct;
-    // ¿El stop por ATR habría aguantado el retroceso que hubo? (el MAE está en R del stop real)
-    const maeEnPct = Math.abs(t.registro.mae) * stopReal;
-    const aguantaATR = maeEnPct < stopAlt;
-    const aguantaReal = Math.abs(t.registro.mae) < 1;
-    // ¿El objetivo por ATR se habría alcanzado? (el MFE también está en R del stop real)
-    const mfeEnPct = t.registro.mfe * stopReal;
-    const llegaTp1ATR = mfeEnPct >= (alt.rrTp1 * stopAlt);
-    const llegaTp1Real = t.alcanzoTp1;
-
-    if(aguantaATR && !aguantaReal) ganaATR++;            // el stop por ATR habría salvado la operación
-    else if(!aguantaATR && aguantaReal) ganaEstructura++;  // el de estructura fue mejor
-    else if(llegaTp1ATR && !llegaTp1Real) ganaATR++;
-    else if(!llegaTp1ATR && llegaTp1Real) ganaEstructura++;
-    else empate++;
-    detalle.push({ symbol:t.symbol, stopReal, stopAlt, aguantaATR, aguantaReal, llegaTp1ATR, llegaTp1Real });
-  }
-
-  const total = trades.length;
-  const dif = ganaATR - ganaEstructura;
-  return {
-    listo: true, operaciones: total,
-    ganaEstructura, ganaATR, empate,
-    veredicto: Math.abs(dif) < Math.max(3, total*0.15)
-      ? `Los dos sistemas rinden parecido (${ganaEstructura} a favor de estructura, ${ganaATR} a favor de ATR, ${empate} iguales). No hay motivo para cambiar.`
-      : dif > 0
-      ? `⚠️ Los niveles por volatilidad habrían sido mejores en ${ganaATR} de ${total} casos contra ${ganaEstructura}. Vale la pena probarlos.`
-      : `Los niveles por estructura fueron mejores (${ganaEstructura} contra ${ganaATR}). Conviene dejarlos como están.`,
-    nota: 'La comparación usa el MFE y el MAE: cuánto avanzó y cuánto retrocedió cada operación. No es un backtest completo, pero indica si vale la pena investigar el cambio.',
-  };
-}
 
 // ═══ FOTO ANTES / DESPUÉS DE LOS ARREGLOS ═══
 // Compara las operaciones anteriores a una fecha contra las posteriores, en las dimensiones que
@@ -4785,229 +4754,9 @@ export function precioVsPosicionamiento(candles, lsActual, lsPrevio, dirTesis){
   };
 }
 
-// ═══ TAMAÑO DE UNA TRANSFERENCIA EN CONTEXTO ═══
-// Un movimiento de $4M no significa nada por sí solo: en una moneda de $10.000M es ruido,
-// en una de $200M es enorme. Lo que importa es el tamaño CONTRA el market cap y contra el
-// volumen diario — si una sola transferencia equivale al 17% de todo lo que se opera en un
-// día, ese dinero no puede salir sin mover el precio.
-export function contextoTransferencia(usd, marketCapUsd, volumenDiarioUsd){
-  if(!usd || usd <= 0) return null;
-  const pctMcap = marketCapUsd > 0 ? usd/marketCapUsd*100 : null;
-  const pctVol = volumenDiarioUsd > 0 ? usd/volumenDiarioUsd*100 : null;
-  if(pctMcap == null && pctVol == null) return null;
 
-  // El nivel sale del mayor de los dos: cualquiera de los dos puede ser determinante
-  const peor = Math.max(pctMcap ?? 0, (pctVol ?? 0)/5);   // el volumen se pondera distinto
-  const nivel = peor >= 3 ? 'MUY ALTO' : peor >= 1 ? 'ALTO' : peor >= 0.3 ? 'MEDIO' : 'BAJO';
 
-  const lecturas = [];
-  if(pctVol != null && pctVol >= 15) lecturas.push(`Equivale al ${pctVol.toFixed(1)}% de todo lo que se opera en un día: un movimiento de este tamaño no puede ejecutarse sin mover el precio.`);
-  else if(pctVol != null && pctVol >= 5) lecturas.push(`Es el ${pctVol.toFixed(1)}% del volumen diario: significativo, aunque el mercado puede absorberlo.`);
-  if(pctMcap != null && pctMcap >= 1) lecturas.push(`Representa el ${pctMcap.toFixed(2)}% de toda la capitalización de la moneda.`);
 
-  return {
-    usd, nivel,
-    pctMarketCap: pctMcap != null ? +pctMcap.toFixed(2) : null,
-    pctVolumenDiario: pctVol != null ? +pctVol.toFixed(1) : null,
-    relevante: nivel === 'ALTO' || nivel === 'MUY ALTO',
-    lectura: lecturas.length ? lecturas.join(' ') : `Movimiento chico para el tamaño de esta moneda: probablemente no mueva el precio.`,
-  };
-}
-
-// ═══ LÍNEA DE TENDENCIA, RUPTURA Y RETESTEO ═══
-// El motor detecta pivotes pero nunca traza la línea que los une. Y esa línea es de lo más
-// básico que mira cualquiera: mientras el precio la respeta, la tendencia sigue; cuando la
-// rompe, cambia algo; y el RETESTEO —volver a tocarla desde el otro lado— es de las entradas
-// con mejor relación riesgo/beneficio que hay.
-export function lineaTendencia(candles, opciones = {}){
-  if(!Array.isArray(candles) || candles.length < 30) return null;
-  const minToques = opciones.minToques ?? 4;
-  const tol = opciones.tolerancia ?? 0.006;
-
-  // Pivotes: máximos y mínimos locales
-  const piv = (tipo) => {
-    const out = [];
-    for(let i = 3; i < candles.length - 3; i++){
-      const v = candles[i];
-      const ventana = candles.slice(i-3, i+4);
-      if(tipo === 'max' && v.h >= Math.max(...ventana.map(x=>x.h))) out.push({ i, p: v.h });
-      if(tipo === 'min' && v.l <= Math.min(...ventana.map(x=>x.l))) out.push({ i, p: v.l });
-    }
-    return out;
-  };
-
-  // Se prueban pares de pivotes y se queda la recta que más toques acumula.
-  // Una línea con 2 toques la dibuja cualquiera; con 4 o más ya es significativa.
-  const mejorRecta = (pivotes, tipo) => {
-    if(pivotes.length < 2) return null;
-    let mejor = null;
-    for(let a = 0; a < pivotes.length - 1; a++){
-      for(let b = a + 1; b < pivotes.length; b++){
-        const p1 = pivotes[a], p2 = pivotes[b];
-        if(p2.i - p1.i < 8) continue;                 // demasiado juntos
-        const m = (p2.p - p1.p) / (p2.i - p1.i);
-        const en = (i) => p1.p + m * (i - p1.i);
-
-        // ¿Cuántos pivotes toca esta recta? ¿Y el precio la respeta?
-        let toques = 0, violaciones = 0;
-        for(const pv of pivotes){
-          const esperado = en(pv.i);
-          if(Math.abs(pv.p - esperado) / esperado < tol) toques++;
-        }
-        // ═══ LAS VIOLACIONES SE CUENTAN HASTA LA PRIMERA RUPTURA ═══
-        // Una línea que el precio rompió y dejó atrás NO es una línea mala: es una línea
-        // que cumplió su función y después se rompió. Contar como violación cada vela
-        // posterior a la ruptura hacía que las líneas rotas —que son justo las más
-        // interesantes— quedaran descartadas.
-        let idxRuptura = -1;
-        for(let i = p1.i; i < candles.length; i++){
-          const esperado = en(i);
-          const cerroFuera = tipo === 'max'
-            ? candles[i].c > esperado * (1 + tol*1.5)
-            : candles[i].c < esperado * (1 - tol*1.5);
-          if(cerroFuera){
-            // ¿Se sostuvo? Entonces es ruptura, y desde acá ya no se cuentan violaciones
-            const sig = candles.slice(i+1, i+3);
-            const sostuvo = sig.length >= 1 && sig.every(x => tipo === 'max'
-              ? x.c > esperado * (1 - tol) : x.c < esperado * (1 + tol));
-            if(sostuvo){ idxRuptura = i; break; }
-            violaciones++;
-          }
-        }
-        if(toques < minToques) continue;
-
-        // ═══ ¿ES UNA LÍNEA O ES CASUALIDAD? ═══
-        // Con suficientes pivotes, cualquier recta "toca" algunos por azar. Para que cuente
-        // como línea de tendencia real hacen falta dos cosas más:
-        //  · Los toques tienen que estar REPARTIDOS, no amontonados en una zona
-        //  · Tiene que haber una proporción decente de los pivotes disponibles
-        const tocados = pivotes.filter(pv => {
-          const esp = en(pv.i);
-          return Math.abs(pv.p - esp) / esp < tol;
-        });
-        if(tocados.length < minToques) continue;
-        // Reparto: la distancia entre el primer y el último toque, sobre el total
-        const spread = (tocados.at(-1).i - tocados[0].i) / candles.length;
-        if(spread < 0.35) continue;               // amontonados: no es una línea
-        // Y que toque una fracción razonable de los pivotes, no 3 de 40
-        if(tocados.length / pivotes.length < 0.28) continue;
-
-        // ═══ FILTRO CONTRA ALINEACIONES CASUALES ═══
-        // Con N pivotes hay N·(N-1)/2 rectas posibles: con 17 pivotes son 136 pruebas, y
-        // alguna alinea 5 o 6 puntos por puro azar. Estimar eso con una fórmula de banda
-        // fija no funciona, porque una recta inclinada barre todo el rango de precios.
-        //
-        // El criterio que sí discrimina: los toques tienen que ser una MAYORÍA de los
-        // pivotes del mismo lado, y estar bien repartidos en el tiempo. En una tendencia
-        // real, casi todos los máximos (o mínimos) caen sobre la línea. En ruido, no.
-        if(tocados.length < Math.ceil(pivotes.length * 0.5)) continue;
-
-        // Y la separación entre toques consecutivos tiene que ser pareja: si tres toques
-        // están pegados y uno lejos, es casualidad, no una línea respetada.
-        const huecos = [];
-        for(let k = 1; k < tocados.length; k++) huecos.push(tocados[k].i - tocados[k-1].i);
-        if(huecos.length >= 2){
-          const prom = huecos.reduce((s,x)=>s+x,0) / huecos.length;
-          const maxHueco = Math.max(...huecos);
-          if(maxHueco > prom * 3.2) continue;    // un salto enorme: no es una línea continua
-        }
-        // ═══ EL PUNTAJE ═══
-        // Contar toques a secas favorece líneas triviales: una recta muy alejada del precio
-        // "toca" muchos pivotes por casualidad y no se viola nunca, porque nadie llega ahí.
-        // Lo que importa es que la línea esté CERCA de la acción y que el precio la respete
-        // de verdad.
-        // La cercanía se mide en el punto donde la línea todavía era válida: si se rompió,
-        // ahí; si no, al final. Así una línea rota hace 10 velas sigue siendo relevante.
-        const hastaIdx = idxRuptura >= 0 ? idxRuptura : candles.length - 1;
-        const valorRef = en(hastaIdx);
-        const precioRef = candles[hastaIdx].c;
-        const cercania = Math.abs(precioRef - valorRef) / precioRef;
-        if(cercania > 0.12) continue;
-        const bonusCercania = Math.max(0, 1 - cercania * 8);
-        const alcance = hastaIdx / candles.length;
-        // Una línea rota recientemente vale más: es la información más accionable que hay
-        const bonusRuptura = idxRuptura >= 0 && (candles.length - idxRuptura) <= 25 ? 2.5 : 0;
-        const puntaje = toques * 1.5 - violaciones * 0.5 + alcance * 2 + bonusCercania * 3 + bonusRuptura;
-        if(!mejor || puntaje > mejor.puntaje){
-          mejor = { p1, p2, m, en, toques, violaciones, puntaje, tipo };
-        }
-      }
-    }
-    return mejor;
-  };
-
-  const techo = mejorRecta(piv('max'), 'max');
-  const piso = mejorRecta(piv('min'), 'min');
-  // Se elige la más sólida de las dos
-  const linea = (!techo && !piso) ? null
-              : !techo ? piso : !piso ? techo
-              : (techo.puntaje >= piso.puntaje ? techo : piso);
-  if(!linea) return null;
-
-  const n = candles.length;
-  const precioAhora = candles.at(-1).c;
-  const valorAhora = linea.en(n - 1);
-  const esResistencia = linea.tipo === 'max';
-
-  // ── ¿LA ROMPIÓ? ──
-  // Una ruptura necesita cierre del otro lado, no solo una mecha.
-  let ruptura = null;
-  for(let i = Math.max(linea.p2.i, n - 30); i < n; i++){
-    const esperado = linea.en(i);
-    const rompio = esResistencia
-      ? candles[i].c > esperado * (1 + tol)
-      : candles[i].c < esperado * (1 - tol);
-    if(rompio){
-      // Que se sostenga al menos dos velas, para no contar un pinchazo
-      const sig = candles.slice(i+1, i+3);
-      const sostuvo = sig.length >= 1 && sig.every(v => esResistencia
-        ? v.c > esperado * (1 - tol/2) : v.c < esperado * (1 + tol/2));
-      if(sostuvo){
-        ruptura = { i, precio: candles[i].c, nivel: esperado,
-                    velasAtras: n - 1 - i, direccion: esResistencia ? 'alcista' : 'bajista' };
-        break;
-      }
-    }
-  }
-
-  // ── ¿HUBO RETESTEO? ──
-  // Después de romper, el precio suele volver a tocar la línea desde el otro lado.
-  // Ese toque, si la línea aguanta, es la entrada con mejor riesgo/beneficio.
-  let retesteo = null;
-  if(ruptura){
-    for(let i = ruptura.i + 2; i < n; i++){
-      const esperado = linea.en(i);
-      const volvio = esResistencia
-        ? (candles[i].l <= esperado * (1 + tol) && candles[i].c > esperado * (1 - tol))
-        : (candles[i].h >= esperado * (1 - tol) && candles[i].c < esperado * (1 + tol));
-      if(volvio){
-        retesteo = { i, precio: esperado, velasAtras: n - 1 - i,
-                     aguanto: esResistencia ? candles[i].c > esperado : candles[i].c < esperado };
-        break;
-      }
-    }
-  }
-
-  const distPct = +((precioAhora - valorAhora) / valorAhora * 100).toFixed(2);
-
-  return {
-    tipo: esResistencia ? 'resistencia' : 'soporte',
-    desdeIdx: linea.p1.i, hastaIdx: n - 1,
-    precioDesde: linea.p1.p, precioHasta: valorAhora,
-    pendiente: linea.m,
-    toques: linea.toques, violaciones: linea.violaciones,
-    // La función para saber el valor de la línea en cualquier vela: la usa el dibujo
-    valorEn: linea.en,
-    distPct, valorAhora,
-    ruptura, retesteo,
-    // Cuán confiable es: pocas violaciones y muchos toques
-    fuerza: linea.toques >= 5 && linea.violaciones <= 2 ? 'fuerte'
-          : linea.toques >= 3 ? 'moderada' : 'débil',
-    estado: ruptura
-      ? (retesteo ? `rota y reteseada hace ${retesteo.velasAtras} velas` : `rota hace ${ruptura.velasAtras} velas`)
-      : `intacta · el precio está a ${Math.abs(distPct)}% ${distPct > 0 ? 'por encima' : 'por debajo'}`,
-  };
-}
 
 // ═══ MAPA DE CALOR REAL — DENSIDAD × TIEMPO ═══
 // Los mapas de calor de liquidez de verdad (Bookmap, Hyblock) no muestran un corte: muestran
@@ -5061,13 +4810,30 @@ export function mapaCalorTemporal(candles, opciones = {}){
     // ── VOLUMEN POR PRECIO ──
     // El volumen de cada vela se reparte en las franjas que tocó. Donde se negoció más,
     // hay más órdenes pendientes.
+    // ═══ EL VOLUMEN NO SE REPARTE PAREJO ═══
+    // Repartirlo uniformemente por el rango de la vela era la aproximación más grosera del
+    // cálculo: una vela con mecha larga marcaba tanta liquidez en la punta de la mecha como
+    // en el cuerpo. En la realidad el precio pasa casi todo el tiempo cerca del cuerpo y
+    // solo roza los extremos. Se usa una distribución triangular centrada en el precio
+    // típico —(alto+bajo+cierre)/3—, que es lo que hacen los perfiles de volumen serios
+    // cuando no hay datos tick a tick.
     for(const v of trozo){
       const iLo = idxDe(v.l), iHi = idxDe(v.h);
       if(iLo < 0 && iHi < 0) continue;
       const a = Math.max(0, iLo < 0 ? 0 : iLo);
       const b = Math.min(filas-1, iHi < 0 ? filas-1 : iHi);
-      const reparto = (v.v || 1) / Math.max(1, b - a + 1);
-      for(let i = a; i <= b; i++) columna[i] += reparto;
+      const vol = v.v || 1;
+      if(b === a){ columna[a] += vol; continue; }
+      const iCentro = idxDe((v.h + v.l + v.c) / 3);
+      const centro = iCentro >= 0 ? iCentro : (a + b) / 2;
+      const alcance = Math.max(1, (b - a) / 2);
+      const pesos = [];
+      let total = 0;
+      for(let i = a; i <= b; i++){
+        const w = Math.max(0.12, 1 - Math.abs(i - centro) / alcance);
+        pesos.push(w); total += w;
+      }
+      for(let k = 0; k < pesos.length; k++) columna[a+k] += vol * (pesos[k] / total);
     }
 
     // ── RECHAZOS: donde el precio reaccionó ──
@@ -5205,6 +4971,27 @@ export function mapaCalorTemporal(candles, opciones = {}){
   // ── QUÉ CAMBIÓ ──
   // Comparar la primera mitad con la última dice si cada nivel se armó o se disolvió.
   const mitad = Math.floor(norm.length / 2);
+
+  // ═══ CALIBRACIÓN DEL UMBRAL ═══
+  // Se mide cuánto cambia la densidad entre columnas consecutivas en toda la ventana.
+  // Si esta moneda normalmente varía un 60%, un cambio del 40% no significa nada; si
+  // normalmente varía un 10%, ese mismo 40% sí es una señal.
+  // Se mide sobre la rejilla CRUDA: el suavizado y la normalización logarítmica aplastan
+  // las diferencias, así que medir sobre `norm` daba casi el mismo valor para todas las
+  // monedas y el umbral no se adaptaba a nada.
+  let sumaVar = 0, nVar = 0;
+  for(let i = 0; i < filas; i++){
+    for(let col = 1; col < rejilla.length; col++){
+      const a = rejilla[col-1][i], b = rejilla[col][i];
+      if(a > 0 && b > 0){ sumaVar += Math.abs(b - a) / a; nVar++; }
+    }
+  }
+  const varTipica = nVar > 0 ? sumaVar / nVar : 0.3;
+  // El umbral es 2.5 desviaciones de lo normal, acotado entre 1.25 y 2.2
+  // La variación cruda entre columnas vecinas ronda el 50-250%, así que el multiplicador
+  // tiene que ser mucho menor para que el umbral quede en un rango útil (1.3x a 2.5x).
+  const umbralCambio = Math.max(1.3, Math.min(2.5, 1 + varTipica * 0.55));
+
   const evolucion = [];
   for(let i = 0; i < filas; i++){
     const viejo = norm.slice(0, mitad).reduce((s,cl)=>s+cl[i], 0) / mitad;
@@ -5215,8 +5002,11 @@ export function mapaCalorTemporal(candles, opciones = {}){
       distPct: +((precioFila - precio) / precio * 100).toFixed(2),
       antes: +viejo.toFixed(3), ahora: +nuevo.toFixed(3),
       cambio: +(nuevo - viejo).toFixed(3),
-      estado: nuevo > viejo * 1.4 && nuevo > 0.12 ? 'armándose'
-            : nuevo < viejo * 0.6 && viejo > 0.12 ? 'disolviéndose'
+      // El umbral no es fijo: se calibra contra cuánto varía normalmente ESTA moneda.
+      // Un 1.4x en una moneda estable es mucho; en una volátil es ruido. Con el corte
+      // fijo, las monedas volátiles marcaban "armándose" todo el tiempo.
+      estado: nuevo > viejo * umbralCambio && nuevo > 0.12 ? 'armándose'
+            : nuevo < viejo / umbralCambio && viejo > 0.12 ? 'disolviéndose'
             : nuevo > 0.25 ? 'estable' : null,
     });
   }
@@ -5246,6 +5036,8 @@ export function mapaCalorTemporal(candles, opciones = {}){
     // Si el mapa se construyó con liquidaciones reales o estimadas: cambia cuánto confiar
     conLiquidacionesReales: Array.isArray(opciones.liquidacionesReales) && opciones.liquidacionesReales.length > 0,
     rejilla: norm, filas, columnas: norm.length, tiempos, recorrido,
+    // El umbral que se usó: sirve para saber cuán exigente fue la detección
+    umbralCambio: +umbralCambio.toFixed(2), variacionTipica: +varTipica.toFixed(3),
     min, max, alto, precio,
     evolucion, focos,
     // Niveles donde se acumula liquidez aunque el precio se haya ido: alguien espera ahí
@@ -5476,7 +5268,14 @@ export function mapaObstaculos(candles, precio, opciones = {}){
   // el filtro (eso daba un umbral más alto que cualquier nivel real, y nada calificaba).
   // La escala del costo es conocida: un nivel débil da ~1.2, uno sólido ~2-5, un MURO 3-7.5.
   // Por encima de 3 hay que tenerlo en cuenta de verdad.
-  const umbralSerio = 3;
+  // ═══ QUÉ ES UN OBSTÁCULO SERIO, PARA ESTA MONEDA ═══
+  // Un corte fijo en 3 trata igual a una moneda con 20 niveles marcados que a una con 3.
+  // Se toma el percentil 65 de los costos reales: el obstáculo serio es el que destaca
+  // sobre los demás de ESTA moneda, no contra un número universal.
+  const costosOrden = niveles.map(n => n.costo).sort((a,b) => a-b);
+  const umbralSerio = costosOrden.length >= 4
+    ? Math.max(2, costosOrden[Math.floor(costosOrden.length * 0.65)])
+    : 3;
   const alcanceLibre = (camino) => {
     const primero = camino.find(n => n.costo >= umbralSerio);
     return primero ? Math.abs(primero.distPct) : alcance;
@@ -5509,143 +5308,7 @@ export function mapaObstaculos(candles, precio, opciones = {}){
   };
 }
 
-// ═══ MAPA DE CALOR DE LIQUIDEZ ═══
-// Devuelve una franja de precios con la densidad de liquidez en cada una, para DIBUJARLA.
-// La idea: mirar el mapa y ver de un vistazo dónde están los imanes, arriba o abajo, cerca
-// o lejos — sin leer un párrafo.
-//
-// La densidad de cada franja combina cinco cosas, todas de datos que ya tenemos:
-//   · Volumen negociado ahí (perfil de volumen clásico)
-//   · Tiempo que el precio pasó ahí (donde estuvo horas hay más órdenes)
-//   · Toques de swing con su calidad (rechazo, frescura, volumen)
-//   · Órdenes reales del libro, si están disponibles
-//   · Liquidaciones estimadas por apalancamiento
-export function mapaCalorLiquidez(candles, precio, opciones = {}){
-  if(!Array.isArray(candles) || candles.length < 30 || !precio) return null;
 
-  const rangoPct = opciones.rangoPct ?? 12;        // ±12% alrededor del precio
-  const filas = opciones.filas ?? 60;              // resolución del mapa
-  const min = precio * (1 - rangoPct/100);
-  const max = precio * (1 + rangoPct/100);
-  const alto = (max - min) / filas;
-
-  // Cada franja arranca en cero y se va cargando
-  const franjas = Array.from({length: filas}, (_, i) => ({
-    desde: min + i*alto, hasta: min + (i+1)*alto,
-    centro: min + (i+0.5)*alto,
-    volumen: 0, tiempo: 0, toques: 0, rechazo: 0, libro: 0, liquidaciones: 0,
-  }));
-  const indiceDe = (p) => {
-    if(p < min || p >= max) return -1;
-    return Math.min(filas-1, Math.floor((p - min) / alto));
-  };
-
-  // ── 1 y 2: VOLUMEN Y TIEMPO ──
-  // El volumen se reparte por el rango de cada vela; el tiempo cuenta cuántas velas
-  // tocaron cada franja. Donde el precio estuvo horas hay muchas más órdenes puestas.
-  for(const v of candles){
-    const iLo = indiceDe(v.l), iHi = indiceDe(v.h);
-    if(iLo < 0 && iHi < 0) continue;
-    const desde = Math.max(0, iLo < 0 ? 0 : iLo);
-    const hasta = Math.min(filas-1, iHi < 0 ? filas-1 : iHi);
-    const n = Math.max(1, hasta - desde + 1);
-    for(let i = desde; i <= hasta; i++){
-      franjas[i].volumen += (v.v || 0) / n;
-      franjas[i].tiempo += 1 / n;
-    }
-  }
-
-  // ── 3: TOQUES DE SWING CON SU CALIDAD ──
-  // Un swing con mecha larga rechazando pesa mucho más que uno que el precio cruzó de largo.
-  for(let i = 2; i < candles.length - 2; i++){
-    const v = candles[i];
-    const esMax = v.h > candles[i-1].h && v.h > candles[i-2].h && v.h > candles[i+1].h && v.h > candles[i+2].h;
-    const esMin = v.l < candles[i-1].l && v.l < candles[i-2].l && v.l < candles[i+1].l && v.l < candles[i+2].l;
-    if(!esMax && !esMin) continue;
-    const idx = indiceDe(esMax ? v.h : v.l);
-    if(idx < 0) continue;
-    const rango = v.h - v.l;
-    const mecha = rango > 0 ? (esMax ? (v.h - Math.max(v.o,v.c)) : (Math.min(v.o,v.c) - v.l)) / rango : 0;
-    // Los swings recientes pesan más: la liquidez vieja ya se consumió
-    const frescura = 0.4 + 0.6 * (i / candles.length);
-    franjas[idx].toques += frescura;
-    franjas[idx].rechazo += mecha * frescura;
-  }
-
-  // ── 4: ÓRDENES REALES DEL LIBRO ──
-  if(opciones.libro?.niveles?.length){
-    for(const n of opciones.libro.niveles){
-      const idx = indiceDe(n.precio);
-      if(idx >= 0) franjas[idx].libro += n.usd || 0;
-    }
-  }
-
-  // ── 5: LIQUIDACIONES ESTIMADAS ──
-  // Donde están los stops de la multitud. Se calcula desde los precios de entrada probables
-  // (los máximos y mínimos recientes) con los apalancamientos más usados.
-  if(opciones.estimarLiquidaciones !== false){
-    const recientes = candles.slice(-100);
-    for(const v of recientes){
-      for(const lev of [10, 20, 25, 50]){
-        // Un long entrado en el máximo se liquida un 1/lev por debajo
-        const liqLong = v.h * (1 - 1/lev);
-        const liqShort = v.l * (1 + 1/lev);
-        const peso = (v.v || 1) / lev;   // los apalancamientos altos son menos usados por volumen
-        const iL = indiceDe(liqLong), iS = indiceDe(liqShort);
-        if(iL >= 0) franjas[iL].liquidaciones += peso;
-        if(iS >= 0) franjas[iS].liquidaciones += peso;
-      }
-    }
-  }
-
-  // ── NORMALIZAR Y COMBINAR ──
-  const maxDe = (k) => Math.max(...franjas.map(f => f[k]), 0) || 1;
-  const mV = maxDe('volumen'), mT = maxDe('tiempo'), mTo = maxDe('toques'),
-        mR = maxDe('rechazo'), mL = maxDe('libro'), mLiq = maxDe('liquidaciones');
-
-  for(const f of franjas){
-    // Los pesos: el volumen y los toques son la base; el libro y las liquidaciones,
-    // cuando están, son evidencia más directa y pesan más.
-    f.densidad = +(
-      (f.volumen/mV) * 0.25 +
-      (f.tiempo/mT) * 0.15 +
-      (f.toques/mTo) * 0.25 +
-      (f.rechazo/mR) * 0.15 +
-      (f.libro/mL) * (mL > 1 ? 0.10 : 0) +
-      (f.liquidaciones/mLiq) * 0.10
-    ).toFixed(3);
-    f.distPct = +((f.centro - precio) / precio * 100).toFixed(2);
-  }
-
-  // Los picos: las franjas que sobresalen sobre sus vecinas son los imanes de verdad
-  const promedio = franjas.reduce((s,f)=>s+f.densidad, 0) / filas;
-  const picos = franjas
-    .filter((f,i) => f.densidad > promedio * 1.6 &&
-      (i === 0 || f.densidad >= franjas[i-1].densidad) &&
-      (i === filas-1 || f.densidad >= franjas[i+1].densidad))
-    .sort((a,b) => b.densidad - a.densidad);
-
-  const arriba = franjas.filter(f => f.distPct > 0.3);
-  const abajo = franjas.filter(f => f.distPct < -0.3);
-  const densArriba = arriba.reduce((s,f)=>s+f.densidad, 0);
-  const densAbajo = abajo.reduce((s,f)=>s+f.densidad, 0);
-  const totalDens = densArriba + densAbajo;
-
-  const picoArriba = picos.find(f => f.distPct > 0.3) || null;
-  const picoAbajo = picos.find(f => f.distPct < -0.3) || null;
-
-  return {
-    franjas, picos: picos.slice(0, 8), precio, min, max,
-    picoArriba, picoAbajo,
-    // Hacia dónde tira: el dato que se quiere ver de un vistazo
-    sesgo: totalDens > 0 ? (densArriba > densAbajo * 1.15 ? 'arriba'
-                          : densAbajo > densArriba * 1.15 ? 'abajo' : 'pareja') : 'pareja',
-    dominancia: totalDens > 0 ? Math.round(Math.max(densArriba, densAbajo) / totalDens * 100) : 50,
-    // La distancia al imán más cercano de cada lado, para saber si vale la pena operar
-    distArriba: picoArriba?.distPct ?? null,
-    distAbajo: picoAbajo?.distPct ?? null,
-  };
-}
 
 // ═══ CALIDAD DE UN NIVEL DE LIQUIDEZ ═══
 // Contar toques no alcanza. Un nivel tocado 4 veces puede ser un muro que se está cargando
@@ -7572,7 +7235,7 @@ async function fetchTransferenciasToken(contrato, red, horas = 24){
       params:[{ contractAddresses:[contrato], category:['erc20'], withMetadata:true,
                 excludeZeroValue:true, maxCount:'0x64', order:'desc' }],
     };
-    const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cuerpo) });
+    const res = await fetchConTimeout(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(cuerpo) });
     if(!res.ok) return null;
     const j = await res.json();
     const transfers = j?.result?.transfers;
