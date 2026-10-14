@@ -26,7 +26,7 @@
   },
   "account": {
     "id": 1,
-    "capital": 32.0158,
+    "capital": 31.1913,
     "initialCapital": 100,
     "openPositions": [
       {
@@ -78345,14 +78345,7 @@
         "pnlPct": -3.556,
         "motivoCierre": "stop antes de TP1",
         "closedAt": 1791991858627
-      }
-    ],
-    "tradesToday": {
-      "date": "2026-10-14",
-      "count": 5
-    },
-    "peakCapital": 100,
-    "theses": [
+      },
       {
         "id": "1790323295696_EWT",
         "symbol": "EWT",
@@ -78451,6 +78444,10 @@
           {
             "ts": 1791986474903,
             "note": "Actualización día 19.2: ⚠️ El motor ya NO confirma LONG en esta moneda (ahora da SHORT). La tesis original puede estar equivocada — revisar manualmente si conviene cerrar antes de que toque el stop. P&L flotante: -0.58 USDT."
+          },
+          {
+            "ts": 1792000604432,
+            "note": "Stop tocado antes de TP1 (-0.82 USDT). Capital: 31.19."
           }
         ],
         "theoEntry": 114.43,
@@ -78471,6 +78468,11 @@
             "ts": 1790326909974,
             "etapa": "🚀 Entrada",
             "detalle": "$114.64"
+          },
+          {
+            "ts": 1792000604432,
+            "etapa": "🛑 Cerrada por stop",
+            "detalle": "-0.82 USDT"
           }
         ],
         "abiertaEnDrawdownAlto": true,
@@ -78534,7 +78536,7 @@
             "stopEstructural": null
           },
           "mfe": 1.01,
-          "mae": -0.94,
+          "mae": -1.02,
           "ifvg": "soporte",
           "imbalance": null,
           "rupturaTriangulo": null,
@@ -78635,13 +78637,9 @@
           }
         ],
         "auditoria": {
-          "minDesdeEntrada": 110.97,
+          "minDesdeEntrada": 110.76,
           "maxDesdeEntrada": 118.58,
           "eventos": [
-            {
-              "ts": 1791964870375,
-              "precio": 113.48
-            },
             {
               "ts": 1791966660290,
               "precio": 113.98
@@ -78717,23 +78715,43 @@
             {
               "ts": 1791999061368,
               "precio": 111.08
+            },
+            {
+              "ts": 1792000604432,
+              "precio": 110.79
             }
           ],
           "ultimaMedicion": {
-            "ts": 1791999061368,
-            "desde": 1791976261368,
-            "velas": 26,
-            "low": 110.97,
+            "ts": 1792000604432,
+            "desde": 1791977804432,
+            "velas": 25,
+            "low": 110.76,
             "high": 113.85,
-            "precio": 111.08
+            "precio": 110.79
           },
-          "slTocadoDesdeEntrada": false,
+          "slTocadoDesdeEntrada": true,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1791999061368,
-        "lastNarrationAt": 1791986474492
-      },
+        "lastCheckedAt": 1792000604432,
+        "lastNarrationAt": 1791986474492,
+        "exit": 110.86175,
+        "alcanzoTp1": false,
+        "pnlPctTramoFinal": -3.296,
+        "result": "loss",
+        "pnl": -0.8245,
+        "pnlUsd": -0.8245,
+        "pnlPct": -3.296,
+        "motivoCierre": "stop antes de TP1",
+        "closedAt": 1792000604433
+      }
+    ],
+    "tradesToday": {
+      "date": "2026-10-14",
+      "count": 5
+    },
+    "peakCapital": 100,
+    "theses": [
       {
         "id": "1790325102225_SPY",
         "symbol": "SPY",
@@ -79037,10 +79055,6 @@
           "maxDesdeEntrada": 782.44,
           "eventos": [
             {
-              "ts": 1791964870977,
-              "precio": 780.51
-            },
-            {
               "ts": 1791966660551,
               "precio": 781.11
             },
@@ -79115,21 +79129,25 @@
             {
               "ts": 1791999061632,
               "precio": 769.71
+            },
+            {
+              "ts": 1792000605019,
+              "precio": 768.86
             }
           ],
           "ultimaMedicion": {
-            "ts": 1791999061632,
-            "desde": 1791976261632,
-            "velas": 26,
-            "low": 769.5,
+            "ts": 1792000605019,
+            "desde": 1791977805018,
+            "velas": 25,
+            "low": 768.74,
             "high": 781.58,
-            "precio": 769.71
+            "precio": 768.86
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1791999061632,
+        "lastCheckedAt": 1792000605019,
         "lastNarrationAt": 1791999061632
       },
       {
@@ -79348,7 +79366,7 @@
             "atrPct": 0.26,
             "stopEstructural": null
           },
-          "mfe": 0.33,
+          "mfe": 0.34,
           "mae": 0,
           "ifvg": "soporte",
           "imbalance": null,
@@ -79453,12 +79471,8 @@
         ],
         "auditoria": {
           "minDesdeEntrada": 0.06862,
-          "maxDesdeEntrada": 0.06937,
+          "maxDesdeEntrada": 0.0694,
           "eventos": [
-            {
-              "ts": 1791964873782,
-              "precio": 0.06916
-            },
             {
               "ts": 1791966661854,
               "precio": 0.0693
@@ -79534,21 +79548,25 @@
             {
               "ts": 1791999062226,
               "precio": 0.06927
+            },
+            {
+              "ts": 1792000605565,
+              "precio": 0.06939
             }
           ],
           "ultimaMedicion": {
-            "ts": 1791999062226,
-            "desde": 1791976262226,
-            "velas": 26,
+            "ts": 1792000605565,
+            "desde": 1791977805565,
+            "velas": 25,
             "low": 0.06887,
-            "high": 0.06937,
-            "precio": 0.06927
+            "high": 0.0694,
+            "precio": 0.06939
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1791999062226
+        "lastCheckedAt": 1792000605566
       },
       {
         "id": "1791961318216_INIT",
@@ -79651,6 +79669,10 @@
           },
           {
             "ts": 1791999072462,
+            "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
+          },
+          {
+            "ts": 1792000620031,
             "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
           }
         ],
@@ -79770,6 +79792,10 @@
           {
             "ts": 1791999073913,
             "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
+          },
+          {
+            "ts": 1792000622568,
+            "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
           }
         ],
         "theoEntry": 0.008603,
@@ -79875,6 +79901,10 @@
           },
           {
             "ts": 1791999075347,
+            "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
+          },
+          {
+            "ts": 1792000624518,
             "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
           }
         ],
@@ -79982,6 +80012,10 @@
           {
             "ts": 1791999076675,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 19 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792000625979,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 19 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.01738,
@@ -80072,6 +80106,10 @@
           {
             "ts": 1791999078210,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 85 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792000627780,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 83 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.232,
@@ -80162,6 +80200,10 @@
           {
             "ts": 1791999079634,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 74% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1792000629573,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 71% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.0594,
@@ -80252,6 +80294,10 @@
           {
             "ts": 1791999080953,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 16 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792000631561,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 15 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.2038,
@@ -80342,6 +80388,10 @@
           {
             "ts": 1791999082667,
             "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
+          },
+          {
+            "ts": 1792000633054,
+            "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
           }
         ],
         "theoEntry": 0.02036,
@@ -80428,6 +80478,10 @@
           {
             "ts": 1791999084222,
             "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
+          },
+          {
+            "ts": 1792000637571,
+            "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
           }
         ],
         "theoEntry": 0.1617,
@@ -80509,6 +80563,10 @@
           },
           {
             "ts": 1791999085700,
+            "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
+          },
+          {
+            "ts": 1792000639511,
             "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
           }
         ],
@@ -80592,6 +80650,10 @@
           {
             "ts": 1791999087153,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 14 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792000640946,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 14 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.008013,
@@ -80674,6 +80736,10 @@
           {
             "ts": 1791999088589,
             "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
+          },
+          {
+            "ts": 1792000642747,
+            "note": "Se frena por hoy: 3 pérdidas seguidas ya en el día. No se confirma nada más hasta mañana, para no seguir operando en un momento donde algo está afectando varias operaciones seguidas."
           }
         ],
         "theoEntry": 0.1939,
@@ -80752,6 +80818,10 @@
           {
             "ts": 1791999090145,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (19) — la tendencia se está quedando sin fuerza. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792000644622,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); ADX 4h débil y bajando (19) — la tendencia se está quedando sin fuerza. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.003833,
@@ -80822,6 +80892,10 @@
           {
             "ts": 1791999091553,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 83% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1792000646436,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 85% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.01866,
@@ -81077,21 +81151,25 @@
             {
               "ts": 1791999062484,
               "precio": 0.1267
+            },
+            {
+              "ts": 1792000606082,
+              "precio": 0.1264
             }
           ],
           "ultimaMedicion": {
-            "ts": 1791999062484,
+            "ts": 1792000606082,
             "desde": 1791982917088,
-            "velas": 18,
+            "velas": 19,
             "low": 0.1252,
             "high": 0.1281,
-            "precio": 0.1267
+            "precio": 0.1264
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1791999062484
+        "lastCheckedAt": 1792000606082
       },
       {
         "id": "1791981166452_ICNT",
@@ -81332,21 +81410,25 @@
             {
               "ts": 1791999062742,
               "precio": 0.1126
+            },
+            {
+              "ts": 1792000606604,
+              "precio": 0.1104
             }
           ],
           "ultimaMedicion": {
-            "ts": 1791999062742,
+            "ts": 1792000606604,
             "desde": 1791982921273,
-            "velas": 18,
+            "velas": 19,
             "low": 0.1045,
             "high": 0.115,
-            "precio": 0.1126
+            "precio": 0.1104
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1791999062742
+        "lastCheckedAt": 1792000606604
       }
     ],
     "expiredTheses": [
@@ -312311,27 +312393,27 @@
     },
     "SEI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999092384
+      "ts": 1792000648202
     },
     "JUP": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999092782
+      "ts": 1792000649314
     },
     "STRK": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999094357
+      "ts": 1792000652390
     },
     "ENA": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999094853
+      "ts": 1792000653445
     },
     "W": {
       "lastRecommendation": "LONG",
-      "ts": 1791999095254
+      "ts": 1792000654546
     },
     "TNSR": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999095649
+      "ts": 1792000655239
     },
     "WOLF": {
       "lastRecommendation": "SHORT",
@@ -312499,7 +312581,7 @@
     },
     "TIA": {
       "lastRecommendation": "LONG",
-      "ts": 1791999091971
+      "ts": 1792000647482
     },
     "CATE": {
       "lastRecommendation": "NO OPERAR",
@@ -312675,11 +312757,11 @@
     },
     "ORDI": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999093958
+      "ts": 1792000651277
     },
     "PYTH": {
       "lastRecommendation": "LONG",
-      "ts": 1791999093171
+      "ts": 1792000649812
     },
     "BANK": {
       "lastRecommendation": "SHORT",
@@ -312695,7 +312777,7 @@
     },
     "OPG": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999103165
+      "ts": 1792000670406
     },
     "BAT": {
       "lastRecommendation": "LONG",
@@ -312711,7 +312793,7 @@
     },
     "WIF": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999093566
+      "ts": 1792000650554
     },
     "LUNA": {
       "lastRecommendation": "NO OPERAR",
@@ -312727,7 +312809,7 @@
     },
     "AT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999103576
+      "ts": 1792000671448
     },
     "GGBR": {
       "lastRecommendation": "NO OPERAR",
@@ -312755,11 +312837,11 @@
     },
     "IRYS": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999111766
+      "ts": 1792000688209
     },
     "MANTRA": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999110580
+      "ts": 1792000684421
     },
     "IDOL": {
       "lastRecommendation": "SHORT",
@@ -312771,7 +312853,7 @@
     },
     "BNT": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999101331
+      "ts": 1792000666388
     },
     "MEW": {
       "lastRecommendation": "SHORT",
@@ -312791,7 +312873,7 @@
     },
     "HIVE": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999106863
+      "ts": 1792000677413
     },
     "RLC": {
       "lastRecommendation": "NO OPERAR",
@@ -312815,11 +312897,11 @@
     },
     "AUCTION": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999112957
+      "ts": 1792000690530
     },
     "EWT": {
-      "lastRecommendation": "LONG",
-      "ts": 1790323295694
+      "lastRecommendation": "SHORT",
+      "ts": 1792000687477
     },
     "HOME": {
       "lastRecommendation": "SHORT",
@@ -312827,7 +312909,7 @@
     },
     "SKL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999099320
+      "ts": 1792000662975
     },
     "REZ": {
       "lastRecommendation": "SHORT",
@@ -312839,7 +312921,7 @@
     },
     "IOST": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999105590
+      "ts": 1792000675306
     },
     "STORJ": {
       "lastRecommendation": "NO OPERAR",
@@ -312847,23 +312929,23 @@
     },
     "STEEM": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999101730
+      "ts": 1792000667410
     },
     "PUNDIX": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999108713
+      "ts": 1792000680908
     },
     "HYPER": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999116564
+      "ts": 1792000697534
     },
     "CTSI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999103981
+      "ts": 1792000672473
     },
     "GMT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999114589
+      "ts": 1792000693428
     },
     "ONG": {
       "lastRecommendation": "SHORT",
@@ -312871,7 +312953,7 @@
     },
     "LISTA": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999097355
+      "ts": 1792000658420
     },
     "B2": {
       "lastRecommendation": "SHORT",
@@ -312879,7 +312961,7 @@
     },
     "MTL": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999110138
+      "ts": 1792000683355
     },
     "NAORIS": {
       "lastRecommendation": "NO OPERAR",
@@ -312894,12 +312976,12 @@
       "ts": 1791995516315
     },
     "METIS": {
-      "lastRecommendation": "LONG",
-      "ts": 1791999104377
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1792000673194
     },
     "CVC": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999117347
+      "ts": 1792000698936
     },
     "LQTY": {
       "lastRecommendation": "SHORT",
@@ -312915,7 +312997,7 @@
     },
     "CARV": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999109631
+      "ts": 1792000682327
     },
     "DOGS": {
       "lastRecommendation": "SHORT",
@@ -312923,7 +313005,7 @@
     },
     "YGG": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999116957
+      "ts": 1792000698234
     },
     "CGPT": {
       "lastRecommendation": "LONG",
@@ -312943,7 +313025,7 @@
     },
     "ONE": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999114170
+      "ts": 1792000692712
     },
     "BREV": {
       "lastRecommendation": "SHORT",
@@ -312971,7 +313053,7 @@
     },
     "WAXP": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999115774
+      "ts": 1792000696005
     },
     "LSK": {
       "lastRecommendation": "SHORT",
@@ -312991,7 +313073,7 @@
     },
     "LUMIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999118653
+      "ts": 1792000701466
     },
     "XNY": {
       "lastRecommendation": "SHORT",
@@ -313003,7 +313085,7 @@
     },
     "CELR": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999114976
+      "ts": 1792000694569
     },
     "CLO": {
       "lastRecommendation": "NO OPERAR",
@@ -313095,7 +313177,7 @@
     },
     "RVN": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999112559
+      "ts": 1792000689740
     },
     "JELLYJELLY": {
       "lastRecommendation": "SHORT",
@@ -313167,7 +313249,7 @@
     },
     "SPACE": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999115372
+      "ts": 1792000695269
     },
     "PROVE": {
       "lastRecommendation": "SHORT",
@@ -313199,7 +313281,7 @@
     },
     "MEME": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999096160
+      "ts": 1792000655941
     },
     "MOCA": {
       "lastRecommendation": "SHORT",
@@ -313207,11 +313289,11 @@
     },
     "VANA": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999098146
+      "ts": 1792000660480
     },
     "FOGO": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999117739
+      "ts": 1792000699688
     },
     "DUSK": {
       "lastRecommendation": "LONG",
@@ -313223,7 +313305,7 @@
     },
     "XAN": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999110979
+      "ts": 1792000685440
     },
     "BIGTIME": {
       "lastRecommendation": "SHORT",
@@ -313243,7 +313325,7 @@
     },
     "USTC": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999106459
+      "ts": 1792000676717
     },
     "MANTA": {
       "lastRecommendation": "NO OPERAR",
@@ -313274,8 +313356,8 @@
       "ts": 1791984760427
     },
     "SKYAI": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1791999102245
+      "lastRecommendation": "SHORT",
+      "ts": 1792000668496
     },
     "UP": {
       "lastRecommendation": "SHORT",
@@ -313283,7 +313365,7 @@
     },
     "ETHW": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999109231
+      "ts": 1792000681627
     },
     "KNC": {
       "lastRecommendation": "SHORT",
@@ -313295,7 +313377,7 @@
     },
     "ZORA": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999105174
+      "ts": 1792000674604
     },
     "EDU": {
       "lastRecommendation": "NO OPERAR",
@@ -313307,7 +313389,7 @@
     },
     "ILV": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999104776
+      "ts": 1792000673890
     },
     "FRAX": {
       "lastRecommendation": "NO OPERAR",
@@ -313359,7 +313441,7 @@
     },
     "AIOT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999107257
+      "ts": 1792000678438
     },
     "LAB": {
       "lastRecommendation": "NO OPERAR",
@@ -313459,11 +313541,11 @@
     },
     "BLUR": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999096557
+      "ts": 1792000656643
     },
     "EUL": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999102643
+      "ts": 1792000669215
     },
     "ALT": {
       "lastRecommendation": "LONG",
@@ -313471,7 +313553,7 @@
     },
     "POWR": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999098539
+      "ts": 1792000661501
     },
     "CROSS": {
       "lastRecommendation": "LONG",
@@ -313495,7 +313577,7 @@
     },
     "EDEN": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999112156
+      "ts": 1792000688980
     },
     "RECALL": {
       "lastRecommendation": "SHORT",
@@ -313527,7 +313609,7 @@
     },
     "ZEST": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999113355
+      "ts": 1792000691252
     },
     "RPL": {
       "lastRecommendation": "SHORT",
@@ -313535,11 +313617,11 @@
     },
     "ZEREBRO": {
       "lastRecommendation": "LONG",
-      "ts": 1791999111374
+      "ts": 1792000686452
     },
     "SQD": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999100931
+      "ts": 1792000665288
     },
     "MASK": {
       "lastRecommendation": "SHORT",
@@ -313847,7 +313929,7 @@
     },
     "ZBT": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999116166
+      "ts": 1792000696779
     },
     "WCT": {
       "lastRecommendation": "SHORT",
@@ -313859,11 +313941,11 @@
     },
     "SOMI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999097756
+      "ts": 1792000659448
     },
     "XAI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999107653
+      "ts": 1792000679469
     },
     "AGLD": {
       "lastRecommendation": "SHORT",
@@ -314011,7 +314093,7 @@
     },
     "XPIN": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999098934
+      "ts": 1792000662255
     },
     "BOT": {
       "lastRecommendation": "LONG",
@@ -314019,7 +314101,7 @@
     },
     "NOW": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999100539
+      "ts": 1792000664561
     },
     "TAG": {
       "lastRecommendation": "NO OPERAR",
@@ -314031,7 +314113,7 @@
     },
     "HEMI": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999119160
+      "ts": 1792000702500
     },
     "RARE": {
       "lastRecommendation": "LONG",
@@ -314043,7 +314125,7 @@
     },
     "BEAT": {
       "lastRecommendation": "SHORT",
-      "ts": 1791999108318
+      "ts": 1792000680211
     },
     "TRUMP": {
       "lastRecommendation": "NO OPERAR",
@@ -314131,7 +314213,7 @@
     },
     "VELVET": {
       "lastRecommendation": "LONG",
-      "ts": 1791999096948
+      "ts": 1792000657336
     },
     "STX": {
       "lastRecommendation": "LONG",
@@ -314207,7 +314289,7 @@
     },
     "GRVT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999118257
+      "ts": 1792000700394
     },
     "SPY": {
       "lastRecommendation": "LONG",
@@ -314371,7 +314453,7 @@
     },
     "OGN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1791999113773
+      "ts": 1792000691969
     },
     "KAIA": {
       "lastRecommendation": "LONG",
@@ -430092,8 +430174,9 @@
       "tp2": 0.001501782,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791608539406,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792000610500
     },
     {
       "symbol": "HUMA",
@@ -430108,8 +430191,9 @@
       "tp2": 0.036665393726161066,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791608552451,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792000611354
     },
     {
       "symbol": "JUP",
@@ -430124,8 +430208,9 @@
       "tp2": 0.44108400000000003,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791610281453,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1792000612122
     },
     {
       "symbol": "PYTH",
@@ -430140,8 +430225,9 @@
       "tp2": 0.08698453000000003,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791610281928,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792000612910
     },
     {
       "symbol": "ENA",
@@ -430156,8 +430242,9 @@
       "tp2": 0.23755517000000004,
       "marketPhase": "RANGO",
       "detectadaEn": 1791610285394,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792000613692
     },
     {
       "symbol": "LPT",
@@ -430172,8 +430259,9 @@
       "tp2": 2.2210570000000005,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791610288956,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1792000614484
     },
     {
       "symbol": "NXPC",
@@ -430188,8 +430276,9 @@
       "tp2": 0.20366048971754203,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1791610311450,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792000615240
     },
     {
       "symbol": "TURBO",
@@ -430204,8 +430293,9 @@
       "tp2": 0.0008642368,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1791610314909,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792000616007
     },
     {
       "symbol": "ROSE",
@@ -430220,8 +430310,9 @@
       "tp2": 0.009289527148182177,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791610318387,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "sin definir",
+      "evaluadaEn": 1792000616796
     },
     {
       "symbol": "HUMA",
@@ -430236,8 +430327,9 @@
       "tp2": 0.03666979372616106,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791610331736,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792000617583
     },
     {
       "symbol": "JUP",
@@ -490990,6 +491082,486 @@
       "detectadaEn": 1791999117347,
       "evaluada": false,
       "resultado": null
+    },
+    {
+      "symbol": "PYTH",
+      "tag": " (custom)",
+      "dir": "LONG",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 46,
+      "precio": 0.08081,
+      "stop": 0.07678415,
+      "tp1": 0.08684877500000002,
+      "tp2": 0.09168855534135896,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000649814,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ENA",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 41,
+      "precio": 0.19728,
+      "stop": 0.20911680000000002,
+      "tp1": 0.17261922671924212,
+      "tp2": 0.15908539351808976,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000653446,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "TNSR",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 41,
+      "precio": 0.03334,
+      "stop": 0.03529557,
+      "tp1": 0.030406645000000006,
+      "tp2": 0.02747329000000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000655240,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "MEME",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.0005115,
+      "stop": 0.0005405998928039736,
+      "tp1": 0.00047803512327543047,
+      "tp2": 0.00045912019295284764,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000655942,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "VELVET",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7.1,
+      "faltaba": 0.5,
+      "confianza": 43,
+      "precio": 0.07294,
+      "stop": 0.0650098017156198,
+      "tp1": 0.08205972802703723,
+      "tp2": 0.08721435691188437,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000657337,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "LISTA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.5,
+      "faltaba": 0.1,
+      "confianza": 49,
+      "precio": 0.07566,
+      "stop": 0.08037039,
+      "tp1": 0.06983204594791237,
+      "tp2": 0.06718129800000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000658420,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "VANA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 1.013,
+      "stop": 1.107365,
+      "tp1": 0.9044802499999999,
+      "tp2": 0.8431429999999999,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000660480,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "POWR",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.05521,
+      "stop": 0.06187507,
+      "tp1": 0.04470930084281372,
+      "tp2": 0.04204327284281372,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000661501,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SQD",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.4,
+      "faltaba": 0.2,
+      "confianza": 47,
+      "precio": 0.02357,
+      "stop": 0.02518533,
+      "tp1": 0.022090480811742624,
+      "tp2": 0.020662406000000005,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000665289,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "BNT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.4,
+      "faltaba": 0.2,
+      "confianza": 47,
+      "precio": 0.3118,
+      "stop": 0.33109299999999997,
+      "tp1": 0.2896130500000001,
+      "tp2": 0.2770726000000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000666389,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SKYAI",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 44,
+      "precio": 0.03105,
+      "stop": 0.03532199999999999,
+      "tp1": 0.026137200000000013,
+      "tp2": 0.023360400000000017,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000668496,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "EUL",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 1.279,
+      "stop": 1.358148298600027,
+      "tp1": 1.2021720195386947,
+      "tp2": 1.136533062519951,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000669215,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ZORA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.006577,
+      "stop": 0.006953956822041378,
+      "tp1": 0.006143499654652416,
+      "tp2": 0.00589847772032552,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000674605,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "IOST",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.4,
+      "faltaba": 0.2,
+      "confianza": 47,
+      "precio": 0.0008058,
+      "stop": 0.0008631559999999999,
+      "tp1": 0.0007250600508533072,
+      "tp2": 0.0007021176508533072,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000675306,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "USTC",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.004999,
+      "stop": 0.005255719999999999,
+      "tp1": 0.004703772000000001,
+      "tp2": 0.004536904000000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000676717,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "BEAT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.4,
+      "faltaba": 0.2,
+      "confianza": 48,
+      "precio": 0.0767,
+      "stop": 0.08194509999999998,
+      "tp1": 0.07066813500000003,
+      "tp2": 0.06725882000000005,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000680212,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ETHW",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 35,
+      "precio": 0.2512,
+      "stop": 0.27432049999999997,
+      "tp1": 0.224611425,
+      "tp2": 0.2095831,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000681629,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "CARV",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.0369,
+      "stop": 0.03949365,
+      "tp1": 0.03459580747089506,
+      "tp2": 0.03223143000000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000682329,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "MTL",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 0.2865,
+      "stop": 0.3035864999999999,
+      "tp1": 0.26685052500000006,
+      "tp2": 0.2557443000000001,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000683355,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "XAN",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.010163,
+      "stop": 0.010907624999999999,
+      "tp1": 0.009306681250000002,
+      "tp2": 0.008822675000000002,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000685440,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ZEREBRO",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 0.038541,
+      "stop": 0.03275985,
+      "tp1": 0.0451893225,
+      "tp2": 0.048947069999999995,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000686452,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "EWT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 110.77,
+      "stop": 116.76559999999999,
+      "tp1": 103.87506,
+      "tp2": 99.97792,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000687477,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "EDEN",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 41,
+      "precio": 0.05755,
+      "stop": 0.06378259999999998,
+      "tp1": 0.05038251000000002,
+      "tp2": 0.045444137589456604,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000688980,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "RVN",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 37,
+      "precio": 0.001564,
+      "stop": 0.001762271,
+      "tp1": 0.0013359883500000003,
+      "tp2": 0.0012071122000000003,
+      "marketPhase": "CAPITULACIÓN",
+      "detectadaEn": 1792000689740,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "AUCTION",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 3.458,
+      "stop": 3.6722699999999997,
+      "tp1": 3.159936531547854,
+      "tp2": 3.072314000000001,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000690531,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ONE",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 0.0015613,
+      "stop": 0.001795495,
+      "tp1": 0.0012919757500000002,
+      "tp2": 0.001139749,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792000692713,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SPACE",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 41,
+      "precio": 0.003915,
+      "stop": 0.004476389,
+      "tp1": 0.0034454485637993013,
+      "tp2": 0.0029044998000000003,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000695269,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ZBT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.07353,
+      "stop": 0.08084474999999999,
+      "tp1": 0.0651180375,
+      "tp2": 0.060363450000000006,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000696779,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "HYPER",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.06684,
+      "stop": 0.07317135,
+      "tp1": 0.06141187462409016,
+      "tp2": 0.05544357,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000697534,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "CVC",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 37,
+      "precio": 0.0239,
+      "stop": 0.02493519533107298,
+      "tp1": 0.022709525369266077,
+      "tp2": 0.022036648404068642,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792000698937,
+      "evaluada": false,
+      "resultado": null
     }
   ],
   "killSwitchNotifiedDate": "2026-10-14",
@@ -503791,20 +504363,35 @@
       "drawdownPct": 67.98,
       "operacionesCerradas": 200,
       "tesisAbiertas": 19
+    },
+    {
+      "ts": 1792000646447,
+      "cuenta": 1,
+      "capital": 31.1913,
+      "pico": 100,
+      "drawdownPct": 68.81,
+      "operacionesCerradas": 201,
+      "tesisAbiertas": 18
+    },
+    {
+      "ts": 1792000655241,
+      "cuenta": 1,
+      "capital": 31.1913,
+      "pico": 100,
+      "drawdownPct": 68.81,
+      "operacionesCerradas": 201,
+      "tesisAbiertas": 18
     }
   ],
   "mesesArchivados": [],
   "huellasMensajes": {
     "270611575": 1791981162152,
-    "923117572": 1791977467135,
     "1021262388": 1791988265955,
     "1200714824": 1791982923270,
     "1403162192": 1791986474903,
+    "1423508229": 1792000604434,
     "1490449289": 1791981152937,
-    "1561910945": 1791977499222,
     "1882579248": 1791991858630,
-    "2013286326": 1791977467137,
-    "-1400820842": 1791977568389,
     "-403297604": 1791981166453,
     "-816580434": 1791982873856,
     "-336253452": 1791982873857,
@@ -503814,7 +504401,8 @@
     "-1161251548": 1791986473979,
     "-717222606": 1791988265954,
     "-847024310": 1791991858629,
-    "-401443949": 1791999061961
+    "-401443949": 1791999061961,
+    "-1504813004": 1792000604436
   },
   "ultimoScalpBTC": "2026-10-14",
   "ultimoInformeBTC": "2026-10-11",
