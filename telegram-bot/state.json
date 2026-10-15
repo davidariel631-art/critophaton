@@ -26,7 +26,7 @@
   },
   "account": {
     "id": 1,
-    "capital": 30.641,
+    "capital": 30.0282,
     "initialCapital": 100,
     "openPositions": [
       {
@@ -80914,6 +80914,591 @@
         "pnlPct": -4.963,
         "motivoCierre": "stop antes de TP1",
         "closedAt": 1792031458318
+      },
+      {
+        "id": "1792047680690_W",
+        "symbol": "W",
+        "dir": "LONG",
+        "tag": " (custom)",
+        "status": "ACTIVE",
+        "conviction": 95,
+        "detectedAt": 1792047680690,
+        "expiresAt": 1792112480690,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1792047680690,
+            "note": "Tesis detectada en 4h: LONG (score 9.5/10, confianza 90%). A favor: Dios Smart Money, Dios Derivados, Dios Macro (4h), Dios Radar del Mercado. Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1792049468549,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1792051282131,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1792053070585,
+            "note": "Todavía esperando confirmación (Estocástico en 11, zona de sobreventa en un mercado LATERAL, ADX 17 — acá sí es agotamiento real, no se abren operaciones nuevas en el extremo)."
+          },
+          {
+            "ts": 1792054878968,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1792056046232,
+            "note": "Entrada CONFIRMADA en 15m (la confianza del motor subió a 32%). Entrada: $0.014606, Stop: $0.01419056, TP1: $0.015355, TP2: $0.01584925. riesgo reducido a 1.0% (drawdown 69% o 1 pérdidas seguidas)."
+          },
+          {
+            "ts": 1792067470278,
+            "note": "Stop tocado antes de TP1 (-0.31 USDT). Capital: 30.33."
+          }
+        ],
+        "theoEntry": 0.014948,
+        "theoStop": 0.014051119999999999,
+        "theoTp1": 0.01629332,
+        "timeline": [
+          {
+            "ts": 1792047680690,
+            "etapa": "🔭 Detectada",
+            "detalle": "score 9.5/10 en 4h"
+          },
+          {
+            "ts": 1792056046232,
+            "etapa": "🟢 Confirmada",
+            "detalle": "por Entrada en zona"
+          },
+          {
+            "ts": 1792056046232,
+            "etapa": "🚀 Entrada",
+            "detalle": "$0.014606"
+          },
+          {
+            "ts": 1792067470278,
+            "etapa": "🛑 Cerrada por stop",
+            "detalle": "-0.31 USDT"
+          }
+        ],
+        "abiertaEnDrawdownAlto": true,
+        "drawdownAlDetectar": 69.36,
+        "score4h": 9.5,
+        "score15m": 6.6,
+        "score": 9.5,
+        "confianza": 32,
+        "dataQuality": 76,
+        "marketPhase": "ACUMULACIÓN",
+        "registro": {
+          "componentes": [
+            {
+              "n": "Macro (4h)",
+              "aporte": 1.1,
+              "senal": 1
+            },
+            {
+              "n": "Tendencia",
+              "aporte": 0.53,
+              "senal": 0.5
+            },
+            {
+              "n": "Estructura",
+              "aporte": 0.36,
+              "senal": 0.4
+            },
+            {
+              "n": "Momentum",
+              "aporte": -0.29,
+              "senal": -0.36
+            },
+            {
+              "n": "Derivados",
+              "aporte": 0.2,
+              "senal": 0.3
+            },
+            {
+              "n": "Dominancias",
+              "aporte": 0,
+              "senal": 0
+            }
+          ],
+          "ajusteCalidad": -0.32,
+          "estocastico": 26.47270114942522,
+          "rsi": 41.772729289216436,
+          "adx": 14.679127776132422,
+          "divergencia": null,
+          "triangulo": "ascendente",
+          "liquidezAFavor": "pareja",
+          "fuerzaVolumen": 32,
+          "caminos": "Entrada en zona",
+          "horasHastaConfirmar": 2.3,
+          "porValvulaEscape": false,
+          "gestion": {
+            "stopPct": 2.84,
+            "rTp1": 1.8,
+            "rTp2": 2.99,
+            "rTp3": 5.01,
+            "atrPct": 1.42,
+            "stopEstructural": null
+          },
+          "mfe": 0,
+          "mae": -0.84,
+          "ifvg": "resistencia",
+          "imbalance": null,
+          "rupturaTriangulo": "ascendente/arriba",
+          "onChain": null,
+          "apalancamiento": null,
+          "libro": null,
+          "flujoOrdenes": null,
+          "wallets": null,
+          "actividadAnomala": null,
+          "diosesAFavor": [
+            "Dios de Tendencia",
+            "Dios Smart Money",
+            "Dios Derivados",
+            "Dios Macro (4h)",
+            "Dios Radar del Mercado",
+            "Dios Memoria"
+          ],
+          "parecidasAlEntrar": {
+            "cantidad": 14,
+            "winRate": 42.9
+          },
+          "decision": {
+            "accion": "DESCARTAR",
+            "fuerza": null,
+            "contexto": null,
+            "sesgo": "LONG",
+            "tamanoSugerido": 0,
+            "bloqueos": 1,
+            "esperas": 2,
+            "checklistPendiente": 0
+          }
+        },
+        "entry": 0.014606,
+        "stop": 0.014190563188314536,
+        "tp1": 0.015355,
+        "tp2": 0.01584924934427818,
+        "tp3": 0.016686,
+        "units": 737.5610234366757,
+        "originalUnits": 737.5610234366757,
+        "riskPct": 0.01,
+        "confirmedAt": 1792056046232,
+        "partialTaken": false,
+        "originalStop": 0.014190563188314536,
+        "originalRisk": 0.00041543681168546356,
+        "entryAt": 1792056046232,
+        "stopHistory": [
+          {
+            "tipo": "ORIGINAL",
+            "precio": 0.014190563188314536,
+            "desde": 1792056046232,
+            "hasta": null
+          }
+        ],
+        "tipoSetup": "Confianza subió",
+        "horaConfirmacion": 9,
+        "committeeSnapshot": [
+          {
+            "name": "📈 Dios de Tendencia",
+            "vote": "LONG"
+          },
+          {
+            "name": "⚡ Dios Momentum",
+            "vote": "SHORT"
+          },
+          {
+            "name": "🧠 Dios Smart Money",
+            "vote": "LONG"
+          },
+          {
+            "name": "💰 Dios Derivados",
+            "vote": "LONG"
+          },
+          {
+            "name": "🌐 Dios Macro (4h)",
+            "vote": "LONG"
+          },
+          {
+            "name": "💧 Dios Capital Flow",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "⚠️ Dios Gestión de Riesgo",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📡 Dios Radar del Mercado",
+            "vote": "LONG"
+          },
+          {
+            "name": "🧠 Dios Memoria",
+            "vote": "LONG"
+          },
+          {
+            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios VWAP",
+            "vote": "SHORT"
+          },
+          {
+            "name": "📉 Dios CVD",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios Market Context Matrix",
+            "vote": "NEUTRAL"
+          }
+        ],
+        "auditoria": {
+          "minDesdeEntrada": 0.014177,
+          "maxDesdeEntrada": 0.014763,
+          "eventos": [
+            {
+              "ts": 1792056655744,
+              "precio": 0.014468
+            },
+            {
+              "ts": 1792058474797,
+              "precio": 0.014605
+            },
+            {
+              "ts": 1792060261296,
+              "precio": 0.014533
+            },
+            {
+              "ts": 1792062070077,
+              "precio": 0.014447
+            },
+            {
+              "ts": 1792063857805,
+              "precio": 0.014328
+            },
+            {
+              "ts": 1792065674363,
+              "precio": 0.014255
+            },
+            {
+              "ts": 1792067470278,
+              "precio": 0.014314
+            }
+          ],
+          "ultimaMedicion": {
+            "ts": 1792067470278,
+            "desde": 1792056046232,
+            "velas": 13,
+            "low": 0.014177,
+            "high": 0.014763,
+            "precio": 0.014314
+          },
+          "slTocadoDesdeEntrada": true,
+          "tp1TocadoDesdeEntrada": false
+        },
+        "priceFailCount": 0,
+        "lastCheckedAt": 1792067470278,
+        "exit": 0.014190563188314536,
+        "alcanzoTp1": false,
+        "pnlPctTramoFinal": -2.844,
+        "result": "loss",
+        "pnl": -0.3064,
+        "pnlUsd": -0.3064,
+        "pnlPct": -2.844,
+        "motivoCierre": "stop antes de TP1",
+        "closedAt": 1792067470278
+      },
+      {
+        "id": "1792047707640_OGN",
+        "symbol": "OGN",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "ACTIVE",
+        "conviction": 95,
+        "detectedAt": 1792047707640,
+        "expiresAt": 1792112507640,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1792047707640,
+            "note": "Tesis detectada en 4h: LONG (score 9.5/10, confianza 90%). A favor: Dios Smart Money, Dios Derivados, Dios Macro (4h), Dios Gestión de Riesgo. Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1792049475111,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1792051286500,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1792053074833,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1792054883824,
+            "note": "Entrada CONFIRMADA en 15m (Momentum Continuation: pullback a EMA20 dentro de una tendencia ya fuerte). Entrada: $0.03159, Stop: $0.0302198, TP1: $0.03316573, TP2: $0.03405636. riesgo reducido a 1.0% (drawdown 69% o 1 pérdidas seguidas)."
+          },
+          {
+            "ts": 1792067471067,
+            "note": "Stop tocado antes de TP1 (-0.31 USDT). Capital: 30.03."
+          }
+        ],
+        "theoEntry": 0.03154,
+        "theoStop": 0.029647599999999996,
+        "theoTp1": 0.0343786,
+        "timeline": [
+          {
+            "ts": 1792047707640,
+            "etapa": "🔭 Detectada",
+            "detalle": "score 9.5/10 en 4h"
+          },
+          {
+            "ts": 1792054883824,
+            "etapa": "🟢 Confirmada",
+            "detalle": "por Pullback + MACD temprano"
+          },
+          {
+            "ts": 1792054883824,
+            "etapa": "🚀 Entrada",
+            "detalle": "$0.03159"
+          },
+          {
+            "ts": 1792067471067,
+            "etapa": "🛑 Cerrada por stop",
+            "detalle": "-0.31 USDT"
+          }
+        ],
+        "abiertaEnDrawdownAlto": true,
+        "drawdownAlDetectar": 69.36,
+        "score4h": 9.5,
+        "score15m": 7.3,
+        "score": 9.5,
+        "confianza": 46,
+        "dataQuality": 76,
+        "marketPhase": "RANGO",
+        "registro": {
+          "componentes": [
+            {
+              "n": "Macro (4h)",
+              "aporte": 1.1,
+              "senal": 1
+            },
+            {
+              "n": "Tendencia",
+              "aporte": 0.63,
+              "senal": 0.6
+            },
+            {
+              "n": "Momentum",
+              "aporte": 0.48,
+              "senal": 0.6
+            },
+            {
+              "n": "Estructura",
+              "aporte": 0.36,
+              "senal": 0.4
+            },
+            {
+              "n": "Derivados",
+              "aporte": 0.2,
+              "senal": 0.3
+            },
+            {
+              "n": "Dominancias",
+              "aporte": 0,
+              "senal": 0
+            }
+          ],
+          "ajusteCalidad": -0.46,
+          "estocastico": 45.29494097854499,
+          "rsi": 53.56095734171528,
+          "adx": 29.678279918659005,
+          "divergencia": null,
+          "triangulo": null,
+          "liquidezAFavor": null,
+          "fuerzaVolumen": 59,
+          "caminos": "Pullback + MACD temprano",
+          "horasHastaConfirmar": 2,
+          "porValvulaEscape": false,
+          "gestion": {
+            "stopPct": 4.34,
+            "rTp1": 1.15,
+            "rTp2": 1.8,
+            "rTp3": 2.5,
+            "atrPct": 1.41,
+            "stopEstructural": null
+          },
+          "mfe": 0,
+          "mae": -0.97,
+          "ifvg": "soporte",
+          "imbalance": null,
+          "rupturaTriangulo": null,
+          "onChain": null,
+          "apalancamiento": null,
+          "libro": null,
+          "flujoOrdenes": null,
+          "wallets": null,
+          "actividadAnomala": null,
+          "diosesAFavor": [
+            "Dios de Tendencia",
+            "Dios Momentum",
+            "Dios Smart Money",
+            "Dios Derivados",
+            "Dios Macro (4h)",
+            "Dios Radar del Mercado",
+            "Dios Memoria"
+          ],
+          "parecidasAlEntrar": {
+            "cantidad": 11,
+            "winRate": 36.4
+          },
+          "decision": {
+            "accion": "DESCARTAR",
+            "fuerza": null,
+            "contexto": null,
+            "sesgo": "LONG",
+            "tamanoSugerido": 0,
+            "bloqueos": 1,
+            "esperas": 3,
+            "checklistPendiente": 0
+          }
+        },
+        "entry": 0.03159,
+        "stop": 0.030219799999999998,
+        "tp1": 0.033165730000000004,
+        "tp2": 0.03405636,
+        "tp3": 0.035015500000000005,
+        "units": 223.62428842504713,
+        "originalUnits": 223.62428842504713,
+        "riskPct": 0.01,
+        "confirmedAt": 1792054883824,
+        "partialTaken": false,
+        "originalStop": 0.030219799999999998,
+        "originalRisk": 0.001370200000000002,
+        "entryAt": 1792054883824,
+        "stopHistory": [
+          {
+            "tipo": "ORIGINAL",
+            "precio": 0.030219799999999998,
+            "desde": 1792054883824,
+            "hasta": null
+          }
+        ],
+        "tipoSetup": "Pullback",
+        "horaConfirmacion": 9,
+        "committeeSnapshot": [
+          {
+            "name": "📈 Dios de Tendencia",
+            "vote": "LONG"
+          },
+          {
+            "name": "⚡ Dios Momentum",
+            "vote": "LONG"
+          },
+          {
+            "name": "🧠 Dios Smart Money",
+            "vote": "LONG"
+          },
+          {
+            "name": "💰 Dios Derivados",
+            "vote": "LONG"
+          },
+          {
+            "name": "🌐 Dios Macro (4h)",
+            "vote": "LONG"
+          },
+          {
+            "name": "💧 Dios Capital Flow",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "⚠️ Dios Gestión de Riesgo",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📡 Dios Radar del Mercado",
+            "vote": "LONG"
+          },
+          {
+            "name": "🧠 Dios Memoria",
+            "vote": "LONG"
+          },
+          {
+            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios VWAP",
+            "vote": "SHORT"
+          },
+          {
+            "name": "📉 Dios CVD",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios Market Context Matrix",
+            "vote": "NEUTRAL"
+          }
+        ],
+        "auditoria": {
+          "minDesdeEntrada": 0.02985,
+          "maxDesdeEntrada": 0.03199,
+          "eventos": [
+            {
+              "ts": 1792056036937,
+              "precio": 0.03157
+            },
+            {
+              "ts": 1792056656247,
+              "precio": 0.03099
+            },
+            {
+              "ts": 1792058475333,
+              "precio": 0.03118
+            },
+            {
+              "ts": 1792060261920,
+              "precio": 0.03088
+            },
+            {
+              "ts": 1792062070596,
+              "precio": 0.03074
+            },
+            {
+              "ts": 1792063858370,
+              "precio": 0.03099
+            },
+            {
+              "ts": 1792065674975,
+              "precio": 0.03061
+            },
+            {
+              "ts": 1792067471067,
+              "precio": 0.03026
+            }
+          ],
+          "ultimaMedicion": {
+            "ts": 1792067471067,
+            "desde": 1792054883824,
+            "velas": 13,
+            "low": 0.02985,
+            "high": 0.03199,
+            "precio": 0.03026
+          },
+          "slTocadoDesdeEntrada": true,
+          "tp1TocadoDesdeEntrada": false
+        },
+        "priceFailCount": 0,
+        "lastCheckedAt": 1792067471067,
+        "exit": 0.030219799999999998,
+        "alcanzoTp1": false,
+        "pnlPctTramoFinal": -4.337,
+        "result": "loss",
+        "pnl": -0.3064,
+        "pnlUsd": -0.3064,
+        "pnlPct": -4.337,
+        "motivoCierre": "stop antes de TP1",
+        "closedAt": 1792067471067
       }
     ],
     "tradesToday": {
@@ -81225,10 +81810,6 @@
           "maxDesdeEntrada": 782.44,
           "eventos": [
             {
-              "ts": 1792035054050,
-              "precio": 767.1
-            },
-            {
               "ts": 1792036867875,
               "precio": 767.45
             },
@@ -81303,21 +81884,25 @@
             {
               "ts": 1792065673022,
               "precio": 768.47
+            },
+            {
+              "ts": 1792067468768,
+              "precio": 768.09
             }
           ],
           "ultimaMedicion": {
-            "ts": 1792065673022,
-            "desde": 1792042873022,
-            "velas": 26,
-            "low": 767.12,
+            "ts": 1792067468768,
+            "desde": 1792044668768,
+            "velas": 25,
+            "low": 767.13,
             "high": 769.56,
-            "precio": 768.47
+            "precio": 768.09
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1792065673022,
+        "lastCheckedAt": 1792067468768,
         "lastNarrationAt": 1791999061632
       },
       {
@@ -81648,10 +82233,6 @@
           "maxDesdeEntrada": 0.07023,
           "eventos": [
             {
-              "ts": 1792035054590,
-              "precio": 0.06881
-            },
-            {
               "ts": 1792036868408,
               "precio": 0.06872
             },
@@ -81726,21 +82307,25 @@
             {
               "ts": 1792065673812,
               "precio": 0.06877
+            },
+            {
+              "ts": 1792067469496,
+              "precio": 0.06861
             }
           ],
           "ultimaMedicion": {
-            "ts": 1792065673812,
-            "desde": 1792042873812,
-            "velas": 25,
-            "low": 0.06825,
+            "ts": 1792067469496,
+            "desde": 1792044669496,
+            "velas": 26,
+            "low": 0.06835,
             "high": 0.06891,
-            "precio": 0.06877
+            "precio": 0.06861
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1792065673812,
+        "lastCheckedAt": 1792067469496,
         "lastNarrationAt": 1792024254569
       },
       {
@@ -81801,6 +82386,10 @@
           {
             "ts": 1792065686698,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792067484215,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 82 (sobrecompra) — abrir un LONG acá es comprar en el techo del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.08592,
@@ -81816,276 +82405,6 @@
         "abiertaEnDrawdownAlto": true,
         "drawdownAlDetectar": 69.36,
         "score4h": 8.5
-      },
-      {
-        "id": "1792047680690_W",
-        "symbol": "W",
-        "dir": "LONG",
-        "tag": " (custom)",
-        "status": "ACTIVE",
-        "conviction": 95,
-        "detectedAt": 1792047680690,
-        "expiresAt": 1792112480690,
-        "breakEvenMoved": false,
-        "journal": [
-          {
-            "ts": 1792047680690,
-            "note": "Tesis detectada en 4h: LONG (score 9.5/10, confianza 90%). A favor: Dios Smart Money, Dios Derivados, Dios Macro (4h), Dios Radar del Mercado. Bajando a 15m a buscar confirmación de entrada."
-          },
-          {
-            "ts": 1792049468549,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1792051282131,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1792053070585,
-            "note": "Todavía esperando confirmación (Estocástico en 11, zona de sobreventa en un mercado LATERAL, ADX 17 — acá sí es agotamiento real, no se abren operaciones nuevas en el extremo)."
-          },
-          {
-            "ts": 1792054878968,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1792056046232,
-            "note": "Entrada CONFIRMADA en 15m (la confianza del motor subió a 32%). Entrada: $0.014606, Stop: $0.01419056, TP1: $0.015355, TP2: $0.01584925. riesgo reducido a 1.0% (drawdown 69% o 1 pérdidas seguidas)."
-          }
-        ],
-        "theoEntry": 0.014948,
-        "theoStop": 0.014051119999999999,
-        "theoTp1": 0.01629332,
-        "timeline": [
-          {
-            "ts": 1792047680690,
-            "etapa": "🔭 Detectada",
-            "detalle": "score 9.5/10 en 4h"
-          },
-          {
-            "ts": 1792056046232,
-            "etapa": "🟢 Confirmada",
-            "detalle": "por Entrada en zona"
-          },
-          {
-            "ts": 1792056046232,
-            "etapa": "🚀 Entrada",
-            "detalle": "$0.014606"
-          }
-        ],
-        "abiertaEnDrawdownAlto": true,
-        "drawdownAlDetectar": 69.36,
-        "score4h": 9.5,
-        "score15m": 6.6,
-        "score": 9.5,
-        "confianza": 32,
-        "dataQuality": 76,
-        "marketPhase": "ACUMULACIÓN",
-        "registro": {
-          "componentes": [
-            {
-              "n": "Macro (4h)",
-              "aporte": 1.1,
-              "senal": 1
-            },
-            {
-              "n": "Tendencia",
-              "aporte": 0.53,
-              "senal": 0.5
-            },
-            {
-              "n": "Estructura",
-              "aporte": 0.36,
-              "senal": 0.4
-            },
-            {
-              "n": "Momentum",
-              "aporte": -0.29,
-              "senal": -0.36
-            },
-            {
-              "n": "Derivados",
-              "aporte": 0.2,
-              "senal": 0.3
-            },
-            {
-              "n": "Dominancias",
-              "aporte": 0,
-              "senal": 0
-            }
-          ],
-          "ajusteCalidad": -0.32,
-          "estocastico": 26.47270114942522,
-          "rsi": 41.772729289216436,
-          "adx": 14.679127776132422,
-          "divergencia": null,
-          "triangulo": "ascendente",
-          "liquidezAFavor": "pareja",
-          "fuerzaVolumen": 32,
-          "caminos": "Entrada en zona",
-          "horasHastaConfirmar": 2.3,
-          "porValvulaEscape": false,
-          "gestion": {
-            "stopPct": 2.84,
-            "rTp1": 1.8,
-            "rTp2": 2.99,
-            "rTp3": 5.01,
-            "atrPct": 1.42,
-            "stopEstructural": null
-          },
-          "mfe": 0,
-          "mae": -0.84,
-          "ifvg": "resistencia",
-          "imbalance": null,
-          "rupturaTriangulo": "ascendente/arriba",
-          "onChain": null,
-          "apalancamiento": null,
-          "libro": null,
-          "flujoOrdenes": null,
-          "wallets": null,
-          "actividadAnomala": null,
-          "diosesAFavor": [
-            "Dios de Tendencia",
-            "Dios Smart Money",
-            "Dios Derivados",
-            "Dios Macro (4h)",
-            "Dios Radar del Mercado",
-            "Dios Memoria"
-          ],
-          "parecidasAlEntrar": {
-            "cantidad": 14,
-            "winRate": 42.9
-          },
-          "decision": {
-            "accion": "DESCARTAR",
-            "fuerza": null,
-            "contexto": null,
-            "sesgo": "LONG",
-            "tamanoSugerido": 0,
-            "bloqueos": 1,
-            "esperas": 2,
-            "checklistPendiente": 0
-          }
-        },
-        "entry": 0.014606,
-        "stop": 0.014190563188314536,
-        "tp1": 0.015355,
-        "tp2": 0.01584924934427818,
-        "tp3": 0.016686,
-        "units": 737.5610234366757,
-        "originalUnits": 737.5610234366757,
-        "riskPct": 0.01,
-        "confirmedAt": 1792056046232,
-        "partialTaken": false,
-        "originalStop": 0.014190563188314536,
-        "originalRisk": 0.00041543681168546356,
-        "entryAt": 1792056046232,
-        "stopHistory": [
-          {
-            "tipo": "ORIGINAL",
-            "precio": 0.014190563188314536,
-            "desde": 1792056046232,
-            "hasta": null
-          }
-        ],
-        "tipoSetup": "Confianza subió",
-        "horaConfirmacion": 9,
-        "committeeSnapshot": [
-          {
-            "name": "📈 Dios de Tendencia",
-            "vote": "LONG"
-          },
-          {
-            "name": "⚡ Dios Momentum",
-            "vote": "SHORT"
-          },
-          {
-            "name": "🧠 Dios Smart Money",
-            "vote": "LONG"
-          },
-          {
-            "name": "💰 Dios Derivados",
-            "vote": "LONG"
-          },
-          {
-            "name": "🌐 Dios Macro (4h)",
-            "vote": "LONG"
-          },
-          {
-            "name": "💧 Dios Capital Flow",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "⚠️ Dios Gestión de Riesgo",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📡 Dios Radar del Mercado",
-            "vote": "LONG"
-          },
-          {
-            "name": "🧠 Dios Memoria",
-            "vote": "LONG"
-          },
-          {
-            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📊 Dios VWAP",
-            "vote": "SHORT"
-          },
-          {
-            "name": "📉 Dios CVD",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📊 Dios Market Context Matrix",
-            "vote": "NEUTRAL"
-          }
-        ],
-        "auditoria": {
-          "minDesdeEntrada": 0.014212,
-          "maxDesdeEntrada": 0.014763,
-          "eventos": [
-            {
-              "ts": 1792056655744,
-              "precio": 0.014468
-            },
-            {
-              "ts": 1792058474797,
-              "precio": 0.014605
-            },
-            {
-              "ts": 1792060261296,
-              "precio": 0.014533
-            },
-            {
-              "ts": 1792062070077,
-              "precio": 0.014447
-            },
-            {
-              "ts": 1792063857805,
-              "precio": 0.014328
-            },
-            {
-              "ts": 1792065674363,
-              "precio": 0.014255
-            }
-          ],
-          "ultimaMedicion": {
-            "ts": 1792065674363,
-            "desde": 1792056046232,
-            "velas": 11,
-            "low": 0.014212,
-            "high": 0.014763,
-            "precio": 0.014255
-          },
-          "slTocadoDesdeEntrada": false,
-          "tp1TocadoDesdeEntrada": false
-        },
-        "priceFailCount": 0,
-        "lastCheckedAt": 1792065674363
       },
       {
         "id": "1792047697284_IOST",
@@ -82145,6 +82464,10 @@
           {
             "ts": 1792065688722,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 85% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1792067486841,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 86% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.0007736,
@@ -82219,6 +82542,10 @@
           {
             "ts": 1792065690898,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 85% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1792067489623,
+            "note": "Todavía esperando confirmación (Estocástico en 18, zona de sobreventa en un mercado LATERAL, ADX 17 — acá sí es agotamiento real, no se abren operaciones nuevas en el extremo)."
           }
         ],
         "theoEntry": 0.0719,
@@ -82234,277 +82561,6 @@
         "abiertaEnDrawdownAlto": true,
         "drawdownAlDetectar": 69.36,
         "score4h": 7.6
-      },
-      {
-        "id": "1792047707640_OGN",
-        "symbol": "OGN",
-        "dir": "LONG",
-        "tag": " (cap chico)",
-        "status": "ACTIVE",
-        "conviction": 95,
-        "detectedAt": 1792047707640,
-        "expiresAt": 1792112507640,
-        "breakEvenMoved": false,
-        "journal": [
-          {
-            "ts": 1792047707640,
-            "note": "Tesis detectada en 4h: LONG (score 9.5/10, confianza 90%). A favor: Dios Smart Money, Dios Derivados, Dios Macro (4h), Dios Gestión de Riesgo. Bajando a 15m a buscar confirmación de entrada."
-          },
-          {
-            "ts": 1792049475111,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1792051286500,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1792053074833,
-            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
-          },
-          {
-            "ts": 1792054883824,
-            "note": "Entrada CONFIRMADA en 15m (Momentum Continuation: pullback a EMA20 dentro de una tendencia ya fuerte). Entrada: $0.03159, Stop: $0.0302198, TP1: $0.03316573, TP2: $0.03405636. riesgo reducido a 1.0% (drawdown 69% o 1 pérdidas seguidas)."
-          }
-        ],
-        "theoEntry": 0.03154,
-        "theoStop": 0.029647599999999996,
-        "theoTp1": 0.0343786,
-        "timeline": [
-          {
-            "ts": 1792047707640,
-            "etapa": "🔭 Detectada",
-            "detalle": "score 9.5/10 en 4h"
-          },
-          {
-            "ts": 1792054883824,
-            "etapa": "🟢 Confirmada",
-            "detalle": "por Pullback + MACD temprano"
-          },
-          {
-            "ts": 1792054883824,
-            "etapa": "🚀 Entrada",
-            "detalle": "$0.03159"
-          }
-        ],
-        "abiertaEnDrawdownAlto": true,
-        "drawdownAlDetectar": 69.36,
-        "score4h": 9.5,
-        "score15m": 7.3,
-        "score": 9.5,
-        "confianza": 46,
-        "dataQuality": 76,
-        "marketPhase": "RANGO",
-        "registro": {
-          "componentes": [
-            {
-              "n": "Macro (4h)",
-              "aporte": 1.1,
-              "senal": 1
-            },
-            {
-              "n": "Tendencia",
-              "aporte": 0.63,
-              "senal": 0.6
-            },
-            {
-              "n": "Momentum",
-              "aporte": 0.48,
-              "senal": 0.6
-            },
-            {
-              "n": "Estructura",
-              "aporte": 0.36,
-              "senal": 0.4
-            },
-            {
-              "n": "Derivados",
-              "aporte": 0.2,
-              "senal": 0.3
-            },
-            {
-              "n": "Dominancias",
-              "aporte": 0,
-              "senal": 0
-            }
-          ],
-          "ajusteCalidad": -0.46,
-          "estocastico": 45.29494097854499,
-          "rsi": 53.56095734171528,
-          "adx": 29.678279918659005,
-          "divergencia": null,
-          "triangulo": null,
-          "liquidezAFavor": null,
-          "fuerzaVolumen": 59,
-          "caminos": "Pullback + MACD temprano",
-          "horasHastaConfirmar": 2,
-          "porValvulaEscape": false,
-          "gestion": {
-            "stopPct": 4.34,
-            "rTp1": 1.15,
-            "rTp2": 1.8,
-            "rTp3": 2.5,
-            "atrPct": 1.41,
-            "stopEstructural": null
-          },
-          "mfe": 0,
-          "mae": -0.72,
-          "ifvg": "soporte",
-          "imbalance": null,
-          "rupturaTriangulo": null,
-          "onChain": null,
-          "apalancamiento": null,
-          "libro": null,
-          "flujoOrdenes": null,
-          "wallets": null,
-          "actividadAnomala": null,
-          "diosesAFavor": [
-            "Dios de Tendencia",
-            "Dios Momentum",
-            "Dios Smart Money",
-            "Dios Derivados",
-            "Dios Macro (4h)",
-            "Dios Radar del Mercado",
-            "Dios Memoria"
-          ],
-          "parecidasAlEntrar": {
-            "cantidad": 11,
-            "winRate": 36.4
-          },
-          "decision": {
-            "accion": "DESCARTAR",
-            "fuerza": null,
-            "contexto": null,
-            "sesgo": "LONG",
-            "tamanoSugerido": 0,
-            "bloqueos": 1,
-            "esperas": 3,
-            "checklistPendiente": 0
-          }
-        },
-        "entry": 0.03159,
-        "stop": 0.030219799999999998,
-        "tp1": 0.033165730000000004,
-        "tp2": 0.03405636,
-        "tp3": 0.035015500000000005,
-        "units": 223.62428842504713,
-        "originalUnits": 223.62428842504713,
-        "riskPct": 0.01,
-        "confirmedAt": 1792054883824,
-        "partialTaken": false,
-        "originalStop": 0.030219799999999998,
-        "originalRisk": 0.001370200000000002,
-        "entryAt": 1792054883824,
-        "stopHistory": [
-          {
-            "tipo": "ORIGINAL",
-            "precio": 0.030219799999999998,
-            "desde": 1792054883824,
-            "hasta": null
-          }
-        ],
-        "tipoSetup": "Pullback",
-        "horaConfirmacion": 9,
-        "committeeSnapshot": [
-          {
-            "name": "📈 Dios de Tendencia",
-            "vote": "LONG"
-          },
-          {
-            "name": "⚡ Dios Momentum",
-            "vote": "LONG"
-          },
-          {
-            "name": "🧠 Dios Smart Money",
-            "vote": "LONG"
-          },
-          {
-            "name": "💰 Dios Derivados",
-            "vote": "LONG"
-          },
-          {
-            "name": "🌐 Dios Macro (4h)",
-            "vote": "LONG"
-          },
-          {
-            "name": "💧 Dios Capital Flow",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "⚠️ Dios Gestión de Riesgo",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📡 Dios Radar del Mercado",
-            "vote": "LONG"
-          },
-          {
-            "name": "🧠 Dios Memoria",
-            "vote": "LONG"
-          },
-          {
-            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📊 Dios VWAP",
-            "vote": "SHORT"
-          },
-          {
-            "name": "📉 Dios CVD",
-            "vote": "NEUTRAL"
-          },
-          {
-            "name": "📊 Dios Market Context Matrix",
-            "vote": "NEUTRAL"
-          }
-        ],
-        "auditoria": {
-          "minDesdeEntrada": 0.03052,
-          "maxDesdeEntrada": 0.03198,
-          "eventos": [
-            {
-              "ts": 1792056036937,
-              "precio": 0.03157
-            },
-            {
-              "ts": 1792056656247,
-              "precio": 0.03099
-            },
-            {
-              "ts": 1792058475333,
-              "precio": 0.03118
-            },
-            {
-              "ts": 1792060261920,
-              "precio": 0.03088
-            },
-            {
-              "ts": 1792062070596,
-              "precio": 0.03074
-            },
-            {
-              "ts": 1792063858370,
-              "precio": 0.03099
-            },
-            {
-              "ts": 1792065674975,
-              "precio": 0.03061
-            }
-          ],
-          "ultimaMedicion": {
-            "ts": 1792065674975,
-            "desde": 1792054883824,
-            "velas": 12,
-            "low": 0.03052,
-            "high": 0.03198,
-            "precio": 0.03061
-          },
-          "slTocadoDesdeEntrada": false,
-          "tp1TocadoDesdeEntrada": false
-        },
-        "priceFailCount": 0,
-        "lastCheckedAt": 1792065674975
       },
       {
         "id": "1792049483416_REZ",
@@ -82560,6 +82616,10 @@
           {
             "ts": 1792065692917,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 14 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792067491512,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 13 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.003606,
@@ -82630,6 +82690,10 @@
           {
             "ts": 1792065694922,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 4 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1792067493955,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — MACD 4h perdiendo fuerza en las últimas 3 velas (el histograma se viene achicando); Estocástico 1D ya en 4 (sin espacio en el marco mayor). Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.1499,
@@ -82696,6 +82760,10 @@
           {
             "ts": 1792065696981,
             "note": "Pausado: Peticiones de desempleo semanales en 1.5hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
+          },
+          {
+            "ts": 1792067496570,
+            "note": "Pausado: Peticiones de desempleo semanales en 1.0hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
           }
         ],
         "theoEntry": 0.006614,
@@ -82741,6 +82809,10 @@
           },
           {
             "ts": 1792065700623,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 90% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1792067500342,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 90% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
@@ -82863,7 +82935,7 @@
             "stopEstructural": null
           },
           "mfe": 0.13,
-          "mae": -0.04,
+          "mae": -0.32,
           "ifvg": "resistencia",
           "imbalance": null,
           "rupturaTriangulo": null,
@@ -82971,7 +83043,7 @@
           }
         ],
         "auditoria": {
-          "minDesdeEntrada": 0.2217,
+          "minDesdeEntrada": 0.2187,
           "maxDesdeEntrada": 0.2247,
           "eventos": [
             {
@@ -82981,21 +83053,25 @@
             {
               "ts": 1792065675496,
               "precio": 0.2237
+            },
+            {
+              "ts": 1792067471860,
+              "precio": 0.2202
             }
           ],
           "ultimaMedicion": {
-            "ts": 1792065675496,
+            "ts": 1792067471860,
             "desde": 1792062101632,
-            "velas": 4,
-            "low": 0.2217,
+            "velas": 6,
+            "low": 0.2187,
             "high": 0.2247,
-            "precio": 0.2237
+            "precio": 0.2202
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1792065675496
+        "lastCheckedAt": 1792067471860
       },
       {
         "id": "1792058538281_AXL",
@@ -83027,6 +83103,10 @@
           {
             "ts": 1792065702664,
             "note": "Pausado: Peticiones de desempleo semanales en 1.5hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
+          },
+          {
+            "ts": 1792067503146,
+            "note": "Pausado: Peticiones de desempleo semanales en 1.0hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
           }
         ],
         "theoEntry": 0.05373,
@@ -83073,6 +83153,10 @@
           {
             "ts": 1792065704944,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 77% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1792067505287,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 78% del volumen está ABAJO del precio en una tesis LONG. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.11182,
@@ -83119,6 +83203,10 @@
           {
             "ts": 1792065706988,
             "note": "Pausado: Peticiones de desempleo semanales en 1.5hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
+          },
+          {
+            "ts": 1792067507493,
+            "note": "Pausado: Peticiones de desempleo semanales en 1.0hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
           }
         ],
         "theoEntry": 0.007369,
@@ -83157,6 +83245,10 @@
           {
             "ts": 1792065708990,
             "note": "Pausado: Peticiones de desempleo semanales en 1.5hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
+          },
+          {
+            "ts": 1792067509064,
+            "note": "Pausado: Peticiones de desempleo semanales en 1.0hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
           }
         ],
         "theoEntry": 0.0168,
@@ -83195,6 +83287,10 @@
           {
             "ts": 1792065710741,
             "note": "Pausado: Peticiones de desempleo semanales en 1.5hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
+          },
+          {
+            "ts": 1792067511423,
+            "note": "Pausado: Peticiones de desempleo semanales en 1.0hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
           }
         ],
         "theoEntry": 0.1719,
@@ -83229,6 +83325,10 @@
           {
             "ts": 1792065712699,
             "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 92% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
+          },
+          {
+            "ts": 1792067513858,
+            "note": "Todavía esperando confirmación: el perfil de volumen contradice la dirección — 93% del volumen está ARRIBA del precio en una tesis SHORT. El precio tiende a ir hacia donde está la concentración de volumen. Se exige BOS o Bear/Bull Trap para confirmar contra esa lectura."
           }
         ],
         "theoEntry": 0.3794,
@@ -83259,6 +83359,10 @@
           {
             "ts": 1792065713404,
             "note": "Tesis detectada en 4h: LONG (score 9.5/10, confianza 90%). A favor: Dios Smart Money, Dios Derivados, Dios Macro (4h), Dios Gestión de Riesgo. Bajando a 15m a buscar confirmación de entrada."
+          },
+          {
+            "ts": 1792067516186,
+            "note": "Pausado: Peticiones de desempleo semanales en 1.0hs. No tiene sentido confirmar una entrada técnica justo antes de un evento binario que puede mover todo el mercado de golpe."
           }
         ],
         "theoEntry": 0.533,
@@ -83274,6 +83378,36 @@
         "abiertaEnDrawdownAlto": true,
         "drawdownAlDetectar": 69.36,
         "score4h": 9.5
+      },
+      {
+        "id": "1792067543287_METIS",
+        "symbol": "METIS",
+        "dir": "LONG",
+        "tag": " (cap chico)",
+        "status": "WATCHING",
+        "conviction": 77,
+        "detectedAt": 1792067543287,
+        "expiresAt": 1792132343287,
+        "breakEvenMoved": false,
+        "journal": [
+          {
+            "ts": 1792067543287,
+            "note": "Tesis detectada en 4h: LONG (score 7.7/10, confianza 53%). A favor: Dios de Tendencia, Dios Momentum, Dios Smart Money, Dios Derivados. Bajando a 15m a buscar confirmación de entrada."
+          }
+        ],
+        "theoEntry": 3.776,
+        "theoStop": 3.5494399999999997,
+        "theoTp1": 4.11584,
+        "timeline": [
+          {
+            "ts": 1792067543288,
+            "etapa": "🔭 Detectada",
+            "detalle": "score 7.7/10 en 4h"
+          }
+        ],
+        "abiertaEnDrawdownAlto": true,
+        "drawdownAlDetectar": 69.97,
+        "score4h": 7.7
       }
     ],
     "expiredTheses": [
@@ -316128,19 +316262,19 @@
     },
     "SEI": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065714403
+      "ts": 1792067516955
     },
     "JUP": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065715426
+      "ts": 1792067517693
     },
     "STRK": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065718477
+      "ts": 1792067520211
     },
     "ENA": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065719221
+      "ts": 1792067520938
     },
     "W": {
       "lastRecommendation": "LONG",
@@ -316148,7 +316282,7 @@
     },
     "TNSR": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065719998
+      "ts": 1792067522394
     },
     "WOLF": {
       "lastRecommendation": "SHORT",
@@ -316492,7 +316626,7 @@
     },
     "ORDI": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065717466
+      "ts": 1792067519492
     },
     "PYTH": {
       "lastRecommendation": "LONG",
@@ -316511,8 +316645,8 @@
       "ts": 1785323824000
     },
     "OPG": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1792065746338
+      "lastRecommendation": "SHORT",
+      "ts": 1792067548004
     },
     "BAT": {
       "lastRecommendation": "LONG",
@@ -316528,7 +316662,7 @@
     },
     "WIF": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065716431
+      "ts": 1792067518422
     },
     "LUNA": {
       "lastRecommendation": "NO OPERAR",
@@ -316544,7 +316678,7 @@
     },
     "AT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065728478
+      "ts": 1792067530204
     },
     "GGBR": {
       "lastRecommendation": "NO OPERAR",
@@ -316572,11 +316706,11 @@
     },
     "IRYS": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065762408
+      "ts": 1792067564208
     },
     "MANTRA": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065756771
+      "ts": 1792067557345
     },
     "IDOL": {
       "lastRecommendation": "SHORT",
@@ -316588,7 +316722,7 @@
     },
     "BNT": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065735253
+      "ts": 1792067536460
     },
     "MEW": {
       "lastRecommendation": "SHORT",
@@ -316608,7 +316742,7 @@
     },
     "HIVE": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065753366
+      "ts": 1792067553986
     },
     "RLC": {
       "lastRecommendation": "NO OPERAR",
@@ -316632,11 +316766,11 @@
     },
     "AUCTION": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065764455
+      "ts": 1792067565803
     },
     "EWT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065744317
+      "ts": 1792067546431
     },
     "HOME": {
       "lastRecommendation": "SHORT",
@@ -316644,7 +316778,7 @@
     },
     "SKL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065745321
+      "ts": 1792067547257
     },
     "REZ": {
       "lastRecommendation": "SHORT",
@@ -316652,7 +316786,7 @@
     },
     "IOTX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065721470
+      "ts": 1792067524459
     },
     "IOST": {
       "lastRecommendation": "SHORT",
@@ -316664,11 +316798,11 @@
     },
     "STEEM": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065738485
+      "ts": 1792067539311
     },
     "PUNDIX": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065759616
+      "ts": 1792067561366
     },
     "HYPER": {
       "lastRecommendation": "SHORT",
@@ -316676,11 +316810,11 @@
     },
     "CTSI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065740231
+      "ts": 1792067541425
     },
     "GMT": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1792065769410
+      "lastRecommendation": "SHORT",
+      "ts": 1792067569431
     },
     "ONG": {
       "lastRecommendation": "SHORT",
@@ -316688,7 +316822,7 @@
     },
     "LISTA": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065730323
+      "ts": 1792067531693
     },
     "B2": {
       "lastRecommendation": "SHORT",
@@ -316696,7 +316830,7 @@
     },
     "MTL": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065760348
+      "ts": 1792067562419
     },
     "NAORIS": {
       "lastRecommendation": "SHORT",
@@ -316712,7 +316846,7 @@
     },
     "METIS": {
       "lastRecommendation": "LONG",
-      "ts": 1792065741858
+      "ts": 1792067543286
     },
     "CVC": {
       "lastRecommendation": "SHORT",
@@ -316728,11 +316862,11 @@
     },
     "SIGN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065727218
+      "ts": 1792067529496
     },
     "CARV": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1792065761362
+      "lastRecommendation": "SHORT",
+      "ts": 1792067563481
     },
     "DOGS": {
       "lastRecommendation": "SHORT",
@@ -316788,7 +316922,7 @@
     },
     "WAXP": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065771494
+      "ts": 1792067572286
     },
     "LSK": {
       "lastRecommendation": "SHORT",
@@ -316808,7 +316942,7 @@
     },
     "LUMIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065770471
+      "ts": 1792067571533
     },
     "XNY": {
       "lastRecommendation": "SHORT",
@@ -316912,7 +317046,7 @@
     },
     "RVN": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065767324
+      "ts": 1792067567994
     },
     "JELLYJELLY": {
       "lastRecommendation": "SHORT",
@@ -316984,7 +317118,7 @@
     },
     "SPACE": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065768387
+      "ts": 1792067568713
     },
     "PROVE": {
       "lastRecommendation": "SHORT",
@@ -317016,7 +317150,7 @@
     },
     "MEME": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065729286
+      "ts": 1792067530937
     },
     "MOCA": {
       "lastRecommendation": "SHORT",
@@ -317024,7 +317158,7 @@
     },
     "VANA": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065737416
+      "ts": 1792067538602
     },
     "FOGO": {
       "lastRecommendation": "SHORT",
@@ -317040,7 +317174,7 @@
     },
     "XAN": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065763456
+      "ts": 1792067564936
     },
     "BIGTIME": {
       "lastRecommendation": "SHORT",
@@ -317048,7 +317182,7 @@
     },
     "GIGGLE": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065720752
+      "ts": 1792067523670
     },
     "COLLECT": {
       "lastRecommendation": "SHORT",
@@ -317060,7 +317194,7 @@
     },
     "USTC": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065752353
+      "ts": 1792067553269
     },
     "MANTA": {
       "lastRecommendation": "LONG",
@@ -317076,7 +317210,7 @@
     },
     "SAHARA": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065722261
+      "ts": 1792067525537
     },
     "BAND": {
       "lastRecommendation": "NO OPERAR",
@@ -317092,7 +317226,7 @@
     },
     "SKYAI": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065736393
+      "ts": 1792067537509
     },
     "UP": {
       "lastRecommendation": "SHORT",
@@ -317100,7 +317234,7 @@
     },
     "ETHW": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065758210
+      "ts": 1792067559519
     },
     "KNC": {
       "lastRecommendation": "NO OPERAR",
@@ -317112,7 +317246,7 @@
     },
     "ZORA": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065748363
+      "ts": 1792067549512
     },
     "EDU": {
       "lastRecommendation": "LONG",
@@ -317124,11 +317258,11 @@
     },
     "ILV": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065751280
+      "ts": 1792067552541
     },
     "FRAX": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065750451
+      "ts": 1792067551394
     },
     "EPIC": {
       "lastRecommendation": "SHORT",
@@ -317172,15 +317306,15 @@
     },
     "MMT": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065726500
+      "ts": 1792067528399
     },
     "AIOT": {
-      "lastRecommendation": "LONG",
-      "ts": 1792065754415
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1792067554706
     },
     "LAB": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065725445
+      "ts": 1792067527689
     },
     "XVS": {
       "lastRecommendation": "SHORT",
@@ -317204,7 +317338,7 @@
     },
     "COTI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065722976
+      "ts": 1792067526263
     },
     "FLOW": {
       "lastRecommendation": "NO OPERAR",
@@ -317276,11 +317410,11 @@
     },
     "BLUR": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065733760
+      "ts": 1792067534651
     },
     "EUL": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065740978
+      "ts": 1792067542542
     },
     "ALT": {
       "lastRecommendation": "LONG",
@@ -317288,7 +317422,7 @@
     },
     "POWR": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065734479
+      "ts": 1792067535390
     },
     "CROSS": {
       "lastRecommendation": "LONG",
@@ -317312,7 +317446,7 @@
     },
     "EDEN": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065766300
+      "ts": 1792067567256
     },
     "RECALL": {
       "lastRecommendation": "SHORT",
@@ -317344,7 +317478,7 @@
     },
     "ZEST": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065756243
+      "ts": 1792067556595
     },
     "RPL": {
       "lastRecommendation": "SHORT",
@@ -317356,7 +317490,7 @@
     },
     "SQD": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065747340
+      "ts": 1792067548729
     },
     "MASK": {
       "lastRecommendation": "NO OPERAR",
@@ -317676,11 +317810,11 @@
     },
     "SOMI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065731439
+      "ts": 1792067532420
     },
     "XAI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065739480
+      "ts": 1792067540365
     },
     "AGLD": {
       "lastRecommendation": "SHORT",
@@ -317828,7 +317962,7 @@
     },
     "XPIN": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065742856
+      "ts": 1792067544304
     },
     "BOT": {
       "lastRecommendation": "LONG",
@@ -317836,7 +317970,7 @@
     },
     "NOW": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065733038
+      "ts": 1792067533927
     },
     "TAG": {
       "lastRecommendation": "SHORT",
@@ -317948,7 +318082,7 @@
     },
     "VELVET": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065724378
+      "ts": 1792067526980
     },
     "STX": {
       "lastRecommendation": "LONG",
@@ -318024,7 +318158,7 @@
     },
     "GRVT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1792065765503
+      "ts": 1792067566544
     },
     "SPY": {
       "lastRecommendation": "LONG",
@@ -318212,7 +318346,7 @@
     },
     "CNPY": {
       "lastRecommendation": "SHORT",
-      "ts": 1792065743576
+      "ts": 1792067545362
     },
     "QQQB": {
       "lastRecommendation": "SHORT",
@@ -442085,8 +442219,9 @@
       "tp2": 0.1392,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791673339123,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "sin definir",
+      "evaluadaEn": 1792067472416
     },
     {
       "symbol": "BICO",
@@ -442101,8 +442236,9 @@
       "tp2": 0.017509933566654503,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1791673339503,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792067473230
     },
     {
       "symbol": "WCT",
@@ -442117,8 +442253,9 @@
       "tp2": 0.04664367,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791673339907,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1792067474026
     },
     {
       "symbol": "C98",
@@ -442133,8 +442270,9 @@
       "tp2": 0.021950467077142002,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791673340298,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1792067474840
     },
     {
       "symbol": "CTR",
@@ -442149,8 +442287,9 @@
       "tp2": 0.013966411238928281,
       "marketPhase": "RANGO",
       "detectadaEn": 1791673341987,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792067475823
     },
     {
       "symbol": "SOPH",
@@ -442165,8 +442304,9 @@
       "tp2": 0.003441548,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1791673342755,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792067476720
     },
     {
       "symbol": "NAORIS",
@@ -442181,8 +442321,9 @@
       "tp2": 0.023728390000000002,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1791673344987,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "sin definir",
+      "evaluadaEn": 1792067477545
     },
     {
       "symbol": "JUP",
@@ -442197,8 +442338,9 @@
       "tp2": 0.4179446019365659,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791674854469,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1792067478321
     },
     {
       "symbol": "ORDI",
@@ -442213,8 +442355,9 @@
       "tp2": 3.9160040000000027,
       "marketPhase": "ACUMULACIÓN",
       "detectadaEn": 1791674856242,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792067479090
     },
     {
       "symbol": "CELR",
@@ -442229,8 +442372,9 @@
       "tp2": 0.0034523830000000003,
       "marketPhase": "EXPANSIÓN ALCISTA",
       "detectadaEn": 1791674860709,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1792067479865
     },
     {
       "symbol": "USUAL",
@@ -442245,8 +442389,9 @@
       "tp2": 0.010844956500000003,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1791674863933,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792067480671
     },
     {
       "symbol": "HYPER",
@@ -442261,8 +442406,9 @@
       "tp2": 0.07697999999999999,
       "marketPhase": "RANGO",
       "detectadaEn": 1791674864465,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1792067481454
     },
     {
       "symbol": "AIOT",
@@ -513767,6 +513913,502 @@
       "detectadaEn": 1792065771495,
       "evaluada": false,
       "resultado": null
+    },
+    {
+      "symbol": "SEI",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 0.05835,
+      "stop": 0.061851,
+      "tp1": 0.05309849999999999,
+      "tp2": 0.049653887586406875,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792067516957,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ORDI",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 46,
+      "precio": 3.745,
+      "stop": 3.9697000000000005,
+      "tp1": 3.4079499999999996,
+      "tp2": 3.070899999999999,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067519493,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "TNSR",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 7.1,
+      "faltaba": 0.5,
+      "confianza": 42,
+      "precio": 0.03198,
+      "stop": 0.033871309999999995,
+      "tp1": 0.02914303500000001,
+      "tp2": 0.02771969406496198,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067522395,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "GIGGLE",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.4,
+      "faltaba": 0.2,
+      "confianza": 47,
+      "precio": 33.12,
+      "stop": 36.77344999999999,
+      "tp1": 28.918532500000005,
+      "tp2": 26.543790000000012,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067523672,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SAHARA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 38,
+      "precio": 0.007648,
+      "stop": 0.008690995,
+      "tp1": 0.006448555750000001,
+      "tp2": 0.005770609000000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067525537,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "MMT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.1392,
+      "stop": 0.16007999999999997,
+      "tp1": 0.11340078206701197,
+      "tp2": 0.10161600000000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067528399,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "MEME",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 44,
+      "precio": 0.0004914,
+      "stop": 0.0005218430997845147,
+      "tp1": 0.00045639043524780816,
+      "tp2": 0.0004366024203878737,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067530938,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "LISTA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.4,
+      "faltaba": 0.2,
+      "confianza": 47,
+      "precio": 0.07197,
+      "stop": 0.07834432999999999,
+      "tp1": 0.06376277531616652,
+      "tp2": 0.06049620600000004,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067531693,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "POWR",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.05229,
+      "stop": 0.055726679999999994,
+      "tp1": 0.04833781800000001,
+      "tp2": 0.04470930084281372,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067535391,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "BNT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.3008,
+      "stop": 0.32467109999999993,
+      "tp1": 0.2733482350000001,
+      "tp2": 0.25783202000000016,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067536461,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SKYAI",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 41,
+      "precio": 0.02933,
+      "stop": 0.033729499999999996,
+      "tp1": 0.024270575000000003,
+      "tp2": 0.021410900000000004,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067537510,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "VANA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.951,
+      "stop": 1.044123,
+      "tp1": 0.84390855,
+      "tp2": 0.7833786,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067538603,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "STEEM",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.05212,
+      "stop": 0.05856516999999999,
+      "tp1": 0.04470805450000001,
+      "tp2": 0.04051869400000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067539312,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "EUL",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 1.1811,
+      "stop": 1.3433178999999997,
+      "tp1": 0.9945494150000004,
+      "tp2": 0.8891077800000006,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067542543,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "XPIN",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 44,
+      "precio": 0.0006947,
+      "stop": 0.0007693009999999999,
+      "tp1": 0.0006089088500000002,
+      "tp2": 0.0005604182000000002,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067544305,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "OPG",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 38,
+      "precio": 0.1254,
+      "stop": 0.13620739999999998,
+      "tp1": 0.11297149000000005,
+      "tp2": 0.10337782355535984,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792067548004,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SQD",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.02062,
+      "stop": 0.023712999999999998,
+      "tp1": 0.017063050000000003,
+      "tp2": 0.015052600000000003,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067548730,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ZORA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 44,
+      "precio": 0.006399,
+      "stop": 0.006906657999999999,
+      "tp1": 0.005979230920884085,
+      "tp2": 0.005485215600000003,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067549513,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "USTC",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 44,
+      "precio": 0.0049,
+      "stop": 0.005255719999999999,
+      "tp1": 0.0044909220000000005,
+      "tp2": 0.0042597040000000004,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067553270,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "HIVE",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.04921,
+      "stop": 0.05370364999999999,
+      "tp1": 0.044055114385093144,
+      "tp2": 0.04112143000000001,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067553986,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "MANTRA",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 36,
+      "precio": 0.00395,
+      "stop": 0.004527541999999999,
+      "tp1": 0.003285826700000002,
+      "tp2": 0.0029104244000000027,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067557346,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ETHW",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.2388,
+      "stop": 0.26489229999999997,
+      "tp1": 0.20879385500000006,
+      "tp2": 0.19183386000000008,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067559519,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "PUNDIX",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 0.09914,
+      "stop": 0.10535511999999998,
+      "tp1": 0.09199261200000003,
+      "tp2": 0.08950656400000004,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067561367,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "MTL",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.2726,
+      "stop": 0.3035864999999999,
+      "tp1": 0.23696552500000012,
+      "tp2": 0.20905607614288338,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067562420,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "CARV",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.0348,
+      "stop": 0.03735172,
+      "tp1": 0.031865522,
+      "tp2": 0.030206903999999996,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067563482,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "IRYS",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.01267,
+      "stop": 0.013335200402003125,
+      "tp1": 0.012053996769539256,
+      "tp2": 0.011472639276394376,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067564208,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "XAN",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.009476,
+      "stop": 0.0108974,
+      "tp1": 0.00784139,
+      "tp2": 0.00691748,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067564936,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "AUCTION",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 3.313,
+      "stop": 3.6722699999999997,
+      "tp1": 2.8998395000000006,
+      "tp2": 2.6663140000000007,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067565804,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "RVN",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 39,
+      "precio": 0.001488,
+      "stop": 0.0016599649999999998,
+      "tp1": 0.00129024025,
+      "tp2": 0.0011784630000000003,
+      "marketPhase": "CAPITULACIÓN",
+      "detectadaEn": 1792067567995,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "GMT",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 35,
+      "precio": 0.007523,
+      "stop": 0.008146366,
+      "tp1": 0.0068061291,
+      "tp2": 0.0064009411999999995,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1792067569431,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "WAXP",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.004919,
+      "stop": 0.005182048085908853,
+      "tp1": 0.0045659653036447005,
+      "tp2": 0.004445513445364064,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1792067572287,
+      "evaluada": false,
+      "resultado": null
     }
   ],
   "killSwitchNotifiedDate": "2026-10-15",
@@ -527306,20 +527948,41 @@
       "drawdownPct": 69.36,
       "operacionesCerradas": 207,
       "tesisAbiertas": 19
+    },
+    {
+      "ts": 1792067516200,
+      "cuenta": 1,
+      "capital": 30.0282,
+      "pico": 100,
+      "drawdownPct": 69.97,
+      "operacionesCerradas": 209,
+      "tesisAbiertas": 17
+    },
+    {
+      "ts": 1792067522396,
+      "cuenta": 1,
+      "capital": 30.0282,
+      "pico": 100,
+      "drawdownPct": 69.97,
+      "operacionesCerradas": 209,
+      "tesisAbiertas": 17
     }
   ],
   "mesesArchivados": [],
   "huellasMensajes": {
     "103227241": 1792062103150,
     "143918606": 1792058523390,
+    "252748176": 1792067471068,
     "392313946": 1792056047693,
     "521844688": 1792062141483,
     "618196971": 1792062165901,
     "812397221": 1792054885301,
+    "943138785": 1792067543289,
     "946669891": 1792047707640,
     "1213878718": 1792063955671,
     "1621566642": 1792047703558,
     "1866808392": 1792058512941,
+    "1981307145": 1792067470280,
     "2108520917": 1792065713406,
     "-217116789": 1792047678155,
     "-1400835800": 1792047680691,
@@ -527329,7 +527992,9 @@
     "-1327049596": 1792051306554,
     "-579708928": 1792058538283,
     "-870405811": 1792058544242,
-    "-2111885618": 1792058563981
+    "-2111885618": 1792058563981,
+    "-1925297258": 1792067470281,
+    "-428812620": 1792067471068
   },
   "ultimoScalpBTC": "2026-10-15",
   "ultimoInformeBTC": "2026-10-11",
