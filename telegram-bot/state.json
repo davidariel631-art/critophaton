@@ -79730,7 +79730,7 @@
     ],
     "tradesToday": {
       "date": "2026-11-20",
-      "count": 3
+      "count": 4
     },
     "peakCapital": 100,
     "theses": [
@@ -79981,10 +79981,6 @@
           "maxDesdeEntrada": 0.008775,
           "eventos": [
             {
-              "ts": 1795186891725,
-              "precio": 0.008506
-            },
-            {
               "ts": 1795188668185,
               "precio": 0.008531
             },
@@ -80059,21 +80055,25 @@
             {
               "ts": 1795219282034,
               "precio": 0.008582
+            },
+            {
+              "ts": 1795221061811,
+              "precio": 0.008559
             }
           ],
           "ultimaMedicion": {
-            "ts": 1795219282034,
-            "desde": 1795196482034,
+            "ts": 1795221061811,
+            "desde": 1795198261811,
             "velas": 26,
             "low": 0.008351,
             "high": 0.00868,
-            "precio": 0.008582
+            "precio": 0.008559
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1795219282034,
+        "lastCheckedAt": 1795221061812,
         "lastNarrationAt": 1795188668185
       },
       {
@@ -80310,6 +80310,14 @@
           {
             "ts": 1795219294807,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221071209,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 17.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221071209,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.2292,
@@ -80480,6 +80488,10 @@
           {
             "ts": 1795219297511,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 17 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221072904,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 17 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.1293,
@@ -80501,7 +80513,7 @@
         "symbol": "PNUT",
         "dir": "SHORT",
         "tag": " (cap chico)",
-        "status": "WATCHING",
+        "status": "ACTIVE",
         "conviction": 76,
         "detectedAt": 1795158102530,
         "expiresAt": 1795222902530,
@@ -80650,6 +80662,10 @@
           {
             "ts": 1795219299928,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221074356,
+            "note": "Entrada CONFIRMADA en 15m (MACD histograma achicándose (entrada temprana), confirmado con ADX 28 (tendencia real) y Estocástico 66 alineado). Entrada: $0.02645, Stop: $0.02843015, TP1: $0.0243266, TP2: $0.02288573. riesgo reducido a 1.0% (drawdown 55% o 1 pérdidas seguidas)."
           }
         ],
         "theoEntry": 0.02814,
@@ -80660,11 +80676,178 @@
             "ts": 1795158102530,
             "etapa": "🔭 Detectada",
             "detalle": "score 7.6/10 en 4h"
+          },
+          {
+            "ts": 1795221074356,
+            "etapa": "🟢 Confirmada",
+            "detalle": "por Entrada en zona + MACD temprano"
+          },
+          {
+            "ts": 1795221074356,
+            "etapa": "🚀 Entrada",
+            "detalle": "$0.02645"
           }
         ],
         "abiertaEnDrawdownAlto": true,
         "drawdownAlDetectar": 57.24,
-        "score4h": 7.6
+        "score4h": 7.6,
+        "score15m": 6.9,
+        "score": 7.6,
+        "confianza": 37,
+        "dataQuality": 76,
+        "marketPhase": "MARKDOWN",
+        "registro": {
+          "componentes": [
+            {
+              "n": "Macro (4h)",
+              "aporte": -1.1,
+              "senal": -1
+            },
+            {
+              "n": "Tendencia",
+              "aporte": -1.05,
+              "senal": -1
+            },
+            {
+              "n": "Momentum",
+              "aporte": -0.29,
+              "senal": -0.36
+            },
+            {
+              "n": "Derivados",
+              "aporte": 0.2,
+              "senal": 0.3
+            },
+            {
+              "n": "Estructura",
+              "aporte": 0,
+              "senal": 0
+            },
+            {
+              "n": "Dominancias",
+              "aporte": 0,
+              "senal": 0
+            }
+          ],
+          "ajusteCalidad": 0.37,
+          "estocastico": 82.54408559540325,
+          "rsi": 55.16575275425219,
+          "adx": 28.038017488622174,
+          "divergencia": null,
+          "triangulo": null,
+          "liquidezAFavor": null,
+          "fuerzaVolumen": 40,
+          "caminos": "Entrada en zona + MACD temprano",
+          "horasHastaConfirmar": 17.5,
+          "porValvulaEscape": true,
+          "gestion": {
+            "stopPct": 7.49,
+            "rTp1": 1.07,
+            "rTp2": 1.8,
+            "rTp3": 2.5,
+            "atrPct": 0.55,
+            "stopEstructural": null
+          },
+          "mfe": 0,
+          "mae": 0,
+          "ifvg": "soporte",
+          "imbalance": null,
+          "rupturaTriangulo": null,
+          "onChain": null,
+          "apalancamiento": null,
+          "libro": null,
+          "flujoOrdenes": null,
+          "wallets": null,
+          "actividadAnomala": null,
+          "diosesAFavor": [
+            "Dios de Tendencia",
+            "Dios Momentum",
+            "Dios Macro (4h)",
+            "Dios Capital Flow",
+            "Dios VWAP"
+          ],
+          "parecidasAlEntrar": {
+            "cantidad": 136,
+            "winRate": 58.8
+          }
+        },
+        "entry": 0.02645,
+        "stop": 0.028430149999999998,
+        "tp1": 0.024326604275920587,
+        "tp2": 0.022885730000000007,
+        "tp3": 0.02149962500000001,
+        "units": 227.96959826275827,
+        "originalUnits": 227.96959826275827,
+        "riskPct": 0.01,
+        "confirmedAt": 1795221074356,
+        "partialTaken": false,
+        "originalStop": 0.028430149999999998,
+        "originalRisk": 0.0019801499999999965,
+        "entryAt": 1795221074356,
+        "stopHistory": [
+          {
+            "tipo": "ORIGINAL",
+            "precio": 0.028430149999999998,
+            "desde": 1795221074356,
+            "hasta": null
+          }
+        ],
+        "tipoSetup": "MACD temprano",
+        "horaConfirmacion": 0,
+        "committeeSnapshot": [
+          {
+            "name": "📈 Dios de Tendencia",
+            "vote": "SHORT"
+          },
+          {
+            "name": "⚡ Dios Momentum",
+            "vote": "SHORT"
+          },
+          {
+            "name": "🧠 Dios Smart Money",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "💰 Dios Derivados",
+            "vote": "LONG"
+          },
+          {
+            "name": "🌐 Dios Macro (4h)",
+            "vote": "SHORT"
+          },
+          {
+            "name": "💧 Dios Capital Flow",
+            "vote": "SHORT"
+          },
+          {
+            "name": "⚠️ Dios Gestión de Riesgo",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📡 Dios Radar del Mercado",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "🧠 Dios Memoria",
+            "vote": "LONG"
+          },
+          {
+            "name": "💪 Dios de Fuerza Relativa (vs BTC)",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios VWAP",
+            "vote": "SHORT"
+          },
+          {
+            "name": "📉 Dios CVD",
+            "vote": "NEUTRAL"
+          },
+          {
+            "name": "📊 Dios Market Context Matrix",
+            "vote": "NEUTRAL"
+          }
+        ]
       },
       {
         "id": "1795158136737_TAKE",
@@ -80820,6 +81003,10 @@
           {
             "ts": 1795219302275,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221077788,
+            "note": "Confirmación descartada: el TP1 quedaría detrás de una barrera de liquidez ($0.057905, 2 toques) y ajustarlo antes de esa barrera daría un R:R de solo 0.82:1. No vale la pena la operación."
           }
         ],
         "theoEntry": 0.05819,
@@ -81066,6 +81253,14 @@
           {
             "ts": 1795219304726,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221079218,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 17.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221079218,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.09643,
@@ -81296,6 +81491,14 @@
           {
             "ts": 1795219307657,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221080884,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 16.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221080884,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.00861,
@@ -81518,6 +81721,14 @@
           {
             "ts": 1795219310474,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221082608,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 16.0hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221082609,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.02634,
@@ -81732,6 +81943,14 @@
           {
             "ts": 1795219314234,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221085515,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 15.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221085516,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 135.48,
@@ -81882,6 +82101,10 @@
           {
             "ts": 1795219318196,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 16 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221089094,
+            "note": "Confirmación descartada: el TP1 quedaría detrás de una barrera de liquidez ($0.06817, 2 toques) y ajustarlo antes de esa barrera daría un R:R de solo 0.26:1. No vale la pena la operación."
           }
         ],
         "theoEntry": 0.07305,
@@ -82079,6 +82302,14 @@
           },
           {
             "ts": 1795219320586,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221090448,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 14.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221090449,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -82278,6 +82509,14 @@
           {
             "ts": 1795219322707,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221092239,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 14.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221092240,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 2.612,
@@ -82424,6 +82663,10 @@
           {
             "ts": 1795219326977,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 5 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221095244,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 5 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.05038,
@@ -82566,6 +82809,10 @@
           {
             "ts": 1795219329410,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 16 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221096635,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 15 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.0822,
@@ -82756,6 +83003,14 @@
           {
             "ts": 1795219331772,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221098560,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 14.0hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221098561,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.02769,
@@ -82894,6 +83149,10 @@
           {
             "ts": 1795219334370,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 16 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221100142,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 15 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.000576,
@@ -83236,7 +83495,7 @@
         ],
         "auditoria": {
           "minDesdeEntrada": 0.02134,
-          "maxDesdeEntrada": 0.02202,
+          "maxDesdeEntrada": 0.02204,
           "eventos": [
             {
               "ts": 1795214193043,
@@ -83253,21 +83512,25 @@
             {
               "ts": 1795219282550,
               "precio": 0.02197
+            },
+            {
+              "ts": 1795221062077,
+              "precio": 0.02182
             }
           ],
           "ultimaMedicion": {
-            "ts": 1795219282550,
+            "ts": 1795221062077,
             "desde": 1795213914204,
-            "velas": 6,
+            "velas": 8,
             "low": 0.02134,
-            "high": 0.02202,
-            "precio": 0.02197
+            "high": 0.02204,
+            "precio": 0.02182
           },
           "slTocadoDesdeEntrada": false,
           "tp1TocadoDesdeEntrada": false
         },
         "priceFailCount": 0,
-        "lastCheckedAt": 1795219282550
+        "lastCheckedAt": 1795221062077
       },
       {
         "id": "1795176170876_MAGIC",
@@ -83418,6 +83681,14 @@
           },
           {
             "ts": 1795219336859,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221101556,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 12.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221101556,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -83585,6 +83856,14 @@
           {
             "ts": 1795219339259,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221103249,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 12.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221103250,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.004681,
@@ -83735,6 +84014,14 @@
           {
             "ts": 1795219341894,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221104971,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 11.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221104971,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.619,
@@ -83856,6 +84143,10 @@
           },
           {
             "ts": 1795219344241,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 11 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221106633,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 11 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -84002,6 +84293,14 @@
           },
           {
             "ts": 1795219346494,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221108085,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 11.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221108086,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -84236,7 +84535,7 @@
             "stopEstructural": null
           },
           "mfe": 0,
-          "mae": 0,
+          "mae": -0.32,
           "ifvg": "soporte",
           "imbalance": null,
           "rupturaTriangulo": null,
@@ -84343,7 +84642,29 @@
             "name": "📊 Dios Market Context Matrix",
             "vote": "NEUTRAL"
           }
-        ]
+        ],
+        "auditoria": {
+          "minDesdeEntrada": 0.03083,
+          "maxDesdeEntrada": 0.0312,
+          "eventos": [
+            {
+              "ts": 1795221062347,
+              "precio": 0.03083
+            }
+          ],
+          "ultimaMedicion": {
+            "ts": 1795221062347,
+            "desde": 1795219349346,
+            "velas": 2,
+            "low": 0.03083,
+            "high": 0.0312,
+            "precio": 0.03083
+          },
+          "slTocadoDesdeEntrada": false,
+          "tp1TocadoDesdeEntrada": false
+        },
+        "priceFailCount": 0,
+        "lastCheckedAt": 1795221062347
       },
       {
         "id": "1795179769515_AUCTION",
@@ -84478,6 +84799,14 @@
           },
           {
             "ts": 1795219354614,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221109814,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 11.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221109814,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -84629,6 +84958,14 @@
           {
             "ts": 1795219356765,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221111549,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 11.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221111550,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.03002,
@@ -84763,6 +85100,14 @@
           {
             "ts": 1795219359589,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221113380,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 10.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221113381,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.07503,
@@ -84869,6 +85214,10 @@
           {
             "ts": 1795219363283,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 10 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221116365,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 10 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 583.83,
@@ -84974,6 +85323,10 @@
           },
           {
             "ts": 1795219365559,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 14 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221117683,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 14 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -85089,6 +85442,14 @@
           {
             "ts": 1795219367971,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221119471,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 9.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221119472,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.1335,
@@ -85195,6 +85556,10 @@
           {
             "ts": 1795219371019,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 17 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221121056,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.07451,
@@ -85309,6 +85674,14 @@
           {
             "ts": 1795219373494,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221122833,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 9.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221122833,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 1648,
@@ -85414,6 +85787,10 @@
           },
           {
             "ts": 1795219375804,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 18 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221124452,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 18 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -85529,6 +85906,14 @@
           {
             "ts": 1795219377819,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221125884,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 9.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221125884,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.06764,
@@ -85642,6 +86027,14 @@
           },
           {
             "ts": 1795219380471,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221127612,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 9.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221127612,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -85757,6 +86150,14 @@
           {
             "ts": 1795219382672,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221129331,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 9.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221129331,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.04446,
@@ -85858,6 +86259,10 @@
           },
           {
             "ts": 1795219384943,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 16 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221131156,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 16 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
@@ -85961,6 +86366,10 @@
           {
             "ts": 1795219386973,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 13 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221132530,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 13 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.003654,
@@ -86063,6 +86472,10 @@
           {
             "ts": 1795219389376,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 18 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221133826,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 17 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 2.272,
@@ -86165,6 +86578,10 @@
           {
             "ts": 1795219391829,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 11 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221135192,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 10 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 3.633,
@@ -86266,6 +86683,10 @@
           },
           {
             "ts": 1795219393909,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221136764,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -86373,6 +86794,14 @@
           {
             "ts": 1795219396746,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221138485,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 9.0hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221138485,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.91,
@@ -86479,6 +86908,14 @@
           {
             "ts": 1795219399393,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221140029,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 9.0hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221140030,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.1025,
@@ -86581,6 +87018,10 @@
           {
             "ts": 1795219401776,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 14 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221141673,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 13 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.1463,
@@ -86682,6 +87123,10 @@
           },
           {
             "ts": 1795219403918,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221143227,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -86785,6 +87230,14 @@
           {
             "ts": 1795219406244,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221144942,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 8.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221144943,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 1.092,
@@ -86886,6 +87339,14 @@
           },
           {
             "ts": 1795219408633,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221146705,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 8.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221146706,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
@@ -86989,6 +87450,14 @@
           {
             "ts": 1795219411015,
             "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
+          },
+          {
+            "ts": 1795221148406,
+            "note": "Fear&Greed sigue en 12 (adverso), pero ya lleva 8.5hs esperando un BOS o Bear/Bull Trap que no llegó — se libera el filtro y se deja confirmar con la confluencia normal, para no dejar que expire sin oportunidad."
+          },
+          {
+            "ts": 1795221148406,
+            "note": "Todavía esperando confirmación en 15m (no hay BOS a favor ni suba de confianza). Sigue observando."
           }
         ],
         "theoEntry": 0.004323,
@@ -87078,6 +87547,10 @@
           },
           {
             "ts": 1795219413844,
+            "note": "Todavía esperando confirmación (Fear&Greed en 12, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1795221150290,
             "note": "Todavía esperando confirmación (Fear&Greed en 12, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
@@ -87169,6 +87642,10 @@
           {
             "ts": 1795219415640,
             "note": "Todavía esperando confirmación (Fear&Greed en 12, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1795221151733,
+            "note": "Todavía esperando confirmación (Fear&Greed en 12, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
         "theoEntry": 0.03524,
@@ -87259,6 +87736,10 @@
           {
             "ts": 1795219417368,
             "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 18 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
+          },
+          {
+            "ts": 1795221152953,
+            "note": "Todavía esperando confirmación: el marco mayor (4h/1D) no muestra espacio real para que el movimiento continúe — Estocástico 4h en 18 (sobreventa) — abrir un SHORT acá es vender en el piso del movimiento. Puede que el precio no llegue ni a TP1 antes de girar (por ejemplo, si primero va a buscar liquidez cercana)."
           }
         ],
         "theoEntry": 0.005158,
@@ -87348,6 +87829,10 @@
           },
           {
             "ts": 1795219419755,
+            "note": "Todavía esperando confirmación (Fear&Greed en 12, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
+          },
+          {
+            "ts": 1795221154386,
             "note": "Todavía esperando confirmación (Fear&Greed en 12, contexto adverso para LONG — se exige BOS claro o un Bear/Bull Trap confirmado, no alcanza con confluencia sola en este contexto)."
           }
         ],
@@ -404265,7 +404750,7 @@
     },
     "SEI": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219421280
+      "ts": 1795221155227
     },
     "JUP": {
       "lastRecommendation": "LONG",
@@ -404273,19 +404758,19 @@
     },
     "STRK": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219424288
+      "ts": 1795221156613
     },
     "ENA": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219425376
+      "ts": 1795221157154
     },
     "W": {
       "lastRecommendation": "LONG",
       "ts": 1795161709335
     },
     "TNSR": {
-      "lastRecommendation": "SHORT",
-      "ts": 1795219426467
+      "lastRecommendation": "NO OPERAR",
+      "ts": 1795221157631
     },
     "WOLF": {
       "lastRecommendation": "SHORT",
@@ -404453,7 +404938,7 @@
     },
     "TIA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219420532
+      "ts": 1795221154802
     },
     "CATE": {
       "lastRecommendation": "NO OPERAR",
@@ -404465,7 +404950,7 @@
     },
     "GALA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219448464
+      "ts": 1795221169674
     },
     "AB": {
       "lastRecommendation": "NO OPERAR",
@@ -404477,7 +404962,7 @@
     },
     "ZK": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219439306
+      "ts": 1795221164828
     },
     "NEX": {
       "lastRecommendation": "SHORT",
@@ -404549,7 +405034,7 @@
     },
     "RSR": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219441502
+      "ts": 1795221165735
     },
     "MELANIA": {
       "lastRecommendation": "LONG",
@@ -404572,8 +405057,8 @@
       "ts": 1794213139445
     },
     "COW": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1795219455507
+      "lastRecommendation": "SHORT",
+      "ts": 1795221173248
     },
     "RE": {
       "lastRecommendation": "NO OPERAR",
@@ -404605,7 +405090,7 @@
     },
     "SOON": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219434829
+      "ts": 1795221161975
     },
     "BILL": {
       "lastRecommendation": "SHORT",
@@ -404621,7 +405106,7 @@
     },
     "IMX": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219436949
+      "ts": 1795221163329
     },
     "FORM": {
       "lastRecommendation": "SHORT",
@@ -404629,11 +405114,11 @@
     },
     "ORDI": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219423555
+      "ts": 1795221156181
     },
     "PYTH": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219422466
+      "ts": 1795221155651
     },
     "BANK": {
       "lastRecommendation": "SHORT",
@@ -404677,7 +405162,7 @@
     },
     "0G": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219446280
+      "ts": 1795221168222
     },
     "AT": {
       "lastRecommendation": "SHORT",
@@ -404717,7 +405202,7 @@
     },
     "IDOL": {
       "lastRecommendation": "LONG",
-      "ts": 1795219454427
+      "ts": 1795221172678
     },
     "HSK": {
       "lastRecommendation": "SHORT",
@@ -404897,7 +405382,7 @@
     },
     "ONE": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219432490
+      "ts": 1795221160398
     },
     "BREV": {
       "lastRecommendation": "NO OPERAR",
@@ -404973,7 +405458,7 @@
     },
     "PLUME": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219445506
+      "ts": 1795221167605
     },
     "YFI": {
       "lastRecommendation": "LONG",
@@ -404993,7 +405478,7 @@
     },
     "QTUM": {
       "lastRecommendation": "LONG",
-      "ts": 1795219447728
+      "ts": 1795221169250
     },
     "BAN": {
       "lastRecommendation": "NO OPERAR",
@@ -405001,15 +405486,15 @@
     },
     "BANANAS31": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219457719
+      "ts": 1795221174678
     },
     "GMX": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219442298
+      "ts": 1795221166275
     },
     "ZRX": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219449514
+      "ts": 1795221170208
     },
     "MYX": {
       "lastRecommendation": "SHORT",
@@ -405017,7 +405502,7 @@
     },
     "ARKM": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219451396
+      "ts": 1795221171163
     },
     "LPT": {
       "lastRecommendation": "SHORT",
@@ -405025,7 +405510,7 @@
     },
     "WAL": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219450323
+      "ts": 1795221170631
     },
     "COAI": {
       "lastRecommendation": "SHORT",
@@ -405041,11 +405526,11 @@
     },
     "HOT": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219452546
+      "ts": 1795221171609
     },
     "NMR": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219453289
+      "ts": 1795221172224
     },
     "RVN": {
       "lastRecommendation": "NO OPERAR",
@@ -405057,11 +405542,11 @@
     },
     "MAGMA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219461369
+      "ts": 1795221176704
     },
     "SUPER": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219440418
+      "ts": 1795221165252
     },
     "ARX": {
       "lastRecommendation": "NO OPERAR",
@@ -405089,7 +405574,7 @@
     },
     "USELESS": {
       "lastRecommendation": "LONG",
-      "ts": 1795219436240
+      "ts": 1795221162857
     },
     "PEOPLE": {
       "lastRecommendation": "SHORT",
@@ -405116,8 +405601,8 @@
       "ts": 1794911513199
     },
     "FOLKS": {
-      "lastRecommendation": "NO OPERAR",
-      "ts": 1795219460284
+      "lastRecommendation": "LONG",
+      "ts": 1795221176282
     },
     "SPACE": {
       "lastRecommendation": "NO OPERAR",
@@ -405257,7 +405742,7 @@
     },
     "ACU": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219458456
+      "ts": 1795221175210
     },
     "ILV": {
       "lastRecommendation": "SHORT",
@@ -405285,7 +405770,7 @@
     },
     "SKR": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219444452
+      "ts": 1795221167162
     },
     "ENJ": {
       "lastRecommendation": "SHORT",
@@ -405309,7 +405794,7 @@
     },
     "MMT": {
       "lastRecommendation": "LONG",
-      "ts": 1795219456248
+      "ts": 1795221173699
     },
     "AIOT": {
       "lastRecommendation": "NO OPERAR",
@@ -405357,7 +405842,7 @@
     },
     "ZETA": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219459503
+      "ts": 1795221175619
     },
     "TOSHI": {
       "lastRecommendation": "NO OPERAR",
@@ -405945,7 +406430,7 @@
     },
     "2Z": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219435549
+      "ts": 1795221162427
     },
     "INJ": {
       "lastRecommendation": "SHORT",
@@ -405977,7 +406462,7 @@
     },
     "TAG": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219456970
+      "ts": 1795221174244
     },
     "KAT": {
       "lastRecommendation": "LONG",
@@ -406097,7 +406582,7 @@
     },
     "GENIUS": {
       "lastRecommendation": "LONG",
-      "ts": 1795219429407
+      "ts": 1795221159137
     },
     "SOLV": {
       "lastRecommendation": "SHORT",
@@ -406201,7 +406686,7 @@
     },
     "SAND": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219427277
+      "ts": 1795221158175
     },
     "DOS": {
       "lastRecommendation": "NO OPERAR",
@@ -406277,7 +406762,7 @@
     },
     "AERO": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219430435
+      "ts": 1795221159558
     },
     "LAYER": {
       "lastRecommendation": "LONG",
@@ -406441,7 +406926,7 @@
     },
     "SNX": {
       "lastRecommendation": "LONG",
-      "ts": 1795219431465
+      "ts": 1795221159977
     },
     "SECZ": {
       "lastRecommendation": "SHORT",
@@ -406449,7 +406934,7 @@
     },
     "APE": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219443372
+      "ts": 1795221166731
     },
     "SOXSB": {
       "lastRecommendation": "SHORT",
@@ -406465,11 +406950,11 @@
     },
     "PONS": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219447003
+      "ts": 1795221168706
     },
     "SFP": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219437714
+      "ts": 1795221163751
     },
     "FARTCOIN": {
       "lastRecommendation": "SHORT",
@@ -406477,7 +406962,7 @@
     },
     "1INCH": {
       "lastRecommendation": "SHORT",
-      "ts": 1795219433272
+      "ts": 1795221160828
     },
     "SHELL": {
       "lastRecommendation": "LONG",
@@ -406493,7 +406978,7 @@
     },
     "CHZ": {
       "lastRecommendation": "NO OPERAR",
-      "ts": 1795219428367
+      "ts": 1795221158597
     },
     "ANTHROPIC": {
       "lastRecommendation": "LONG",
@@ -594542,8 +595027,9 @@
       "tp2": 1.8327920894304532,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362529964,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221062606
     },
     {
       "symbol": "SYN",
@@ -594558,8 +595044,9 @@
       "tp2": 0.11051427999999996,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362533705,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221063139
     },
     {
       "symbol": "POWR",
@@ -594574,8 +595061,9 @@
       "tp2": 0.04766265993089578,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362535211,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221063675
     },
     {
       "symbol": "APEX",
@@ -594590,8 +595078,9 @@
       "tp2": 0.16667425496096272,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362536676,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221064473
     },
     {
       "symbol": "NOW",
@@ -594606,8 +595095,9 @@
       "tp2": 87.31562000000004,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362538224,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221065244
     },
     {
       "symbol": "XAI",
@@ -594622,8 +595112,9 @@
       "tp2": 0.00572111242244076,
       "marketPhase": "ACUMULACIÓN",
       "detectadaEn": 1794362538964,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221065804
     },
     {
       "symbol": "UMA",
@@ -594638,8 +595129,9 @@
       "tp2": 0.28479448433252963,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362541533,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221066313
     },
     {
       "symbol": "ONE",
@@ -594654,8 +595146,9 @@
       "tp2": 0.0023732393872603025,
       "marketPhase": "RANGO",
       "detectadaEn": 1794362544449,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría perdido",
+      "evaluadaEn": 1795221066884
     },
     {
       "symbol": "IOTX",
@@ -594670,8 +595163,9 @@
       "tp2": 0.002634960863735444,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362545549,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221067456
     },
     {
       "symbol": "MOVE",
@@ -594686,8 +595180,9 @@
       "tp2": 0.0050753774557553396,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362546340,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221067992
     },
     {
       "symbol": "SAHARA",
@@ -594702,8 +595197,9 @@
       "tp2": 0.0056776244467083535,
       "marketPhase": "MARKDOWN",
       "detectadaEn": 1794362547422,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221068568
     },
     {
       "symbol": "TAKE",
@@ -594718,8 +595214,9 @@
       "tp2": 0.05681368000000002,
       "marketPhase": "RANGO",
       "detectadaEn": 1794362548499,
-      "evaluada": false,
-      "resultado": null
+      "evaluada": true,
+      "resultado": "habría ganado",
+      "evaluadaEn": 1795221069129
     },
     {
       "symbol": "STEEM",
@@ -767472,6 +767969,294 @@
       "detectadaEn": 1795219454428,
       "evaluada": false,
       "resultado": null
+    },
+    {
+      "symbol": "ORDI",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 38,
+      "precio": 2.501,
+      "stop": 2.65106,
+      "tp1": 2.2759099999999997,
+      "tp2": 2.050819999999999,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221156183,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "STRK",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.0305,
+      "stop": 0.03233,
+      "tp1": 0.02899389190283197,
+      "tp2": 0.025010000000000004,
+      "marketPhase": "ACUMULACIÓN",
+      "detectadaEn": 1795221156613,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ENA",
+      "tag": " (custom)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.09902,
+      "stop": 0.1049612,
+      "tp1": 0.09010819999999999,
+      "tp2": 0.08119639999999997,
+      "marketPhase": "CAPITULACIÓN",
+      "detectadaEn": 1795221157155,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ONE",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 43,
+      "precio": 0.0010472,
+      "stop": 0.00120428,
+      "tp1": 0.0008665580000000001,
+      "tp2": 0.0007644560000000002,
+      "marketPhase": "CAPITULACIÓN",
+      "detectadaEn": 1795221160399,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "1INCH",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.06041,
+      "stop": 0.06768244,
+      "tp1": 0.05456221489271389,
+      "tp2": 0.047319608,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221160828,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "IMX",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.1,
+      "faltaba": 0.5,
+      "confianza": 41,
+      "precio": 0.0906,
+      "stop": 0.09809339999999998,
+      "tp1": 0.0832622944575421,
+      "tp2": 0.07711188000000004,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221163329,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SFP",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.1619,
+      "stop": 0.18026399999999998,
+      "tp1": 0.1407814,
+      "tp2": 0.1288448,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221163752,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ZK",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 36,
+      "precio": 0.006939,
+      "stop": 0.007948774999999998,
+      "tp1": 0.006117776275474093,
+      "tp2": 0.0051214050000000025,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221164829,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "SUPER",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.1152,
+      "stop": 0.13248,
+      "tp1": 0.10062738826810495,
+      "tp2": 0.08409600000000002,
+      "marketPhase": "CAPITULACIÓN",
+      "detectadaEn": 1795221165253,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "GMX",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 37,
+      "precio": 7.024,
+      "stop": 7.442668085721889,
+      "tp1": 6.542531701419827,
+      "tp2": 6.270397445700599,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221166275,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "PLUME",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.3,
+      "faltaba": 0.3,
+      "confianza": 46,
+      "precio": 0.01095,
+      "stop": 0.012126269999999998,
+      "tp1": 0.009597289500000002,
+      "tp2": 0.008832714000000002,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221167605,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "0G",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7,
+      "faltaba": 0.6,
+      "confianza": 40,
+      "precio": 0.1113,
+      "stop": 0.127995,
+      "tp1": 0.09210075,
+      "tp2": 0.08124899999999999,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221168222,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "PONS",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 37,
+      "precio": 0.0946,
+      "stop": 0.10879,
+      "tp1": 0.0782815,
+      "tp2": 0.06905800000000001,
+      "marketPhase": "CAPITULACIÓN",
+      "detectadaEn": 1795221168706,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ZRX",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 38,
+      "precio": 0.0742,
+      "stop": 0.08363599999999999,
+      "tp1": 0.06334860000000002,
+      "tp2": 0.05721520000000002,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221170209,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "ARKM",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.9,
+      "faltaba": 0.7,
+      "confianza": 38,
+      "precio": 0.0774,
+      "stop": 0.0875619,
+      "tp1": 0.065713815,
+      "tp2": 0.059108579999999994,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221171163,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "NMR",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 7.1,
+      "faltaba": 0.5,
+      "confianza": 42,
+      "precio": 7.459,
+      "stop": 8.131165,
+      "tp1": 6.68601025,
+      "tp2": 6.249103,
+      "marketPhase": "RANGO",
+      "detectadaEn": 1795221172224,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "IDOL",
+      "tag": " (cap chico)",
+      "dir": "LONG",
+      "score": 7.2,
+      "faltaba": 0.4,
+      "confianza": 44,
+      "precio": 0.0241,
+      "stop": 0.02096904530849044,
+      "tp1": 0.027700597895235993,
+      "tp2": 0.028993962931149066,
+      "marketPhase": "EXPANSIÓN ALCISTA",
+      "detectadaEn": 1795221172679,
+      "evaluada": false,
+      "resultado": null
+    },
+    {
+      "symbol": "COW",
+      "tag": " (cap chico)",
+      "dir": "SHORT",
+      "score": 6.8,
+      "faltaba": 0.8,
+      "confianza": 35,
+      "precio": 0.0858,
+      "stop": 0.0951055,
+      "tp1": 0.075098675,
+      "tp2": 0.0690501,
+      "marketPhase": "MARKDOWN",
+      "detectadaEn": 1795221173249,
+      "evaluada": false,
+      "resultado": null
     }
   ],
   "killSwitchNotifiedDate": "2026-11-21",
@@ -785817,11 +786602,30 @@
       "drawdownPct": 54.86,
       "operacionesCerradas": 199,
       "tesisAbiertas": 51
+    },
+    {
+      "ts": 1795221154391,
+      "cuenta": 1,
+      "capital": 45.1414,
+      "pico": 100,
+      "drawdownPct": 54.86,
+      "operacionesCerradas": 199,
+      "tesisAbiertas": 51
+    },
+    {
+      "ts": 1795221157631,
+      "cuenta": 1,
+      "capital": 45.1414,
+      "pico": 100,
+      "drawdownPct": 54.86,
+      "operacionesCerradas": 199,
+      "tesisAbiertas": 51
     }
   ],
   "mesesArchivados": [],
   "huellasMensajes": {
     "534327086": 1795213916855,
+    "787506497": 1795221075839,
     "1127701064": 1795219419760,
     "1620585075": 1795208481215,
     "-182888343": 1795203064519,
